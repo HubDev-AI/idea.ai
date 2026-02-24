@@ -1,0 +1,126 @@
+:root {
+  color-scheme: light;
+  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  background: linear-gradient(180deg, #f3f7fb 0%, #ffffff 45%, #f5f8ff 100%);
+  color: #1f2937;
+}
+
+body {
+  margin: 0;
+}
+
+.dashboard {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0;
+  color: #3f5f8b;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.refresh {
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.connector-card,
+.signal-card {
+  border: 1px solid #d8e2f0;
+  border-radius: 14px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.connector-card ul,
+.signal-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+}
+
+.connector {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px dashed #dce4ef;
+}
+
+.connector:last-child {
+  border-bottom: none;
+}
+
+.connector.active {
+  color: #14532d;
+}
+
+.connector.disabled {
+  color: #6b7280;
+}
+
+.connector.error {
+  color: #991b1b;
+}
+
+.signal-row {
+  border: 1px solid #dce4ef;
+  border-radius: 12px;
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+  background: #fff;
+}
+
+.signal-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.score {
+  font-weight: 700;
+  color: #0f4c81;
+}
+
+.meta {
+  color: #374151;
+}
+
+.next-action {
+  width: fit-content;
+  background: #1d4ed8;
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 720px) {
+  .connector {
+    grid-template-columns: 1fr;
+  }
+}
