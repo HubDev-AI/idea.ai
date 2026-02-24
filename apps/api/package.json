@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "pnpm -C ../.. vitest apps/api/tests",
+    "test": "pnpm --dir ../.. exec vitest apps/api/tests",
     "lint": "echo lint:api"
   },
   "dependencies": {

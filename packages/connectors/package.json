@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "pnpm -C ../.. vitest packages/connectors/tests",
+    "test": "pnpm --dir ../.. exec vitest packages/connectors/tests",
     "lint": "echo lint:connectors"
   },
   "dependencies": {
