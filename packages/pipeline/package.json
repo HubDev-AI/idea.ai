@@ -1,0 +1,16 @@
+{
+  "name": "@idea/pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -C ../.. vitest packages/pipeline/tests",
+    "lint": "echo lint:pipeline"
+  },
+  "dependencies": {
+    "@idea/ai-runtime": "workspace:*",
+    "@idea/contracts": "workspace:*",
+    "bullmq": "^5.34.5",
+    "ioredis": "^5.4.1"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@idea/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -C ../.. vitest packages/contracts/tests",
+    "lint": "echo lint:contracts"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  }
+}

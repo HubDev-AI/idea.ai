@@ -1,0 +1,13 @@
+{
+  "name": "@idea/connectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -C ../.. vitest packages/connectors/tests",
+    "lint": "echo lint:connectors"
+  },
+  "dependencies": {
+    "@idea/contracts": "workspace:*"
+  }
+}

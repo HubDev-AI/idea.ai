@@ -1,0 +1,16 @@
+{
+  "name": "@idea/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -C ../.. vitest apps/api/tests",
+    "lint": "echo lint:api"
+  },
+  "dependencies": {
+    "@idea/connectors": "workspace:*",
+    "@idea/contracts": "workspace:*",
+    "@idea/pipeline": "workspace:*",
+    "fastify": "^5.2.1"
+  }
+}

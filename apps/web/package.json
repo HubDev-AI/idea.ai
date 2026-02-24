@@ -1,0 +1,14 @@
+{
+  "name": "@idea/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -C ../.. vitest apps/web/tests",
+    "lint": "echo lint:web"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

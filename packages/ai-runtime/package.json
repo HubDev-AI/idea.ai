@@ -1,0 +1,10 @@
+{
+  "name": "@idea/ai-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "pnpm -C ../.. vitest packages/ai-runtime/tests",
+    "lint": "echo lint:ai-runtime"
+  }
+}
