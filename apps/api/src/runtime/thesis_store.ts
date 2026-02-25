@@ -18,11 +18,11 @@ export class InMemoryThesisStore implements ThesisStore {
   }
 
   async list(filter?: ThesisStoreFilter): Promise<ThesisDraft[]> {
-    const all = Array.from(this.store.values());
+    const sorted = Array.from(this.store.values()).sort((a, b) => b.confidence - a.confidence);
     if (filter?.status) {
-      return all.filter((t) => t.status === filter.status);
+      return sorted.filter((t) => t.status === filter.status);
     }
-    return all.sort((a, b) => b.confidence - a.confidence);
+    return sorted;
   }
 
   async getByKey(canonicalKey: string): Promise<ThesisDraft | null> {

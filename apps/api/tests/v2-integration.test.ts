@@ -414,10 +414,9 @@ describe('V2 integration', () => {
     const body = response.json();
     expect(body).toHaveLength(1);
     expect(body[0].title).toBe('Test Thesis');
-    expect(body[0].id).toBe(1);
   });
 
-  it('thesis API returns individual thesis by ID', async () => {
+  it('thesis API returns individual thesis by canonicalKey', async () => {
     const store = new InMemoryThesisStore();
     await store.upsert({
       canonicalKey: 'test',
@@ -439,18 +438,14 @@ describe('V2 integration', () => {
 
     const app = buildServer({ thesisStore: store });
 
-    const response = await app.inject({ method: 'GET', url: '/v1/theses/1' });
+    const response = await app.inject({ method: 'GET', url: '/v1/theses/test' });
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.title).toBe('Test Thesis');
-    expect(body.id).toBe(1);
+    expect(body.canonicalKey).toBe('test');
 
-    // Invalid ID returns 400
-    const bad = await app.inject({ method: 'GET', url: '/v1/theses/abc' });
-    expect(bad.statusCode).toBe(400);
-
-    // Non-existent ID returns 404
-    const missing = await app.inject({ method: 'GET', url: '/v1/theses/999' });
+    // Non-existent key returns 404
+    const missing = await app.inject({ method: 'GET', url: '/v1/theses/nonexistent' });
     expect(missing.statusCode).toBe(404);
   });
 });

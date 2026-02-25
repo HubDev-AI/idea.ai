@@ -3,7 +3,7 @@ import type { RunPromptInput, RunPromptResult } from './types';
 export type ScoreTriplet = { pain: number; timing: number; buildability: number };
 
 export type ReconciledScore = ScoreTriplet & {
-  agreement: 'aligned' | 'contested' | 'single';
+  agreement: 'aligned' | 'contested' | 'single' | 'unavailable';
   contestedDimensions: string[];
 };
 
@@ -21,7 +21,7 @@ export const reconcileScores = (
   codexScores: ScoreTriplet | null
 ): ReconciledScore => {
   if (!claudeScores && !codexScores) {
-    return { pain: 0, timing: 0, buildability: 0, agreement: 'single', contestedDimensions: [] };
+    return { pain: 0, timing: 0, buildability: 0, agreement: 'unavailable', contestedDimensions: [] };
   }
 
   if (!claudeScores || !codexScores) {

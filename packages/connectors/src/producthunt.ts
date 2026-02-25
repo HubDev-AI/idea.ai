@@ -40,7 +40,7 @@ export const fetchProductHunt = async (options: {
 
   const data = (await response.json()) as PHResponse;
 
-  return data.data.posts.edges.map(({ node }) => {
+  return (data.data?.posts?.edges ?? []).map(({ node }) => {
     const topics = node.topics.edges.map((e) => e.node.name).join(', ');
     return {
       source: 'producthunt',

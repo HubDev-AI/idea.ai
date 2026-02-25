@@ -32,7 +32,7 @@ export const fetchReddit = async (options: {
   for (const sub of subreddits) {
     try {
       const data = await fetchJsonWithRetry<RedditListingResponse>(
-        `https://www.reddit.com/r/${sub}/new.json?limit=${limit}`,
+        `https://www.reddit.com/r/${encodeURIComponent(sub)}/new.json?limit=${Math.min(100, Math.max(1, limit))}`,
         {
           fetchImpl: options.fetchImpl,
           init: { headers: { 'User-Agent': 'idea.ai/1.0 (research bot)' } }

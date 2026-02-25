@@ -114,7 +114,7 @@ export const scoreSignalWithAiFallback = async ({
   canonicalText: string;
   memoryRetriever?: MemoryRetriever;
   topK?: number;
-  runPrompt?: (input: { prompt: string; timeoutMs?: number }) => Promise<any>;
+  runPrompt?: (input: { prompt: string; timeoutMs?: number }) => Promise<{ text: string }>;
 }): Promise<ReturnType<typeof scoreSignal> & { aiScored: boolean; reasoning?: string }> => {
   let aiResult: AiScoreResult | null = null;
   if (runPrompt) {

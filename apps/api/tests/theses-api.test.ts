@@ -77,7 +77,7 @@ describe('GET /v1/theses', () => {
     expect(response.statusCode).toBe(404);
   });
 
-  it('GET /v1/theses/:id returns thesis by id lookup', async () => {
+  it('GET /v1/theses/:key returns thesis by canonicalKey', async () => {
     const store = new InMemoryThesisStore();
     await store.upsert({
       canonicalKey: 'test-key',
@@ -108,7 +108,7 @@ describe('GET /v1/theses', () => {
     const app = buildServer({ thesisStore: store });
     servers.push(app);
 
-    const response = await app.inject({ method: 'GET', url: '/v1/theses/1' });
+    const response = await app.inject({ method: 'GET', url: '/v1/theses/test-key' });
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
@@ -116,23 +116,13 @@ describe('GET /v1/theses', () => {
     expect(body.evidence).toHaveLength(1);
   });
 
-  it('GET /v1/theses/:id returns 404 for unknown id', async () => {
+  it('GET /v1/theses/:key returns 404 for unknown key', async () => {
     const store = new InMemoryThesisStore();
     const app = buildServer({ thesisStore: store });
     servers.push(app);
 
-    const response = await app.inject({ method: 'GET', url: '/v1/theses/999' });
+    const response = await app.inject({ method: 'GET', url: '/v1/theses/nonexistent' });
 
     expect(response.statusCode).toBe(404);
-  });
-
-  it('GET /v1/theses/:id returns 400 for invalid id', async () => {
-    const store = new InMemoryThesisStore();
-    const app = buildServer({ thesisStore: store });
-    servers.push(app);
-
-    const response = await app.inject({ method: 'GET', url: '/v1/theses/abc' });
-
-    expect(response.statusCode).toBe(400);
   });
 });
