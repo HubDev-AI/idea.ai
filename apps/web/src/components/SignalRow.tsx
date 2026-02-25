@@ -14,6 +14,15 @@ export const SignalRow = ({ signal }: SignalRowProps) => (
     <p className="meta">
       <strong>{signal.top_source}</strong> - {signal.snippet}
     </p>
-    <span className="next-action">{signal.next_action}</span>
+    <div className="signal-footer">
+      <span className="next-action">{signal.next_action}</span>
+      {signal.source_url ? (
+        <a className="source-link" href={signal.source_url} target="_blank" rel="noreferrer">
+          Open Source
+        </a>
+      ) : (
+        <span className="source-link disabled">No Source Link</span>
+      )}
+    </div>
   </li>
 );

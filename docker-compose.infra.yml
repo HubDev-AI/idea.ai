@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: idea-ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: idea_ai
+      POSTGRES_USER: idea_ai
+      POSTGRES_PASSWORD: idea_ai_dev
+    ports:
+      - "5917:5432"
+    volumes:
+      - idea_ai_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idea_ai -d idea_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: idea-ai-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6391:6379"
+    volumes:
+      - idea_ai_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  idea_ai_pg_data:
+  idea_ai_redis_data:

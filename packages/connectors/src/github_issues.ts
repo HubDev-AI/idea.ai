@@ -11,8 +11,8 @@ type GithubIssue = {
 
 type GithubIssueLoader = (limit: number) => Promise<GithubIssue[]>;
 
-const defaultGithubIssueLoader: GithubIssueLoader = (limit) =>
-  fetchJsonWithRetry<GithubIssue[]>(
+const defaultGithubIssueLoader: GithubIssueLoader = async (limit) => {
+  const response = await fetchJsonWithRetry<{ items?: GithubIssue[] }>(
     `https://api.github.com/search/issues?q=type:issue+state:open+label:feature+sort:updated&per_page=${limit}`,
     {
       init: {
@@ -22,6 +22,9 @@ const defaultGithubIssueLoader: GithubIssueLoader = (limit) =>
       }
     }
   );
+
+  return response.items ?? [];
+};
 
 export const fetchGithubIssueEvents = async (
   loadIssues: GithubIssueLoader = defaultGithubIssueLoader,

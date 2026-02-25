@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "pnpm --dir ../.. exec vitest apps/api/tests",
+    "dev": "pnpm --dir ../.. exec tsx apps/api/src/main.ts",
+    "start": "pnpm --dir ../.. exec tsx apps/api/src/main.ts",
+    "test": "pnpm --dir ../.. exec vitest --run apps/api/tests",
     "lint": "echo lint:api"
   },
   "dependencies": {
+    "@idea/ai-runtime": "workspace:*",
     "@idea/connectors": "workspace:*",
     "@idea/contracts": "workspace:*",
     "@idea/pipeline": "workspace:*",
-    "fastify": "^5.2.1"
+    "fastify": "^5.2.1",
+    "pg": "^8.18.0"
   }
 }

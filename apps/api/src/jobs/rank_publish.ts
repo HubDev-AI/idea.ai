@@ -5,6 +5,7 @@ export type RankedPublishSignal = SignalWithBlend & {
   idea: string;
   top_source: string;
   snippet: string;
+  source_url: string | null;
 };
 
 export const rankAndPreparePublish = (signals: RankedPublishSignal[]) =>
@@ -13,6 +14,7 @@ export const rankAndPreparePublish = (signals: RankedPublishSignal[]) =>
     score: signal.blended,
     top_source: signal.top_source,
     snippet: signal.snippet,
+    source_url: signal.source_url,
     next_action: recommendNextAction(signal),
     updated_at: new Date().toISOString()
   }));

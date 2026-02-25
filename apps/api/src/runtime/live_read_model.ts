@@ -1,0 +1,972 @@
+import type { Cadence, RawEventInput } from '@idea/connectors/src/common/http';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import type { RuntimeEnv } from '../config/env';
+import { loadRuntimeEnv } from '../config/env';
+import { runByoConnectorIngestion } from '../jobs/ingest_byo';
+import {
+  runOpenConnectorIngestionDetailed,
+  type OpenConnectorIngestionResult,
+  type OpenConnectorName
+} from '../jobs/ingest_open';
+import { indexSignalMemory } from '../jobs/memory_index';
+import { buildRetrieverQueryText, createInMemoryRetriever, type IndexedMemoryEntry } from '../jobs/memory_retriever';
+import { rankAndPreparePublish } from '../jobs/rank_publish';
+import { scoreSignalWithRetriever } from '../jobs/score';
+import {
+  isAiJudgeEligible,
+  judgeBuildabilityWithAi,
+  resolveAiJudgeSettings,
+  type AiJudgeAttempt,
+  type AiJudgeSettings
+} from '../jobs/ai_judges';
+import {
+  analyzePostScrapeBatchWithAi,
+  resolveAiPostScrapeSettings,
+  type AiPostScrapeAttempt,
+  type AiPostScrapeSettings
+} from '../jobs/ai_post_scrape';
+import type { AiHealthRecord, AiProviderHealthRecord } from '../routes/ai_health';
+import type { ConnectorStatusRecord } from '../routes/connectors';
+import type { FeedRecord } from '../routes/feed';
+import type { ExecutionLogRecord, ListLogsQuery } from '../routes/logs';
+import { createExecutionLogger, createRunId } from './execution_logger';
+import { readExecutionLogs } from './execution_log_reader';
+import { createPostgresMemoryStore, type PostgresMemoryStore } from './postgres_memory_store';
+import {
+  applySourceQualityPenalty,
+  findIdeaCandidates,
+  isLowValueOpportunityTitle,
+  isLowValueRecruitingEvent,
+  selectEventsForScoring
+} from './signal_quality';
+
+const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
+const DEFAULT_SNAPSHOT_FILE = (): string => join(process.cwd(), 'logs', 'state', 'latest_snapshot.json');
+const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies'];
+
+type Snapshot = {
+  refreshedAt: number;
+  signals: FeedRecord[];
+  connectors: ConnectorStatusRecord[];
+};
+
+const resolveProviderSetting = (env: NodeJS.ProcessEnv): 'claude' | 'codex' | 'both' => {
+  const providerRaw = env.AI_PROVIDER?.toLowerCase();
+  if (providerRaw === 'codex') {
+    return 'codex';
+  }
+
+  if (providerRaw === 'both') {
+    return 'both';
+  }
+
+  return 'claude';
+};
+
+const isProviderEnabled = (providerSetting: 'claude' | 'codex' | 'both', provider: 'claude' | 'codex'): boolean => {
+  if (providerSetting === 'both') {
+    return true;
+  }
+
+  return providerSetting === provider;
+};
+
+const toAiProviderStatus = (provider: AiProviderHealthRecord): AiProviderHealthRecord['status'] => {
+  if (!provider.enabled) {
+    return 'disabled';
+  }
+
+  if (provider.attempted === 0) {
+    return 'idle';
+  }
+
+  if (provider.failed === 0 && provider.succeeded > 0) {
+    return 'healthy';
+  }
+
+  if (provider.succeeded > 0 && provider.failed > 0) {
+    return 'degraded';
+  }
+
+  return 'error';
+};
+
+const createAiHealthSnapshot = ({
+  env,
+  runId,
+  refreshedAt,
+  aiJudgeSettings,
+  aiPostScrapeSettings
+}: {
+  env: NodeJS.ProcessEnv;
+  runId: string | null;
+  refreshedAt: string | null;
+  aiJudgeSettings: Pick<AiJudgeSettings, 'mode' | 'allowFallback' | 'retries' | 'maxSignals'>;
+  aiPostScrapeSettings: Pick<AiPostScrapeSettings, 'enabled' | 'maxSignals'>;
+}): AiHealthRecord => {
+  const providerSetting = resolveProviderSetting(env);
+  const providers: AiProviderHealthRecord[] = (['claude', 'codex'] as const).map((provider) => ({
+    provider,
+    enabled: isProviderEnabled(providerSetting, provider),
+    status: isProviderEnabled(providerSetting, provider) ? 'idle' : 'disabled',
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    retries: 0,
+    last_error: null
+  }));
+
+  return {
+    run_id: runId,
+    refreshed_at: refreshedAt,
+    provider_setting: providerSetting,
+    judge_mode: aiJudgeSettings.mode,
+    fallback_enabled: aiJudgeSettings.allowFallback,
+    retry_budget: aiJudgeSettings.retries,
+    post_scrape_enabled: aiPostScrapeSettings.enabled,
+    post_scrape_max_signals: aiPostScrapeSettings.maxSignals,
+    judge_max_signals: aiJudgeSettings.maxSignals,
+    providers
+  };
+};
+
+const applyAiAttempts = (
+  health: AiHealthRecord,
+  attempts: Array<AiJudgeAttempt | AiPostScrapeAttempt>
+): AiHealthRecord => {
+  const byProvider = new Map(health.providers.map((provider) => [provider.provider, { ...provider }]));
+
+  for (const attempt of attempts) {
+    const record = byProvider.get(attempt.provider);
+    if (!record) {
+      continue;
+    }
+
+    record.attempted += 1;
+    if (attempt.success) {
+      record.succeeded += 1;
+    } else {
+      record.failed += 1;
+      record.last_error = attempt.error ?? record.last_error;
+    }
+
+    if (attempt.attempt > 1) {
+      record.retries += 1;
+    }
+  }
+
+  const providers = (['claude', 'codex'] as const).map((provider) => {
+    const record = byProvider.get(provider);
+    if (!record) {
+      return {
+        provider,
+        enabled: false,
+        status: 'disabled',
+        attempted: 0,
+        succeeded: 0,
+        failed: 0,
+        retries: 0,
+        last_error: null
+      } satisfies AiProviderHealthRecord;
+    }
+
+    return {
+      ...record,
+      status: toAiProviderStatus(record)
+    } satisfies AiProviderHealthRecord;
+  });
+
+  return {
+    ...health,
+    providers
+  };
+};
+
+const pickTopic = (text: string): string => {
+  const normalized = text.toLowerCase();
+
+  if (normalized.includes('compliance') || normalized.includes('soc2') || normalized.includes('audit')) {
+    return 'compliance';
+  }
+
+  if (normalized.includes('billing') || normalized.includes('payment') || normalized.includes('invoice')) {
+    return 'billing';
+  }
+
+  if (normalized.includes('support') || normalized.includes('ticket') || normalized.includes('customer success')) {
+    return 'support';
+  }
+
+  if (normalized.includes('ai') || normalized.includes('llm') || normalized.includes('agent')) {
+    return 'ai_tooling';
+  }
+
+  return 'general';
+};
+
+const toIdea = (event: RawEventInput): string => {
+  const firstLine = event.text
+    .split('\n')
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  if (!firstLine) {
+    return `${event.source} opportunity`;
+  }
+
+  return firstLine.length > 90 ? `${firstLine.slice(0, 87)}...` : firstLine;
+};
+
+const dedupeEvents = (events: RawEventInput[]): RawEventInput[] => {
+  const byKey = new Map<string, RawEventInput>();
+
+  for (const event of events) {
+    byKey.set(`${event.source}:${event.source_item_id}`, event);
+  }
+
+  return Array.from(byKey.values());
+};
+
+const countBySource = (events: RawEventInput[]): Record<string, number> =>
+  events.reduce<Record<string, number>>((acc, event) => {
+    acc[event.source] = (acc[event.source] ?? 0) + 1;
+    return acc;
+  }, {});
+
+const isConnectorSelected = (connector: OpenConnectorName, env: RuntimeEnv): boolean => {
+  if (connector === 'hn' || connector === 'github_issues') {
+    return env.hourlyConnectors.includes(connector);
+  }
+
+  return env.dailyConnectors.includes(connector);
+};
+
+const isConnectorConfigured = (connector: OpenConnectorName, env: RuntimeEnv): boolean => {
+  if (connector === 'greenhouse') {
+    return Boolean(env.greenhouseBoardToken);
+  }
+
+  if (connector === 'lever') {
+    return Boolean(env.leverSite);
+  }
+
+  return true;
+};
+
+const enabledOpenConnectors = (cadence: Cadence, env: RuntimeEnv): OpenConnectorName[] =>
+  OPEN_CONNECTORS.filter((connector) => {
+    if (cadence === 'hourly' && connector !== 'hn' && connector !== 'github_issues') {
+      return false;
+    }
+
+    if (cadence === 'daily' && (connector === 'hn' || connector === 'github_issues')) {
+      return false;
+    }
+
+    return isConnectorSelected(connector, env) && isConnectorConfigured(connector, env);
+  });
+
+const openStatusMap = (
+  hourly: OpenConnectorIngestionResult,
+  daily: OpenConnectorIngestionResult
+): Map<OpenConnectorName, 'active' | 'error'> => {
+  const map = new Map<OpenConnectorName, 'active' | 'error'>();
+
+  for (const status of [...hourly.statuses, ...daily.statuses]) {
+    map.set(status.name, status.status);
+  }
+
+  return map;
+};
+
+const mapByoStatus = (
+  status: 'active' | 'skipped' | 'error',
+  refreshedAtIso: string
+): Pick<ConnectorStatusRecord, 'status' | 'last_run'> => {
+  if (status === 'active') {
+    return { status: 'active', last_run: refreshedAtIso };
+  }
+
+  if (status === 'error') {
+    return { status: 'error', last_run: refreshedAtIso };
+  }
+
+  return { status: 'disabled', last_run: null };
+};
+
+const toConnectorStatus = (
+  env: RuntimeEnv,
+  hourly: OpenConnectorIngestionResult,
+  daily: OpenConnectorIngestionResult,
+  byo: Awaited<ReturnType<typeof runByoConnectorIngestion>>,
+  refreshedAtIso: string
+): ConnectorStatusRecord[] => {
+  const openStatuses = openStatusMap(hourly, daily);
+  const openRecords: ConnectorStatusRecord[] = OPEN_CONNECTORS.map((connector) => {
+    if (!isConnectorSelected(connector, env) || !isConnectorConfigured(connector, env)) {
+      return {
+        name: connector,
+        status: 'disabled',
+        last_run: null
+      };
+    }
+
+    return {
+      name: connector,
+      status: openStatuses.get(connector) === 'error' ? 'error' : 'active',
+      last_run: refreshedAtIso
+    };
+  });
+
+  const exa = mapByoStatus(byo.connectors.exa.status, refreshedAtIso);
+  const perigon = mapByoStatus(byo.connectors.perigon.status, refreshedAtIso);
+
+  return [
+    ...openRecords,
+    { name: 'exa_byo', status: exa.status, last_run: exa.last_run },
+    { name: 'perigon_byo', status: perigon.status, last_run: perigon.last_run }
+  ];
+};
+
+const toErrorFirstSnapshot = (env: RuntimeEnv, refreshedAtIso: string): ConnectorStatusRecord[] => [
+  ...OPEN_CONNECTORS.map((connector) => {
+    if (!isConnectorSelected(connector, env) || !isConnectorConfigured(connector, env)) {
+      return {
+        name: connector,
+        status: 'disabled',
+        last_run: null
+      };
+    }
+
+    return {
+      name: connector,
+      status: 'error',
+      last_run: refreshedAtIso
+    };
+  }),
+  {
+    name: 'exa_byo',
+    status: env.exaApiKey && env.exaDailyBudgetUsd > 0 ? 'error' : 'disabled',
+    last_run: env.exaApiKey && env.exaDailyBudgetUsd > 0 ? refreshedAtIso : null
+  },
+  {
+    name: 'perigon_byo',
+    status: env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? 'error' : 'disabled',
+    last_run: env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? refreshedAtIso : null
+  }
+];
+
+const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');
+
+const resolveSnapshotFile = (env: NodeJS.ProcessEnv): string | null => {
+  if (!env.SNAPSHOT_FILE && (env.NODE_ENV === 'test' || env.VITEST === 'true')) {
+    return null;
+  }
+
+  return env.SNAPSHOT_FILE ?? DEFAULT_SNAPSHOT_FILE();
+};
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const parseSnapshotPayload = (raw: string): Snapshot | null => {
+  try {
+    const parsed = JSON.parse(raw) as Partial<Snapshot> & {
+      refreshedAt?: unknown;
+      signals?: unknown;
+      connectors?: unknown;
+    };
+
+    if (!parsed || !Array.isArray(parsed.signals) || !Array.isArray(parsed.connectors)) {
+      return null;
+    }
+
+    const signals: FeedRecord[] = parsed.signals
+      .map((entry) => {
+        if (!isObject(entry)) {
+          return null;
+        }
+
+        if (
+          typeof entry.idea !== 'string' ||
+          typeof entry.score !== 'number' ||
+          typeof entry.top_source !== 'string' ||
+          typeof entry.snippet !== 'string' ||
+          (entry.source_url !== null && typeof entry.source_url !== 'string') ||
+          (entry.next_action !== 'validate_demand' &&
+            entry.next_action !== 'validate_pricing' &&
+            entry.next_action !== 'validate_channel') ||
+          typeof entry.updated_at !== 'string'
+        ) {
+          return null;
+        }
+
+        return {
+          idea: entry.idea,
+          score: entry.score,
+          top_source: entry.top_source,
+          snippet: entry.snippet,
+          source_url: entry.source_url,
+          next_action: entry.next_action,
+          updated_at: entry.updated_at
+        } satisfies FeedRecord;
+      })
+      .filter((entry): entry is FeedRecord => entry !== null);
+
+    const connectors: ConnectorStatusRecord[] = parsed.connectors
+      .map((entry) => {
+        if (!isObject(entry)) {
+          return null;
+        }
+
+        if (
+          typeof entry.name !== 'string' ||
+          (entry.status !== 'active' && entry.status !== 'disabled' && entry.status !== 'error') ||
+          (entry.last_run !== null && typeof entry.last_run !== 'string')
+        ) {
+          return null;
+        }
+
+        return {
+          name: entry.name,
+          status: entry.status,
+          last_run: entry.last_run
+        } satisfies ConnectorStatusRecord;
+      })
+      .filter((entry): entry is ConnectorStatusRecord => entry !== null);
+
+    return {
+      refreshedAt: toNumber(parsed.refreshedAt, 0),
+      signals,
+      connectors
+    };
+  } catch {
+    return null;
+  }
+};
+
+export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
+  const initialAiJudgeSettings = resolveAiJudgeSettings(process.env);
+  const initialAiPostScrapeSettings = resolveAiPostScrapeSettings(process.env);
+  let memoryEntries: IndexedMemoryEntry[] = [];
+  let postgresMemoryStore: PostgresMemoryStore | null | undefined;
+  let snapshotHydrated = false;
+  let refreshInFlight: Promise<Snapshot> | null = null;
+  const sessionRunIds = new Set<string>();
+  let aiHealth: AiHealthRecord = createAiHealthSnapshot({
+    env: process.env,
+    runId: null,
+    refreshedAt: null,
+    aiJudgeSettings: initialAiJudgeSettings,
+    aiPostScrapeSettings: initialAiPostScrapeSettings
+  });
+  let snapshot: Snapshot = {
+    refreshedAt: 0,
+    signals: [],
+    connectors: []
+  };
+
+  const hydrateSnapshotFromDisk = async (
+    env: NodeJS.ProcessEnv,
+    logger: ReturnType<typeof createExecutionLogger>
+  ): Promise<void> => {
+    if (snapshotHydrated) {
+      return;
+    }
+
+    snapshotHydrated = true;
+    const snapshotFile = resolveSnapshotFile(env);
+    if (!snapshotFile) {
+      return;
+    }
+
+    try {
+      const raw = await readFile(snapshotFile, 'utf8');
+      const parsed = parseSnapshotPayload(raw);
+
+      if (!parsed) {
+        await logger.warn('live_read_model', 'snapshot file is invalid, ignoring persisted snapshot', {
+          snapshot_file: snapshotFile
+        });
+        return;
+      }
+
+      snapshot = parsed;
+      await logger.info('live_read_model', 'loaded persisted snapshot', {
+        snapshot_file: snapshotFile,
+        refreshed_at: snapshot.refreshedAt > 0 ? new Date(snapshot.refreshedAt).toISOString() : null,
+        signals: snapshot.signals.length,
+        connectors: snapshot.connectors.length
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        await logger.warn('live_read_model', 'failed to load persisted snapshot', {
+          snapshot_file: snapshotFile,
+          error: toErrorMessage(error)
+        });
+      }
+    }
+  };
+
+  const persistSnapshotToDisk = async (
+    env: NodeJS.ProcessEnv,
+    logger: ReturnType<typeof createExecutionLogger>,
+    nextSnapshot: Snapshot
+  ): Promise<void> => {
+    const snapshotFile = resolveSnapshotFile(env);
+    if (!snapshotFile) {
+      return;
+    }
+
+    try {
+      await mkdir(dirname(snapshotFile), { recursive: true });
+      await writeFile(snapshotFile, JSON.stringify(nextSnapshot), 'utf8');
+    } catch (error) {
+      await logger.warn('live_read_model', 'failed to persist snapshot', {
+        snapshot_file: snapshotFile,
+        error: toErrorMessage(error)
+      });
+    }
+  };
+
+  const resolvePostgresMemoryStore = async (
+    env: RuntimeEnv,
+    logger: ReturnType<typeof createExecutionLogger>
+  ): Promise<PostgresMemoryStore | null> => {
+    if (postgresMemoryStore !== undefined) {
+      return postgresMemoryStore;
+    }
+
+    if (!env.databaseUrl) {
+      postgresMemoryStore = null;
+      await logger.warn('live_read_model', 'DATABASE_URL not set, using in-memory memory store');
+      return postgresMemoryStore;
+    }
+
+    try {
+      const store = createPostgresMemoryStore({
+        databaseUrl: env.databaseUrl,
+        logger
+      });
+      await store.ping();
+      postgresMemoryStore = store;
+
+      await logger.info('live_read_model', 'postgres memory store enabled');
+      return postgresMemoryStore;
+    } catch (error) {
+      postgresMemoryStore = null;
+      await logger.error('live_read_model', 'postgres memory store unavailable', {
+        error: toErrorMessage(error)
+      });
+      return postgresMemoryStore;
+    }
+  };
+
+  const refresh = async (): Promise<Snapshot> => {
+    const env = loadRuntimeEnv(process.env);
+    const runId = process.env.RUN_ID ?? createRunId('read_model');
+    const logger = createExecutionLogger({ env: process.env, runId });
+    sessionRunIds.add(logger.runId);
+    const aiJudgeSettings = resolveAiJudgeSettings(process.env);
+    const aiPostScrapeSettings = resolveAiPostScrapeSettings(process.env);
+    let runAiHealth = createAiHealthSnapshot({
+      env: process.env,
+      runId: logger.runId,
+      refreshedAt: null,
+      aiJudgeSettings,
+      aiPostScrapeSettings
+    });
+    aiHealth = runAiHealth;
+
+    await hydrateSnapshotFromDisk(process.env, logger);
+
+    await logger.info('live_read_model', 'refresh started', {
+      run_id: logger.runId
+    });
+
+    try {
+      const persistentStore = await resolvePostgresMemoryStore(env, logger);
+      const [hourly, daily, byo] = await Promise.all([
+        runOpenConnectorIngestionDetailed('hourly', {
+          enabledConnectors: enabledOpenConnectors('hourly', env),
+          logger
+        }),
+        runOpenConnectorIngestionDetailed('daily', {
+          enabledConnectors: enabledOpenConnectors('daily', env),
+          logger
+        }),
+        runByoConnectorIngestion(process.env, {
+          logger
+        })
+      ]);
+
+      const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events]);
+      const highSignalEvents = events.filter((event) => !isLowValueRecruitingEvent(event));
+      const selectedEvents = selectEventsForScoring(highSignalEvents);
+
+      await logger.info('live_read_model', 'event selection prepared', {
+        total_events: events.length,
+        filtered_events: highSignalEvents.length,
+        filtered_recruiting_noise: events.length - highSignalEvents.length,
+        selected_events: selectedEvents.length,
+        selected_by_source: countBySource(selectedEvents)
+      });
+
+      const selectedSignalInputs = selectedEvents.map((event) => {
+        const signalId = `${event.source}:${event.source_item_id}`;
+        const topic = pickTopic(event.text);
+        const ideaDraft = toIdea(event);
+
+        return {
+          event,
+          signalId,
+          topic,
+          ideaDraft
+        };
+      });
+
+      const aiPostScrapeBatch = await analyzePostScrapeBatchWithAi({
+        settings: aiPostScrapeSettings,
+        logger,
+        inputs: selectedSignalInputs.map((entry) => ({
+          id: entry.signalId,
+          source: entry.event.source,
+          topic: entry.topic,
+          ideaDraft: entry.ideaDraft,
+          text: entry.event.text
+        }))
+      });
+      runAiHealth = applyAiAttempts(runAiHealth, aiPostScrapeBatch.attempts);
+      aiHealth = runAiHealth;
+      const aiPostScrapeInsights = aiPostScrapeBatch.insights;
+
+      const scoredSignals: Array<{
+        id: string;
+        idea: string;
+        top_source: string;
+        snippet: string;
+        source_url: string | null;
+        pain: number;
+        timing: number;
+        buildability: number;
+        blended: number;
+      }> = [];
+      let aiJudgeAttempts = 0;
+      let aiJudgeSuccess = 0;
+      let aiJudgeFallback = 0;
+      let aiNoiseFiltered = 0;
+      let aiTransformRequiredSkipped = 0;
+      let lowValueTitleSkipped = 0;
+      const aiProvidersUsed = new Set<string>();
+      if (aiPostScrapeBatch.provider) {
+        aiProvidersUsed.add(aiPostScrapeBatch.provider);
+      }
+
+      for (const input of selectedSignalInputs) {
+        const { event, signalId, topic, ideaDraft } = input;
+        try {
+          const aiInsight = aiPostScrapeInsights.get(signalId);
+          if (aiInsight?.isNoise) {
+            aiNoiseFiltered += 1;
+            await logger.debug('live_read_model', 'signal skipped by ai post-scrape noise filter', {
+              source: event.source,
+              source_item_id: event.source_item_id,
+              confidence: aiInsight.confidence ?? null
+            });
+            continue;
+          }
+
+          const requiresAiRewrite =
+            event.source === 'github_issues' || event.source === 'greenhouse' || event.source === 'lever';
+
+          if (requiresAiRewrite && aiPostScrapeSettings.maxSignals > 0 && (!aiInsight?.idea || aiInsight.idea.trim().length === 0)) {
+            aiTransformRequiredSkipped += 1;
+            await logger.debug('live_read_model', 'signal skipped because ai opportunity rewrite is unavailable', {
+              source: event.source,
+              source_item_id: event.source_item_id
+            });
+            continue;
+          }
+
+          if ((!aiInsight?.idea || aiInsight.idea.trim().length === 0) && isLowValueOpportunityTitle(ideaDraft)) {
+            lowValueTitleSkipped += 1;
+            await logger.debug('live_read_model', 'signal skipped because title appears low-value without ai rewrite', {
+              source: event.source,
+              source_item_id: event.source_item_id,
+              idea_draft: ideaDraft
+            });
+            continue;
+          }
+
+          const idea = aiInsight?.idea && aiInsight.idea.length > 0 ? aiInsight.idea : ideaDraft;
+          const retriever = persistentStore?.retriever ?? createInMemoryRetriever(memoryEntries);
+          const canonicalText = buildRetrieverQueryText({
+            idea,
+            snippet: event.text.slice(0, 160),
+            text: event.text,
+            topic
+          });
+
+          const shouldUseAiJudge =
+            aiJudgeAttempts < aiJudgeSettings.maxSignals &&
+            isAiJudgeEligible(event.text) &&
+            !isLowValueOpportunityTitle(idea);
+          let judgeScores: [number, number, number] = aiInsight?.judgeScores ?? [62, 66, 60];
+          if (aiInsight?.judgeScores) {
+            aiJudgeSuccess += 1;
+          } else if (shouldUseAiJudge) {
+            aiJudgeAttempts += 1;
+            const aiJudgeResult = await judgeBuildabilityWithAi({
+              idea,
+              text: event.text,
+              topic,
+              source: event.source,
+              settings: aiJudgeSettings,
+              logger
+            });
+            judgeScores = aiJudgeResult.judgeScores;
+
+            if (aiJudgeResult.fromAi) {
+              aiJudgeSuccess += 1;
+            } else {
+              aiJudgeFallback += 1;
+            }
+
+            if (aiJudgeResult.providers && aiJudgeResult.providers.length > 0) {
+              for (const provider of aiJudgeResult.providers) {
+                aiProvidersUsed.add(provider);
+              }
+            } else if (aiJudgeResult.provider) {
+              aiProvidersUsed.add(aiJudgeResult.provider);
+            }
+            runAiHealth = applyAiAttempts(runAiHealth, aiJudgeResult.attempts);
+            aiHealth = runAiHealth;
+          }
+
+          const score = await scoreSignalWithRetriever({
+            text: event.text,
+            judgeScores,
+            topic,
+            source: event.source,
+            canonicalText,
+            memoryRetriever: retriever,
+            topK: 8,
+            basePain: aiInsight?.pain,
+            baseTiming: aiInsight?.timing
+          });
+          const blended = applySourceQualityPenalty({
+            source: event.source,
+            idea,
+            text: event.text,
+            blended: score.blended
+          });
+
+          const indexedEntry = indexSignalMemory({
+            signalId,
+            topic,
+            source: event.source,
+            idea,
+            snippet: event.text.slice(0, 160),
+            text: event.text,
+            observedAt: event.source_timestamp,
+            pain: score.pain,
+            timing: score.timing,
+            buildability: score.buildability,
+            blended
+          });
+
+          memoryEntries.push(indexedEntry);
+
+          if (persistentStore) {
+            try {
+              await persistentStore.save(indexedEntry);
+            } catch (error) {
+              await logger.error('live_read_model', 'persistent memory save failed', {
+                signal_id: indexedEntry.memoryRecord.signal_id,
+                error: toErrorMessage(error)
+              });
+            }
+          }
+
+          scoredSignals.push({
+            id: signalId,
+            idea,
+            top_source: event.source,
+            snippet: aiInsight?.rationale && aiInsight.rationale.length > 0 ? aiInsight.rationale : event.text.slice(0, 160),
+            source_url: event.url,
+            pain: score.pain,
+            timing: score.timing,
+            buildability: score.buildability,
+            blended
+          });
+        } catch (error) {
+          await logger.error('live_read_model', 'signal scoring failed', {
+            source: event.source,
+            source_item_id: event.source_item_id,
+            error: toErrorMessage(error)
+          });
+        }
+      }
+
+      await logger.info('live_read_model', 'ai judge summary', {
+        post_scrape_enabled: aiPostScrapeSettings.enabled,
+        post_scrape_attempted: aiPostScrapeBatch.attempted,
+        post_scrape_provider: aiPostScrapeBatch.provider ?? null,
+        post_scrape_insights: aiPostScrapeInsights.size,
+        post_scrape_noise_filtered: aiNoiseFiltered,
+        post_scrape_transform_required_skipped: aiTransformRequiredSkipped,
+        low_value_title_skipped: lowValueTitleSkipped,
+        max_signals: aiJudgeSettings.maxSignals,
+        attempts: aiJudgeAttempts,
+        successful: aiJudgeSuccess,
+        fallback: aiJudgeFallback,
+        providers_used: Array.from(aiProvidersUsed),
+        provider_health: runAiHealth.providers
+      });
+
+      const now = Date.now();
+      const refreshedAtIso = new Date(now).toISOString();
+      const rankedSignals = rankAndPreparePublish(scoredSignals);
+      const nextSignals = rankedSignals.length > 0 ? rankedSignals : snapshot.signals;
+      const ideaCandidates = findIdeaCandidates(nextSignals);
+
+      if (rankedSignals.length === 0 && snapshot.signals.length > 0) {
+        await logger.warn('live_read_model', 'no fresh signals, serving previous snapshot');
+      }
+
+      if (ideaCandidates.length > 0) {
+        await logger.info('live_read_model', 'idea candidate detected', {
+          count: ideaCandidates.length,
+          ideas: ideaCandidates.map((signal) => ({
+            score: signal.score,
+            source: signal.top_source,
+            idea: signal.idea
+          }))
+        });
+      } else {
+        await logger.info('live_read_model', 'no idea candidate detected', {
+          top_score: nextSignals[0]?.score ?? null
+        });
+      }
+
+      snapshot = {
+        refreshedAt: now,
+        signals: nextSignals,
+        connectors: toConnectorStatus(env, hourly, daily, byo, refreshedAtIso)
+      };
+      aiHealth = {
+        ...runAiHealth,
+        refreshed_at: refreshedAtIso
+      };
+      await persistSnapshotToDisk(process.env, logger, snapshot);
+
+      await logger.info('live_read_model', 'refresh completed', {
+        run_id: logger.runId,
+        events: events.length,
+        published_signals: snapshot.signals.length
+      });
+
+      return snapshot;
+    } catch (error) {
+      const message = toErrorMessage(error);
+      await logger.error('live_read_model', 'refresh failed', {
+        run_id: logger.runId,
+        error: message
+      });
+
+      if (snapshot.refreshedAt > 0) {
+        await logger.warn('live_read_model', 'serving stale snapshot after refresh failure', {
+          previous_refreshed_at: new Date(snapshot.refreshedAt).toISOString()
+        });
+        aiHealth = {
+          ...runAiHealth,
+          refreshed_at: new Date(snapshot.refreshedAt).toISOString()
+        };
+        return snapshot;
+      }
+
+      const now = Date.now();
+      const refreshedAtIso = new Date(now).toISOString();
+      snapshot = {
+        refreshedAt: now,
+        signals: [],
+        connectors: toErrorFirstSnapshot(env, refreshedAtIso)
+      };
+      aiHealth = {
+        ...runAiHealth,
+        refreshed_at: refreshedAtIso
+      };
+
+      return snapshot;
+    }
+  };
+
+  const startRefresh = (): Promise<Snapshot> => {
+    if (!refreshInFlight) {
+      refreshInFlight = refresh().finally(() => {
+        refreshInFlight = null;
+      });
+    }
+
+    return refreshInFlight;
+  };
+
+  const ensureFresh = async (): Promise<Snapshot> => {
+    if (!snapshotHydrated) {
+      const runId = process.env.RUN_ID ?? createRunId('read_model_boot');
+      const logger = createExecutionLogger({ env: process.env, runId });
+      sessionRunIds.add(logger.runId);
+      await hydrateSnapshotFromDisk(process.env, logger);
+    }
+
+    const stale = Date.now() - snapshot.refreshedAt > refreshMs;
+    const isSyncRefreshMode = refreshMs === 0 || process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
+
+    if (stale) {
+      if (isSyncRefreshMode) {
+        return startRefresh();
+      }
+
+      void startRefresh();
+      return snapshot;
+    }
+
+    return snapshot;
+  };
+
+  return {
+    listSignals: async (): Promise<FeedRecord[]> => (await ensureFresh()).signals,
+    listConnectors: async (): Promise<ConnectorStatusRecord[]> => (await ensureFresh()).connectors,
+    getAiHealth: async (): Promise<AiHealthRecord> => {
+      await ensureFresh();
+      return aiHealth;
+    },
+    listLogs: async (query: ListLogsQuery): Promise<ExecutionLogRecord[]> =>
+      (await (async () => {
+        const rows = await readExecutionLogs({
+          env: process.env,
+          limit: query.scope === 'all' ? query.limit : 1000,
+          level: query.level,
+          runId: query.run_id
+        });
+
+        if (query.scope === 'all' || query.run_id) {
+          return rows.slice(0, query.limit);
+        }
+
+        return rows.filter((row) => sessionRunIds.has(row.run_id)).slice(0, query.limit);
+      })()),
+    refresh,
+    close: async (): Promise<void> => {
+      if (postgresMemoryStore) {
+        await postgresMemoryStore.close();
+      }
+    }
+  };
+};

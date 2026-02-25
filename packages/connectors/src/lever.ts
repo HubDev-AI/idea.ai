@@ -10,14 +10,24 @@ type LeverJob = {
 
 type LeverLoader = (limit: number) => Promise<LeverJob[]>;
 
-const defaultLeverLoader: LeverLoader = (limit) =>
-  fetchJsonWithRetry<LeverJob[]>(`https://api.lever.co/v0/postings?mode=json&limit=${limit}`);
+const buildLeverLoader = (site: string): LeverLoader => (limit) =>
+  fetchJsonWithRetry<LeverJob[]>(
+    `https://api.lever.co/v0/postings/${encodeURIComponent(site)}?mode=json&limit=${limit}`
+  );
 
 export const fetchLeverJobEvents = async (
-  loadJobs: LeverLoader = defaultLeverLoader,
-  limit = OPEN_CONNECTOR_LIMITS.lever
+  loadJobs?: LeverLoader,
+  limit = OPEN_CONNECTOR_LIMITS.lever,
+  env: NodeJS.ProcessEnv = process.env
 ): Promise<RawEventInput[]> => {
-  const jobs = await withRetry(() => loadJobs(limit));
+  const site = env.LEVER_SITE;
+  const loader = loadJobs ?? (site ? buildLeverLoader(site) : undefined);
+
+  if (!loader) {
+    throw new Error('LEVER_SITE is required for lever connector');
+  }
+
+  const jobs = await withRetry(() => loader(limit));
 
   return jobs.slice(0, limit).map((job) => ({
     source: 'lever',

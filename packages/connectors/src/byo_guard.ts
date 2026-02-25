@@ -2,7 +2,7 @@ import type { RawEventInput } from './common/http';
 
 export type ByoSkipReason = 'missing_credentials' | 'budget_exhausted';
 
-export type ConnectorStatus = 'active' | 'skipped';
+export type ConnectorStatus = 'active' | 'skipped' | 'error';
 
 export type ConnectorTelemetry = {
   connector: string;
@@ -14,6 +14,7 @@ export type ConnectorTelemetry = {
 export type ByoConnectorResult = {
   status: ConnectorStatus;
   reason?: ByoSkipReason;
+  error?: string;
   events: RawEventInput[];
   telemetry: ConnectorTelemetry;
 };

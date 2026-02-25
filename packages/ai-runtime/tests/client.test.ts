@@ -71,4 +71,21 @@ describe('ai runtime client', () => {
     expect(seen[0]?.args).toContain('-o');
     expect(result.text).toBe('codex final text');
   });
+
+  it('parses plain-text codex output file when jsonl events are not present', async () => {
+    const result = await runCodexPrompt(
+      { prompt: 'hello', timeoutMs: 1000 },
+      {
+        runCommand: async () => ({
+          exitCode: 0,
+          stdout: '',
+          stderr: ''
+        }),
+        readFile: async () => '84,71,79',
+        tempOutputPath: '/tmp/codex-output.jsonl'
+      }
+    );
+
+    expect(result.text).toBe('84,71,79');
+  });
 });

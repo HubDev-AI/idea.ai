@@ -1,10 +1,76 @@
 import { runExaByoConnector } from '@idea/connectors/src/exa_byo';
 import { runPerigonByoConnector } from '@idea/connectors/src/perigon_byo';
+import type { ByoConnectorResult } from '@idea/connectors/src/byo_guard';
+import { createExecutionLogger, type ExecutionLogger } from '../runtime/execution_logger';
 
-export const runByoConnectorIngestion = async (env: NodeJS.ProcessEnv = process.env) => {
-  const [exa, perigon] = await Promise.all([runExaByoConnector(env), runPerigonByoConnector(env)]);
+type ConnectorExecutor = (env: NodeJS.ProcessEnv) => Promise<ByoConnectorResult>;
+
+const errorMessage = (value: unknown): string => (value instanceof Error ? value.message : 'Unknown error');
+
+const toErroredResult = (connector: 'exa_byo' | 'perigon_byo', error: unknown): ByoConnectorResult => ({
+  status: 'error',
+  error: errorMessage(error),
+  events: [],
+  telemetry: {
+    connector,
+    skipped: true,
+    budget_usd: 0
+  }
+});
+
+const runSafely = async (
+  connector: 'exa_byo' | 'perigon_byo',
+  env: NodeJS.ProcessEnv,
+  execute: ConnectorExecutor,
+  logger: ExecutionLogger
+): Promise<ByoConnectorResult> => {
+  try {
+    const result = await execute(env);
+
+    await logger.info('ingest_byo', 'connector completed', {
+      connector,
+      status: result.status,
+      events: result.events.length,
+      reason: result.reason
+    });
+
+    return result;
+  } catch (error) {
+    const message = errorMessage(error);
+    await logger.error('ingest_byo', 'connector failed', {
+      connector,
+      error: message
+    });
+
+    return toErroredResult(connector, error);
+  }
+};
+
+export const runByoConnectorIngestion = async (
+  env: NodeJS.ProcessEnv = process.env,
+  deps: {
+    runExa?: ConnectorExecutor;
+    runPerigon?: ConnectorExecutor;
+    logger?: ExecutionLogger;
+  } = {}
+) => {
+  const logger = deps.logger ?? createExecutionLogger({ env, runId: env.RUN_ID });
+  const runExa = deps.runExa ?? runExaByoConnector;
+  const runPerigon = deps.runPerigon ?? runPerigonByoConnector;
+  const [exa, perigon] = await Promise.all([
+    runSafely('exa_byo', env, runExa, logger),
+    runSafely('perigon_byo', env, runPerigon, logger)
+  ]);
+
+  await logger.info('ingest_byo', 'ingestion complete', {
+    connectors: {
+      exa: exa.status,
+      perigon: perigon.status
+    }
+  });
 
   return {
+    run_id: logger.runId,
     connectors: {
       exa,
       perigon

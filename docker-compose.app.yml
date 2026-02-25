@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    container_name: idea-ai-api
+    restart: unless-stopped
+    working_dir: /workspace
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://idea_ai:idea_ai_dev@postgres:5432/idea_ai
+      REDIS_URL: redis://redis:6379
+      HOST: 0.0.0.0
+      PORT: 3000
+      IS_SANDBOX: "1"
+      CLAUDE_CONFIG_SOURCE: /host-claude
+      CLAUDE_CONFIG_DIR: /root/.claude
+    volumes:
+      - ./:/workspace
+      - idea_ai_node_modules:/workspace/node_modules
+      - idea_ai_pnpm_store:/root/.local/share/pnpm/store
+      - ${HOME}/.claude:/host-claude:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  idea_ai_node_modules:
+  idea_ai_pnpm_store:

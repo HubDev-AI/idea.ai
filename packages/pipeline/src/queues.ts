@@ -4,9 +4,12 @@ export const QUEUE_NAMES = {
   ingestHourly: 'ingest.hourly',
   ingestDaily: 'ingest.daily',
   normalize: 'normalize',
+  memoryIndex: 'memory.index',
+  memoryWindow: 'memory.window',
   scorePain: 'score.pain',
   scoreTiming: 'score.timing',
   scoreBuildability: 'score.buildability',
+  scoreAggregate: 'score.aggregate',
   rank: 'rank',
   publish: 'publish'
 } as const;

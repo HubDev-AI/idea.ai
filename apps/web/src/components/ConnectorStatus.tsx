@@ -11,9 +11,12 @@ export const ConnectorStatus = ({ connectors }: ConnectorStatusProps) => (
     <ul>
       {connectors.map((connector) => (
         <li key={connector.name} className={`connector ${connector.status}`}>
-          <span>{connector.name}</span>
-          <span>{connector.status}</span>
-          <span>{connector.last_run ?? 'never'}</span>
+          <span className="connector-name">
+            <span className={`status-dot ${connector.status}`} aria-hidden="true" />
+            {connector.name}
+          </span>
+          <span className="connector-state">{connector.status}</span>
+          <span className="connector-run">{connector.last_run ?? 'never'}</span>
         </li>
       ))}
     </ul>

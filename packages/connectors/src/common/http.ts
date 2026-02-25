@@ -12,14 +12,16 @@ export const OPEN_CONNECTOR_LIMITS = {
   hn: 25,
   github_issues: 25,
   greenhouse: 50,
-  lever: 50
+  lever: 50,
+  yc_companies: 50
 } as const;
 
 export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
   hn: 'hourly',
   github_issues: 'hourly',
   greenhouse: 'daily',
-  lever: 'daily'
+  lever: 'daily',
+  yc_companies: 'daily'
 };
 
 const sleep = async (ms: number): Promise<void> => {

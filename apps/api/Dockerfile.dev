@@ -1,0 +1,15 @@
+FROM node:22-bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates git openssh-client bash \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN corepack enable && corepack prepare pnpm@10.13.1 --activate
+RUN npm install -g @anthropic-ai/claude-code@2.1.56
+
+WORKDIR /workspace
+
+COPY apps/api/scripts/dev-entrypoint.sh /usr/local/bin/dev-entrypoint.sh
+RUN chmod +x /usr/local/bin/dev-entrypoint.sh
+
+CMD ["/usr/local/bin/dev-entrypoint.sh"]

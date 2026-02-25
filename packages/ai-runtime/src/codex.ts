@@ -11,7 +11,12 @@ const parseCodexText = (jsonl: string): string => {
     .map((line) => line.trim())
     .filter(Boolean);
 
+  if (lines.length === 0) {
+    return '';
+  }
+
   let fallbackText = '';
+  let parsedAnyJson = false;
 
   for (const line of lines) {
     try {
@@ -19,7 +24,10 @@ const parseCodexText = (jsonl: string): string => {
         type?: string;
         text?: string;
         output_text?: string;
+        output?: string;
+        content?: string;
       };
+      parsedAnyJson = true;
 
       if (parsed.type === 'final' && typeof parsed.text === 'string') {
         return parsed.text;
@@ -27,12 +35,20 @@ const parseCodexText = (jsonl: string): string => {
 
       if (typeof parsed.output_text === 'string') {
         fallbackText = parsed.output_text;
+      } else if (typeof parsed.output === 'string') {
+        fallbackText = parsed.output;
+      } else if (typeof parsed.content === 'string') {
+        fallbackText = parsed.content;
       } else if (typeof parsed.text === 'string') {
         fallbackText = parsed.text;
       }
     } catch {
       // Ignore malformed lines.
     }
+  }
+
+  if (!parsedAnyJson) {
+    return jsonl.trim();
   }
 
   return fallbackText;

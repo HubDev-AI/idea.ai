@@ -37,7 +37,7 @@ export const runClaudePrompt = async (
 
   const result = await runCommand({
     cmd: 'claude',
-    args: ['-p', input.prompt, '--output-format', 'json'],
+    args: ['-p', input.prompt],
     timeoutMs: input.timeoutMs
   });
 

@@ -3,6 +3,7 @@ import { fetchGithubIssueEvents } from '../src/github_issues';
 import { fetchGreenhouseJobEvents } from '../src/greenhouse';
 import { fetchHnEvents } from '../src/hn';
 import { fetchLeverJobEvents } from '../src/lever';
+import { fetchYcCompanyEvents } from '../src/yc_companies';
 
 const assertRawShape = (item: Record<string, unknown>) => {
   expect(item.source_item_id).toBeTypeOf('string');
@@ -73,5 +74,29 @@ describe('open connectors', () => {
 
     expect(events).toHaveLength(1);
     assertRawShape(events[0] as unknown as Record<string, unknown>);
+  });
+
+  it('normalizes YC companies', async () => {
+    const events = await fetchYcCompanyEvents(
+      async () => ({
+        app: '45BWZJ1SGC',
+        key: 'search-only-key'
+      }),
+      async () => [
+        {
+          id: 1,
+          slug: 'acme',
+          name: 'Acme',
+          one_liner: 'AI workflow automation for support teams',
+          long_description: 'Helps teams automate repetitive support work with AI.',
+          batch: 'Winter 2026',
+          website: 'https://acme.example'
+        }
+      ]
+    );
+
+    expect(events).toHaveLength(1);
+    assertRawShape(events[0] as unknown as Record<string, unknown>);
+    expect(events[0]?.source).toBe('yc_companies');
   });
 });

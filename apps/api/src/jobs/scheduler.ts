@@ -12,6 +12,14 @@ export type SchedulerPlan = {
 };
 
 const isConnectorEnabled = (connector: string, env: ReturnType<typeof loadRuntimeEnv>): boolean => {
+  if (connector === 'greenhouse') {
+    return Boolean(env.greenhouseBoardToken);
+  }
+
+  if (connector === 'lever') {
+    return Boolean(env.leverSite);
+  }
+
   if (connector === 'exa_byo') {
     return Boolean(env.exaApiKey);
   }

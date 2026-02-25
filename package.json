@@ -5,8 +5,16 @@
   "type": "module",
   "packageManager": "pnpm@10.13.1",
   "scripts": {
-    "test": "pnpm -r --if-present test",
-    "lint": "pnpm -r --if-present lint"
+    "test": "CI=1 pnpm -r --if-present test",
+    "lint": "pnpm -r --if-present lint",
+    "preview:pipeline": "pnpm exec tsx scripts/dev/pipeline_preview.ts",
+    "infra:up": "docker compose -f docker-compose.infra.yml up -d",
+    "infra:down": "docker compose -f docker-compose.infra.yml down",
+    "api:docker:up": "docker compose -f docker-compose.infra.yml -f docker-compose.app.yml up -d --build api",
+    "api:docker:down": "docker compose -f docker-compose.infra.yml -f docker-compose.app.yml stop api",
+    "api:docker:logs": "docker compose -f docker-compose.infra.yml -f docker-compose.app.yml logs -f api",
+    "api:docker:shell": "docker compose -f docker-compose.infra.yml -f docker-compose.app.yml exec api bash",
+    "db:migrate": "PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0001_init.sql && PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0002_memory.sql && PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0003_thesis.sql"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
@@ -15,6 +23,7 @@
     "@types/react": "^18.3.14",
     "@types/react-dom": "^18.3.1",
     "jsdom": "^25.0.1",
+    "tsx": "^4.20.6",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

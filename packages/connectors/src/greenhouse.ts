@@ -14,16 +14,24 @@ type GreenhouseResponse = {
 
 type GreenhouseLoader = (limit: number) => Promise<GreenhouseResponse>;
 
-const defaultGreenhouseLoader: GreenhouseLoader = (limit) =>
+const buildGreenhouseLoader = (boardToken: string): GreenhouseLoader => (limit) =>
   fetchJsonWithRetry<GreenhouseResponse>(
-    `https://boards-api.greenhouse.io/v1/boards?content=true&limit=${limit}`
+    `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(boardToken)}/jobs?content=true&limit=${limit}`
   );
 
 export const fetchGreenhouseJobEvents = async (
-  loadJobs: GreenhouseLoader = defaultGreenhouseLoader,
-  limit = OPEN_CONNECTOR_LIMITS.greenhouse
+  loadJobs?: GreenhouseLoader,
+  limit = OPEN_CONNECTOR_LIMITS.greenhouse,
+  env: NodeJS.ProcessEnv = process.env
 ): Promise<RawEventInput[]> => {
-  const response = await withRetry(() => loadJobs(limit));
+  const boardToken = env.GREENHOUSE_BOARD_TOKEN;
+  const loader = loadJobs ?? (boardToken ? buildGreenhouseLoader(boardToken) : undefined);
+
+  if (!loader) {
+    throw new Error('GREENHOUSE_BOARD_TOKEN is required for greenhouse connector');
+  }
+
+  const response = await withRetry(() => loader(limit));
 
   return response.jobs.slice(0, limit).map((job) => ({
     source: 'greenhouse',
