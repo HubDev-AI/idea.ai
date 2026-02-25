@@ -20,6 +20,10 @@ const isConnectorEnabled = (connector: string, env: ReturnType<typeof loadRuntim
     return Boolean(env.leverSite);
   }
 
+  if (connector === 'producthunt') {
+    return Boolean(env.phApiToken);
+  }
+
   if (connector === 'exa_byo') {
     return Boolean(env.exaApiKey);
   }

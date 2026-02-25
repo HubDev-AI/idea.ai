@@ -3,10 +3,12 @@ import { fetchGithubIssueEvents } from '@idea/connectors/src/github_issues';
 import { fetchGreenhouseJobEvents } from '@idea/connectors/src/greenhouse';
 import { fetchHnEvents } from '@idea/connectors/src/hn';
 import { fetchLeverJobEvents } from '@idea/connectors/src/lever';
+import { fetchProductHunt } from '@idea/connectors/src/producthunt';
+import { fetchReddit } from '@idea/connectors/src/reddit';
 import { fetchYcCompanyEvents } from '@idea/connectors/src/yc_companies';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 
-export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies';
+export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt';
 
 export type OpenConnectorStatus = {
   name: OpenConnectorName;
@@ -28,14 +30,16 @@ type OpenIngestionDeps = {
   loaders?: Partial<Record<OpenConnectorName, OpenConnectorLoader>>;
 };
 
-const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies'];
+const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt'];
 
 const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   hn: () => fetchHnEvents(),
   github_issues: () => fetchGithubIssueEvents(),
   greenhouse: () => fetchGreenhouseJobEvents(),
   lever: () => fetchLeverJobEvents(),
-  yc_companies: () => fetchYcCompanyEvents()
+  yc_companies: () => fetchYcCompanyEvents(),
+  reddit: () => fetchReddit({}),
+  producthunt: () => fetchProductHunt({ token: process.env.PH_API_TOKEN })
 };
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');

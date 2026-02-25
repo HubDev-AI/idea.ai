@@ -13,7 +13,9 @@ export const OPEN_CONNECTOR_LIMITS = {
   github_issues: 25,
   greenhouse: 50,
   lever: 50,
-  yc_companies: 50
+  yc_companies: 50,
+  reddit: 25,
+  producthunt: 20
 } as const;
 
 export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
@@ -21,7 +23,9 @@ export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
   github_issues: 'hourly',
   greenhouse: 'daily',
   lever: 'daily',
-  yc_companies: 'daily'
+  yc_companies: 'daily',
+  reddit: 'hourly',
+  producthunt: 'daily'
 };
 
 const sleep = async (ms: number): Promise<void> => {

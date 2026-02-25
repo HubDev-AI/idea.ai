@@ -1,3 +1,4 @@
+import { aiScoreSignal, type AiScoreResult } from '@idea/pipeline/src/scoring/ai_score';
 import { scorePain } from '@idea/pipeline/src/scoring/pain';
 import { scoreTiming } from '@idea/pipeline/src/scoring/timing';
 import { scoreBuildability } from '@idea/pipeline/src/scoring/buildability';
@@ -94,4 +95,48 @@ export const scoreSignalWithRetriever = async ({
     basePain,
     baseTiming
   });
+};
+
+export const scoreSignalWithAiFallback = async ({
+  text,
+  source,
+  topic,
+  judgeScores,
+  canonicalText,
+  memoryRetriever,
+  topK,
+  runPrompt
+}: {
+  text: string;
+  source: string;
+  topic: string;
+  judgeScores: [number, number, number];
+  canonicalText: string;
+  memoryRetriever?: MemoryRetriever;
+  topK?: number;
+  runPrompt?: (input: { prompt: string; timeoutMs?: number }) => Promise<any>;
+}): Promise<ReturnType<typeof scoreSignal> & { aiScored: boolean; reasoning?: string }> => {
+  let aiResult: AiScoreResult | null = null;
+  if (runPrompt) {
+    aiResult = await aiScoreSignal({ text, source, topic }, { runPrompt });
+  }
+
+  const result = await scoreSignalWithRetriever({
+    text,
+    judgeScores,
+    topic,
+    source,
+    canonicalText,
+    memoryRetriever,
+    topK,
+    basePain: aiResult?.pain,
+    baseTiming: aiResult?.timing
+  });
+
+  return {
+    ...result,
+    buildability: aiResult?.buildability ?? result.buildability,
+    aiScored: aiResult !== null,
+    reasoning: aiResult?.reasoning
+  };
 };
