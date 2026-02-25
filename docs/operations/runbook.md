@@ -90,3 +90,117 @@ Restart behavior:
 
 - Remove connector names from `HOURLY_CONNECTORS` / `DAILY_CONNECTORS`.
 - Unset `EXA_API_KEY` / `PERIGON_API_KEY` to disable BYO connectors.
+
+---
+
+## Ollama Setup (V2)
+
+Ollama provides local embedding generation via `nomic-embed-text`, removing the need for external embedding APIs.
+
+### Install & Start
+
+```bash
+# macOS
+brew install ollama
+ollama serve          # starts the HTTP server on :11434
+
+# Pull the embedding model
+ollama pull nomic-embed-text
+```
+
+### Verify
+
+```bash
+curl -s http://localhost:11434/api/embeddings \
+  -d '{"model":"nomic-embed-text","prompt":"hello"}' | jq '.embedding | length'
+# Expected: 768
+```
+
+### Environment Variables
+
+- `OLLAMA_BASE_URL`: base URL for the Ollama server (default `http://localhost:11434`).
+- `OLLAMA_EMBED_MODEL`: model name used for embedding generation (default `nomic-embed-text`).
+
+If Ollama is unreachable at startup, the memory indexer logs a warning and skips embedding generation until the next cycle.
+
+## Research Agent (V2)
+
+The research agent is a scheduled job that orchestrates the full V2 pipeline: ingest, score, embed, and synthesize theses.
+
+### Schedule
+
+- Controlled by `AGENT_SCHEDULE_CRON` (default `0 6 * * *` -- daily at 06:00 UTC).
+- Each run triggers: connector ingestion -> noise gate -> AI scoring -> memory indexing -> thesis synthesis.
+
+### Monitoring
+
+- Key log entries:
+  - `research agent cycle started`
+  - `research agent cycle completed`
+  - `research agent cycle failed`
+- The agent emits a structured summary at the end of each cycle with signal counts, thesis updates, and timing.
+- Health: check `GET /v1/ai-health` for provider status and `GET /v1/feed` for freshness.
+
+### Configuration
+
+- `AGENT_DUAL_ANALYST`: when `true`, enables dual-analyst mode (see below).
+- `NOISE_GATE_BATCH_SIZE`: number of signals processed per noise-gate batch (default `15`).
+
+## Thesis Lifecycle (V2)
+
+Theses represent synthesized investment or opportunity ideas derived from recurring signal patterns.
+
+### States
+
+| State | Description |
+|-------|-------------|
+| `candidate` | Newly synthesized thesis that has not yet accumulated enough supporting evidence. |
+| `watching` | Thesis with moderate confidence; actively tracking for additional supporting or contradicting signals. |
+| `promoted` | High-confidence thesis that has crossed the promotion threshold and is surfaced in the feed. |
+| `stale` | Thesis that has not received new supporting signals within its freshness window. |
+| `rejected` | Thesis explicitly rejected by contradicting evidence or user dismissal. |
+
+### Confidence Thresholds
+
+- `candidate` -> `watching`: confidence >= 0.4
+- `watching` -> `promoted`: confidence >= 0.7
+- Any state -> `stale`: no new supporting signal for 14 days
+- Any state -> `rejected`: contradicting evidence score > supporting score, or manual rejection
+
+### Storage
+
+- Theses are persisted in PostgreSQL (migration: `apps/api/db/migrations/0003_thesis.sql`).
+- Each thesis tracks: title, summary, confidence, state, supporting signal IDs, timestamps.
+
+## New Connectors (V2)
+
+### Reddit
+
+- Type: **open** (public API, no authentication required).
+- Subreddits configured via `REDDIT_SUBREDDITS` (comma-separated, default `SaaS,startups,smallbusiness,Entrepreneur`).
+- Polls the public `.json` endpoint for each subreddit on the hourly schedule.
+- Rate limits: respects Reddit's public API rate limit (no token needed).
+
+### ProductHunt
+
+- Type: **BYO** (requires API token).
+- Set `PH_API_TOKEN` to enable.
+- Queries the ProductHunt GraphQL API for new product launches.
+- Skipped automatically if `PH_API_TOKEN` is unset (same behavior as other BYO connectors).
+
+## Dual-Analyst Mode (V2)
+
+When `AGENT_DUAL_ANALYST=true`, the scoring step sends each signal to **both** Claude and Codex for independent analysis.
+
+### Behavior
+
+- Each provider returns an independent score and rationale.
+- **Agreement**: when both providers score within 0.15 of each other, the average score is used and confidence is boosted.
+- **Disagreement**: when scores diverge by more than 0.15, both rationales are preserved and the signal is flagged for review. The lower score is used as a conservative default.
+- Dual-analyst results are visible in the signal detail view and in execution logs.
+
+### When to Use
+
+- Recommended for production deployments where scoring accuracy matters.
+- Increases API cost (two calls per signal) but significantly reduces false positives.
+- Disable by setting `AGENT_DUAL_ANALYST=false` or `AI_PROVIDER` to a single provider.
