@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@idea/ai-runtime/src/ollama', () => ({
+  embedText: vi.fn().mockResolvedValue(Array.from({ length: 768 }, (_, i) => i * 0.001))
+}));
+
 import { buildCanonicalText, buildLocalEmbedding, indexSignalMemory } from '../src/jobs/memory_index';
 
 describe('memory indexing', () => {
@@ -14,8 +19,8 @@ describe('memory indexing', () => {
     expect(buildLocalEmbedding(canonical)).toHaveLength(32);
   });
 
-  it('creates memory and embedding records from scored signal input', () => {
-    const result = indexSignalMemory({
+  it('creates memory and embedding records from scored signal input', async () => {
+    const result = await indexSignalMemory({
       signalId: 'signal-1',
       topic: 'compliance',
       source: 'hn',
@@ -30,6 +35,7 @@ describe('memory indexing', () => {
     });
 
     expect(result.memoryRecord.signal_id).toBe('signal-1');
-    expect(result.embeddingRecord.embedding).toHaveLength(32);
+    expect(result.embeddingRecord.embedding).toHaveLength(768);
+    expect(result.embeddingRecord.model).toBe('ollama-nomic-embed-text');
   });
 });

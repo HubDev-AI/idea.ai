@@ -66,8 +66,9 @@ export const createInMemoryRetriever = (
 
       return entries
         .filter((entry) => entry.memoryRecord.topic === query.topic || entry.memoryRecord.source === query.source)
+        .filter((entry) => entry.embeddingRecord.embedding !== null)
         .map((entry) =>
-          toSimilarMatch(entry, cosineDistance(entry.embeddingRecord.embedding, queryEmbedding))
+          toSimilarMatch(entry, cosineDistance(entry.embeddingRecord.embedding!, queryEmbedding))
         )
         .sort((left, right) => left.distance - right.distance)
         .slice(0, limit);

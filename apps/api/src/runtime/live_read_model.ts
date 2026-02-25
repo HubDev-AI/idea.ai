@@ -767,7 +767,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
             blended: score.blended
           });
 
-          const indexedEntry = indexSignalMemory({
+          const indexedEntry = await indexSignalMemory({
             signalId,
             topic,
             source: event.source,

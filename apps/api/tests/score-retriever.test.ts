@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@idea/ai-runtime/src/ollama', () => ({
+  embedText: vi.fn().mockResolvedValue(Array.from({ length: 768 }, (_, i) => i * 0.001))
+}));
+
 import { indexSignalMemory } from '../src/jobs/memory_index';
 import { buildRetrieverQueryText, createInMemoryRetriever } from '../src/jobs/memory_retriever';
 import { scoreSignalWithRetriever } from '../src/jobs/score';
 
 describe('retriever-backed scoring', () => {
   it('loads memory context from retriever and applies memory-aware scoring', async () => {
-    const indexed = [
+    const indexed = await Promise.all([
       indexSignalMemory({
         signalId: 'hist-1',
         topic: 'compliance',
@@ -32,7 +37,7 @@ describe('retriever-backed scoring', () => {
         buildability: 62,
         blended: 67
       })
-    ];
+    ]);
 
     const retriever = createInMemoryRetriever(indexed, new Date('2026-02-24T00:00:00.000Z'));
 

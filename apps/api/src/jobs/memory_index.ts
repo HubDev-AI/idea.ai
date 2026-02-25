@@ -1,4 +1,5 @@
 import type { SignalMemoryRecord } from '@idea/contracts/src/memory';
+import { embedText } from '@idea/ai-runtime/src/ollama';
 
 export type ScoredSignalInput = {
   signalId: string;
@@ -16,12 +17,13 @@ export type ScoredSignalInput = {
 
 export type SignalEmbeddingRecord = {
   signal_id: string;
-  embedding: number[];
+  embedding: number[] | null;
   model: string;
 };
 
 const EMBEDDING_DIMENSION = 32;
 const EMBEDDING_MODEL = 'local-hash-v1';
+const OLLAMA_EMBEDDING_MODEL = 'ollama-nomic-embed-text';
 
 const tokenize = (text: string): string[] =>
   text
@@ -65,10 +67,11 @@ export const buildLocalEmbedding = (text: string, dimension = EMBEDDING_DIMENSIO
   return normalizeVector(vector);
 };
 
-export const indexSignalMemory = (
+export const indexSignalMemory = async (
   input: ScoredSignalInput
-): { memoryRecord: SignalMemoryRecord; embeddingRecord: SignalEmbeddingRecord } => {
+): Promise<{ memoryRecord: SignalMemoryRecord; embeddingRecord: SignalEmbeddingRecord }> => {
   const canonicalText = buildCanonicalText(input);
+  const embedding = await embedText(canonicalText, { fallbackToNull: true });
 
   return {
     memoryRecord: {
@@ -84,8 +87,8 @@ export const indexSignalMemory = (
     },
     embeddingRecord: {
       signal_id: input.signalId,
-      embedding: buildLocalEmbedding(canonicalText),
-      model: EMBEDDING_MODEL
+      embedding,
+      model: embedding ? OLLAMA_EMBEDDING_MODEL : EMBEDDING_MODEL
     }
   };
 };

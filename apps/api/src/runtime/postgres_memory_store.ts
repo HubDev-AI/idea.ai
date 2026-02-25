@@ -115,6 +115,11 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
     ]
   );
 
+  // Skip embedding storage if Ollama returned null (service unreachable)
+  if (entry.embeddingRecord.embedding === null) {
+    return;
+  }
+
   await client.query(
     `
       INSERT INTO signal_embeddings (
