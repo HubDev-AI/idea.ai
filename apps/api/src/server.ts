@@ -4,12 +4,15 @@ import { registerConnectorRoute, type ConnectorStatusRecord } from './routes/con
 import { registerFeedRoute, type FeedRecord } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { registerLogsRoute, type ExecutionLogRecord, type ListLogsQuery } from './routes/logs';
+import { registerThesesRoute } from './routes/theses';
+import type { ThesisStore } from './runtime/thesis_store';
 
 export type ServerDeps = {
   listSignals: () => Promise<FeedRecord[]>;
   listConnectors: () => Promise<ConnectorStatusRecord[]>;
   listLogs: (query: ListLogsQuery) => Promise<ExecutionLogRecord[]>;
   getAiHealth: () => Promise<AiHealthRecord>;
+  thesisStore?: ThesisStore;
 };
 
 const defaultDeps: ServerDeps = {
@@ -76,6 +79,10 @@ export const buildServer = (deps: Partial<ServerDeps> = {}): FastifyInstance => 
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
   registerHealthRoute(app);
+
+  if (resolvedDeps.thesisStore) {
+    registerThesesRoute(app, resolvedDeps.thesisStore);
+  }
 
   return app;
 };

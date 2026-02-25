@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import type { ThesisStatus } from '../jobs/thesis_synthesizer';
+import type { ThesisStore } from '../runtime/thesis_store';
+import type { ThesisDraft, ThesisEvidenceDraft, ThesisStatus } from '../jobs/thesis_synthesizer';
 
 export type ThesisRecord = {
   id: number;
@@ -35,14 +36,20 @@ export type ThesisDetail = ThesisRecord & {
   }>;
 };
 
+export type ThesisListItem = ThesisDraft & { id: number };
+
+export type ThesisDetailResponse = ThesisListItem & {
+  evidence: ThesisEvidenceDraft[];
+};
+
 export const registerThesesRoute = (
   app: FastifyInstance,
-  deps: {
-    listTheses: () => Promise<ThesisRecord[]>;
-    getThesis: (id: number) => Promise<ThesisDetail | null>;
-  }
+  store: ThesisStore
 ): void => {
-  app.get('/v1/theses', async () => deps.listTheses());
+  app.get('/v1/theses', async () => {
+    const drafts = await store.list();
+    return drafts.map((draft, index) => ({ ...draft, id: index + 1 }));
+  });
 
   app.get('/v1/theses/:id', async (request, reply) => {
     const id = Number((request.params as { id?: string }).id ?? NaN);
@@ -51,13 +58,13 @@ export const registerThesesRoute = (
       return { error: 'Invalid thesis id' };
     }
 
-    const thesis = await deps.getThesis(id);
-    if (!thesis) {
+    const drafts = await store.list();
+    const draft = drafts[id - 1];
+    if (!draft) {
       reply.code(404);
       return { error: 'Thesis not found' };
     }
 
-    return thesis;
+    return { ...draft, id };
   });
 };
-
