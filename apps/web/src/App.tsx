@@ -1,19 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AgentSidebar } from './components/AgentSidebar';
 import { AiHealthPanel } from './components/AiHealthPanel';
 import { ConnectorStatus } from './components/ConnectorStatus';
 import { SignalRow } from './components/SignalRow';
+import { ThesisCard } from './components/ThesisCard';
 import {
+  fetchAgentStatus,
   fetchAiHealth,
   buildApiUrl,
   fetchConnectors,
   fetchLogs,
   fetchSignals,
+  fetchTheses,
+  type AgentStatusRecord,
   type AiHealthRecord,
   type ConnectorRecord,
   type ExecutionLogRecord,
-  type SignalRecord
+  type SignalRecord,
+  type ThesisListItem
 } from './api';
-import { isIdeaCandidateSignal } from './idea';
 
 const PAGE_SIZE = 8;
 const LOG_POLL_INTERVAL_MS = 3_000;
@@ -41,18 +46,21 @@ const formatTerminalLine = (entry: ExecutionLogRecord): string => {
 };
 
 const logLevelIcons: Record<ExecutionLogRecord['level'], string> = {
-  debug: '○',
-  info: '●',
-  warn: '▲',
-  error: '✖'
+  debug: '\u25CB',
+  info: '\u25CF',
+  warn: '\u25B2',
+  error: '\u2716'
 };
 
 const App = () => {
   const [signals, setSignals] = useState<SignalRecord[]>([]);
   const [connectors, setConnectors] = useState<ConnectorRecord[]>([]);
   const [aiHealth, setAiHealth] = useState<AiHealthRecord | null>(null);
+  const [theses, setTheses] = useState<ThesisListItem[]>([]);
+  const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsRealtime, setLogsRealtime] = useState(false);
+  const [logsCollapsed, setLogsCollapsed] = useState(true);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [requestedPage, setRequestedPage] = useState(1);
@@ -64,9 +72,12 @@ const App = () => {
     hasNext: false,
     hasPrev: false
   });
-  const ideaCandidates = signals.filter((signal) => isIdeaCandidateSignal(signal)).slice(0, 3);
   const activeConnectors = connectors.filter((connector) => connector.status === 'active').length;
   const latestSignalAt = signals[0]?.updated_at ?? null;
+  const topThesis = theses.length > 0 ? theses[0] : null;
+  const agentLastRun = agentStatus?.lastRun
+    ? new Date(agentStatus.lastRun.timestamp).toLocaleTimeString()
+    : 'pending';
   const renderedLogs = useMemo(() => logs.slice().reverse(), [logs]);
   const logListRef = useRef<HTMLUListElement | null>(null);
 
@@ -75,10 +86,12 @@ const App = () => {
       if (showLoading) {
         setIsLoading(true);
       }
-      const [signalResult, connectorResult, aiHealthResult] = await Promise.allSettled([
+      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult] = await Promise.allSettled([
         fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
         fetchConnectors(),
-        fetchAiHealth()
+        fetchAiHealth(),
+        fetchTheses(),
+        fetchAgentStatus()
       ]);
       const warnings: string[] = [];
 
@@ -109,6 +122,15 @@ const App = () => {
         setAiHealth(aiHealthResult.value);
       } else {
         warnings.push('ai_health');
+      }
+
+      if (thesesResult.status === 'fulfilled') {
+        setTheses(thesesResult.value);
+      }
+      // Thesis/agent failures are non-critical; don't add to warnings
+
+      if (agentResult.status === 'fulfilled') {
+        setAgentStatus(agentResult.value);
       }
 
       if (warnings.length > 0) {
@@ -226,11 +248,14 @@ const App = () => {
     list.scrollTop = list.scrollHeight;
   }, [renderedLogs]);
 
+  const displayTheses = theses.slice(0, 3);
+
   return (
     <main className="future-shell">
       <div className="halo halo-one" />
       <div className="halo halo-two" />
 
+      {/* HEADER: Stats bar */}
       <header className="hero-panel">
         <div className="hero-copy">
           <p className="eyebrow">Sixth Sense Idea Engine</p>
@@ -250,37 +275,44 @@ const App = () => {
             <span>Last Update</span>
             <strong>{latestSignalAt ? new Date(latestSignalAt).toLocaleTimeString() : 'pending'}</strong>
           </article>
+          <article className="stat-card">
+            <span>Top Thesis</span>
+            <strong>{topThesis ? `${topThesis.title.slice(0, 22)}${topThesis.title.length > 22 ? '\u2026' : ''}` : 'none'}</strong>
+          </article>
+          <article className="stat-card">
+            <span>Agent Last Run</span>
+            <strong>{agentLastRun}</strong>
+          </article>
         </div>
       </header>
 
       {loadWarning ? <p role="alert">{loadWarning}</p> : null}
 
-      <section className="workspace-grid">
-        <div className="workspace-main">
+      {/* TOP THESES: horizontal cards */}
+      <section className="thesis-board-section">
+        <h2>Top Theses</h2>
+        {displayTheses.length > 0 ? (
+          <div className="thesis-board">
+            {displayTheses.map((thesis) => (
+              <ThesisCard key={thesis.canonicalKey} thesis={thesis} />
+            ))}
+          </div>
+        ) : (
+          <p className="thesis-empty">No theses yet. The research agent will synthesize theses from incoming signals.</p>
+        )}
+      </section>
+
+      {/* CONTENT GRID: agent sidebar + signal feed */}
+      <div className="content-grid">
+        {/* Agent Activity sidebar (left column) */}
+        <AgentSidebar
+          lastRun={agentStatus?.lastRun ?? null}
+          investigateNext={agentStatus?.investigateNext ?? null}
+        />
+
+        {/* Signal Feed as main content (right column) */}
+        <div className="feed-column">
           <AiHealthPanel aiHealth={aiHealth} />
-
-          <section className={`idea-banner ${ideaCandidates.length > 0 ? 'found' : 'waiting'}`}>
-            {ideaCandidates.length > 0 ? (
-              <>
-                <h2>Idea Candidate Found</h2>
-                <p>
-                  {ideaCandidates.length} high-confidence signal{ideaCandidates.length === 1 ? '' : 's'} detected.
-                </p>
-                <ul>
-                  {ideaCandidates.map((signal) => (
-                    <li key={`${signal.idea}-${signal.updated_at}`}>{`${signal.idea} (${signal.score})`}</li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <>
-                <h2>No Strong Idea Yet</h2>
-                <p>Engine is collecting evidence across runs. Keep it running and check again after new refresh cycles.</p>
-              </>
-            )}
-          </section>
-
-          <ConnectorStatus connectors={connectors} />
 
           <section className="signal-card">
             <div className="signal-header">
@@ -311,33 +343,44 @@ const App = () => {
               ))}
             </ul>
           </section>
-        </div>
 
-        <aside className="log-card terminal-card">
-          <div className="signal-header">
-            <h2>Runtime Logs</h2>
+          {/* Connector health as compact inline row */}
+          <ConnectorStatus connectors={connectors} />
+        </div>
+      </div>
+
+      {/* LOGS: collapsed drawer at bottom */}
+      <section className={`log-drawer ${logsCollapsed ? 'collapsed' : ''}`}>
+        <button
+          type="button"
+          className="log-drawer-toggle"
+          onClick={() => setLogsCollapsed((prev) => !prev)}
+        >
+          <span>
+            Runtime Logs
             <span className={`log-hint ${logsRealtime ? 'online' : 'offline'}`}>
-              <span className={`status-dot ${logsRealtime ? 'active' : 'disabled'}`} aria-hidden="true" />
-              {logsRealtime ? 'LIVE' : 'POLLING'} · {logs.length} entries
+              {' '}<span className={`status-dot ${logsRealtime ? 'active' : 'disabled'}`} aria-hidden="true" />
+              {' '}{logsRealtime ? 'LIVE' : 'POLLING'} &middot; {logs.length} entries
             </span>
-          </div>
-          <ul ref={logListRef} className="log-list terminal-list">
-            {renderedLogs.map((entry, index) => (
-                <li
-                  key={`${entry.ts}-${entry.run_id}-${entry.component}-${entry.message}-${index}`}
-                  className={`log-row terminal-row ${entry.level}`}
-                >
-                  <code className="terminal-line">
-                    <span className={`terminal-icon ${entry.level}`} aria-hidden="true">
-                      {logLevelIcons[entry.level]}
-                    </span>
-                    {formatTerminalLine(entry)}
-                  </code>
-                </li>
-              ))}
-            {logs.length === 0 ? <li className="log-empty">No execution logs yet.</li> : null}
-          </ul>
-        </aside>
+          </span>
+          <span className="log-drawer-chevron">{logsCollapsed ? '\u25BC' : '\u25B2'}</span>
+        </button>
+        <ul ref={logListRef} className="log-list terminal-list">
+          {renderedLogs.map((entry, index) => (
+            <li
+              key={`${entry.ts}-${entry.run_id}-${entry.component}-${entry.message}-${index}`}
+              className={`log-row terminal-row ${entry.level}`}
+            >
+              <code className="terminal-line">
+                <span className={`terminal-icon ${entry.level}`} aria-hidden="true">
+                  {logLevelIcons[entry.level]}
+                </span>
+                {formatTerminalLine(entry)}
+              </code>
+            </li>
+          ))}
+          {logs.length === 0 ? <li className="log-empty">No execution logs yet.</li> : null}
+        </ul>
       </section>
     </main>
   );

@@ -138,3 +138,34 @@ export const fetchAiHealth = async (): Promise<AiHealthRecord> => {
 
   return response.json() as Promise<AiHealthRecord>;
 };
+
+export type ThesisListItem = {
+  canonicalKey: string;
+  title: string;
+  confidence: number;
+  status: string;
+  evidenceCount: number;
+  problemStatement: string;
+  sourceCount: number;
+};
+
+export type AgentStatusRecord = {
+  lastRun: {
+    timestamp: string;
+    thesesUpdated: number;
+    newCandidates: number;
+  } | null;
+  investigateNext: string | null;
+};
+
+export const fetchTheses = async (): Promise<ThesisListItem[]> => {
+  const response = await fetch(buildApiUrl('/v1/theses'));
+  if (!response.ok) throw new Error('Failed to load theses');
+  return response.json() as Promise<ThesisListItem[]>;
+};
+
+export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
+  const response = await fetch(buildApiUrl('/v1/agent/status'));
+  if (!response.ok) throw new Error('Failed to load agent status');
+  return response.json() as Promise<AgentStatusRecord>;
+};

@@ -68,6 +68,86 @@ const mockAiHealth = {
   ]
 };
 
+const mockTheses = [
+  {
+    canonicalKey: 'soc2-automation',
+    title: 'SOC2 Automation Platform',
+    confidence: 78,
+    status: 'promoted',
+    evidenceCount: 5,
+    problemStatement: 'Startups struggle with SOC2 compliance prep',
+    sourceCount: 3
+  },
+  {
+    canonicalKey: 'dev-onboarding',
+    title: 'Developer Onboarding Tool',
+    confidence: 62,
+    status: 'watching',
+    evidenceCount: 3,
+    problemStatement: 'Engineering teams waste weeks onboarding new developers',
+    sourceCount: 2
+  }
+];
+
+const mockAgentStatus = {
+  lastRun: {
+    timestamp: '2026-02-24T03:00:00.000Z',
+    thesesUpdated: 2,
+    newCandidates: 1
+  },
+  investigateNext: 'API security testing tools'
+};
+
+const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolean; failAgent?: boolean }) =>
+  vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url.includes('/v1/signals')) {
+      if (overrides?.failSignals) {
+        return Promise.resolve(new Response('upstream failure', { status: 503 }));
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            items: mockSignals,
+            page: 1,
+            page_size: 8,
+            total_items: 1,
+            total_pages: 1,
+            has_next: false,
+            has_prev: false
+          }),
+          { status: 200 }
+        )
+      );
+    }
+
+    if (url.includes('/v1/ai-health')) {
+      return Promise.resolve(new Response(JSON.stringify(mockAiHealth), { status: 200 }));
+    }
+
+    if (url.includes('/v1/logs')) {
+      return Promise.resolve(new Response(JSON.stringify(mockLogs), { status: 200 }));
+    }
+
+    if (url.includes('/v1/theses')) {
+      if (overrides?.failTheses) {
+        return Promise.resolve(new Response('not found', { status: 404 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify(mockTheses), { status: 200 }));
+    }
+
+    if (url.includes('/v1/agent/status')) {
+      if (overrides?.failAgent) {
+        return Promise.resolve(new Response('not found', { status: 404 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify(mockAgentStatus), { status: 200 }));
+    }
+
+    // Default: connectors
+    return Promise.resolve(new Response(JSON.stringify(mockConnectors), { status: 200 }));
+  });
+
 describe('web app', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -75,44 +155,11 @@ describe('web app', () => {
 
   it('renders feed rows with idea, score, source/snippet, and next action', async () => {
     vi.stubGlobal('EventSource', undefined);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL) => {
-        const url = String(input);
-
-        if (url.includes('/v1/signals')) {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                items: mockSignals,
-                page: 1,
-                page_size: 8,
-                total_items: 1,
-                total_pages: 1,
-                has_next: false,
-                has_prev: false
-              }),
-              { status: 200 }
-            )
-          );
-        }
-
-        if (url.includes('/v1/ai-health')) {
-          return Promise.resolve(new Response(JSON.stringify(mockAiHealth), { status: 200 }));
-        }
-
-        if (url.includes('/v1/logs')) {
-          return Promise.resolve(new Response(JSON.stringify(mockLogs), { status: 200 }));
-        }
-
-        return Promise.resolve(new Response(JSON.stringify(mockConnectors), { status: 200 }));
-      })
-    );
+    vi.stubGlobal('fetch', buildMockFetch());
 
     render(<App />);
 
     expect(await screen.findByText('SOC2 prep copilot')).toBeDefined();
-    expect(screen.getByText(/Idea Candidate Found/i)).toBeDefined();
     expect(screen.getByText('82')).toBeDefined();
     expect(screen.getByText(/hacker_news/i)).toBeDefined();
     expect(screen.getByText(/compliance blockers/i)).toBeDefined();
@@ -123,35 +170,41 @@ describe('web app', () => {
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getAllByText(/claude/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/ai judge call failed for provider/i)).toBeDefined();
+
+    // V2 layout: thesis board and agent sidebar
+    expect(screen.getByText(/Top Theses/i)).toBeDefined();
+    expect(screen.getByText('SOC2 Automation Platform')).toBeDefined();
+    expect(screen.getByText('Developer Onboarding Tool')).toBeDefined();
+    expect(screen.getByText('78%')).toBeDefined();
+    expect(screen.getByText('62%')).toBeDefined();
+    expect(screen.getByText(/Research Agent/i)).toBeDefined();
+    expect(screen.getByText(/API security testing tools/i)).toBeDefined();
+    expect(screen.getByText(/2 theses updated/i)).toBeDefined();
   });
 
   it('shows partial data and error hint when one API request fails', async () => {
     vi.stubGlobal('EventSource', undefined);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL) => {
-        const url = String(input);
-
-        if (url.includes('/v1/signals')) {
-          return Promise.resolve(new Response('upstream failure', { status: 503 }));
-        }
-
-        if (url.includes('/v1/ai-health')) {
-          return Promise.resolve(new Response(JSON.stringify(mockAiHealth), { status: 200 }));
-        }
-
-        if (url.includes('/v1/logs')) {
-          return Promise.resolve(new Response(JSON.stringify(mockLogs), { status: 200 }));
-        }
-
-        return Promise.resolve(new Response(JSON.stringify(mockConnectors), { status: 200 }));
-      })
-    );
+    vi.stubGlobal('fetch', buildMockFetch({ failSignals: true }));
 
     render(<App />);
 
     expect(await screen.findByText('hn')).toBeDefined();
-    expect(screen.getByText(/No Strong Idea Yet/i)).toBeDefined();
+    expect(screen.getByText(/Top Theses/i)).toBeDefined();
     expect(screen.getByText(/Some data could not be loaded/i)).toBeDefined();
+  });
+
+  it('degrades gracefully when thesis and agent APIs fail', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    vi.stubGlobal('fetch', buildMockFetch({ failTheses: true, failAgent: true }));
+
+    render(<App />);
+
+    // Core data still loads
+    expect(await screen.findByText('SOC2 prep copilot')).toBeDefined();
+    // Thesis section shows empty state
+    expect(screen.getByText(/No theses yet/i)).toBeDefined();
+    // Agent sidebar shows fallback
+    expect(screen.getByText(/No runs yet/i)).toBeDefined();
+    // No warning banner since thesis/agent are non-critical
   });
 });
