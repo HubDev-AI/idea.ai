@@ -6,6 +6,11 @@ export type SignalRecord = {
   source_url: string | null;
   next_action: 'validate_demand' | 'validate_pricing' | 'validate_channel';
   updated_at: string;
+  // V2 score breakdown & reasoning
+  pain?: number;
+  timing?: number;
+  buildability?: number;
+  reasoning?: string;
 };
 
 export type SignalPage = {
