@@ -6,3 +6,8 @@ coverage/
 .worktrees/
 worktrees/
 pnpm-lock.yaml
+.history/
+.claude/
+logs/
+.pnpm-store/
+apps/api/logs/
