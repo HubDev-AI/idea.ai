@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: idea_ai
       POSTGRES_USER: idea_ai
-      POSTGRES_PASSWORD: idea_ai_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-idea_ai_dev}
     ports:
       - "5917:5432"
     volumes:
