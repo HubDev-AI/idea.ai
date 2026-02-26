@@ -1,3 +1,4 @@
+// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React, { useState } from 'react';
 import type { SignalRecord } from '../api';
 

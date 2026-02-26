@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { CommandRunner, RunPromptInput, RunPromptResult } from './types';
 import { spawnCommand } from './types';
 

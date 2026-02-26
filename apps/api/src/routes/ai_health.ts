@@ -1,7 +1,7 @@
+import type { AiHealthRecord, } from '@idea/contracts/src/api';
 import type { FastifyInstance } from 'fastify';
-import type { AiHealthRecord, AiProviderHealthRecord } from '@idea/contracts/src/api';
 
-export type { AiProviderName, AiProviderStatus, AiProviderHealthRecord, AiHealthRecord } from '@idea/contracts/src/api';
+export type { AiHealthRecord, AiProviderHealthRecord, AiProviderName, AiProviderStatus } from '@idea/contracts/src/api';
 
 export const registerAiHealthRoute = (
   app: FastifyInstance,

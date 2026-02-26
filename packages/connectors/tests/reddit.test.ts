@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchReddit, DEFAULT_SUBREDDITS } from '../src/reddit';
+import { DEFAULT_SUBREDDITS, fetchReddit } from '../src/reddit';
 
 describe('reddit connector', () => {
   it('fetches posts from public subreddit JSON API', async () => {

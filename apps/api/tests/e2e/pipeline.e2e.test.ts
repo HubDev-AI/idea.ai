@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
 import { fetchHnEvents } from '@idea/connectors/src/hn';
-import { scoreSignal } from '../../src/jobs/score';
+import { describe, expect, it } from 'vitest';
 import { rankAndPreparePublish } from '../../src/jobs/rank_publish';
+import { scoreSignal } from '../../src/jobs/score';
 import { buildServer } from '../../src/server';
 
 describe('pipeline e2e', () => {

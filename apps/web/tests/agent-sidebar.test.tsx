@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import React from 'react';
+
 import { render, screen } from '@testing-library/react';
+// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
+import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { AgentSidebar } from '../src/components/AgentSidebar';
 

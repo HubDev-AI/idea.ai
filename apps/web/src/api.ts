@@ -1,12 +1,12 @@
 import type {
-  FeedRecord as SignalRecord,
-  SignalPage,
+  AgentStatusRecord, 
+  AiHealthRecord,
+  AiProviderHealthRecord,
   ConnectorStatusRecord as ConnectorRecord,
   ExecutionLogRecord,
-  AiProviderHealthRecord,
-  AiHealthRecord,
-  ThesisListItem,
-  AgentStatusRecord
+  SignalPage,
+  FeedRecord as SignalRecord,
+  ThesisListItem
 } from '@idea/contracts/src/api';
 
 export type {

@@ -161,7 +161,7 @@ export const findIdeaCandidates = (signals: FeedRecord[], limit = 3): FeedRecord
   signals.filter((signal) => isIdeaCandidateSignal(signal)).slice(0, limit);
 
 export const applySourceQualityPenalty = ({
-  source,
+  source: _source,
   idea,
   text,
   blended

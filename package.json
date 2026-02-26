@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.13.1",
   "scripts": {
     "test": "CI=1 pnpm -r --if-present test",
-    "lint": "pnpm -r --if-present lint",
+    "lint": "biome check .",
     "preview:pipeline": "pnpm exec tsx scripts/dev/pipeline_preview.ts",
     "infra:up": "docker compose -f docker-compose.infra.yml up -d",
     "infra:down": "docker compose -f docker-compose.infra.yml down",
@@ -17,6 +17,7 @@
     "db:migrate": "./scripts/db-migrate.sh"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^22.10.5",

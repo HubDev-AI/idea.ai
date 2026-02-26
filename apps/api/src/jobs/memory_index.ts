@@ -1,5 +1,5 @@
-import type { SignalMemoryRecord } from '@idea/contracts/src/memory';
 import { embedText } from '@idea/ai-runtime/src/ollama';
+import type { SignalMemoryRecord } from '@idea/contracts/src/memory';
 
 export type ScoredSignalInput = {
   signalId: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findDuplicates, type EmbeddedSignal } from '../src/dedup';
+import { type EmbeddedSignal, findDuplicates } from '../src/dedup';
 
 describe('cross-source dedup', () => {
   it('detects duplicates from different sources above threshold', () => {

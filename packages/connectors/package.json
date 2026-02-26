@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "pnpm --dir ../.. exec vitest --run packages/connectors/tests",
-    "lint": "echo lint:connectors"
+    "test": "pnpm --dir ../.. exec vitest --run packages/connectors/tests"
   },
   "dependencies": {
     "@idea/contracts": "workspace:*"

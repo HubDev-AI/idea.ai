@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('execution logging', () => {

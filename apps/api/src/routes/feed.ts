@@ -1,5 +1,5 @@
-import type { FastifyInstance } from 'fastify';
 import type { FeedRecord, PaginatedFeedResponse } from '@idea/contracts/src/api';
+import type { FastifyInstance } from 'fastify';
 
 export type { FeedRecord, PaginatedFeedResponse } from '@idea/contracts/src/api';
 

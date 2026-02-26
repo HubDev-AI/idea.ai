@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import type { RawEventInput } from '@idea/connectors/src/common/http';
+import { describe, expect, it } from 'vitest';
 import { findIdeaCandidates, isLowValueRecruitingEvent, selectEventsForScoring } from '../src/runtime/signal_quality';
 
 const event = ({

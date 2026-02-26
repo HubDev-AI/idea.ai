@@ -1,5 +1,5 @@
-import type { FastifyInstance } from 'fastify';
 import type { ExecutionLogLevel, ExecutionLogRecord, ListLogsQuery } from '@idea/contracts/src/api';
+import type { FastifyInstance } from 'fastify';
 
 export type { ExecutionLogLevel, ExecutionLogRecord, ListLogsQuery } from '@idea/contracts/src/api';
 

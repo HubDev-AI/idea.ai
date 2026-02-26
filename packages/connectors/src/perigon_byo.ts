@@ -1,5 +1,5 @@
+import { type ByoConnectorResult, evaluateByoGuard } from './byo_guard';
 import { fetchJsonWithRetry, type RawEventInput } from './common/http';
-import { evaluateByoGuard, type ByoConnectorResult } from './byo_guard';
 
 type PerigonArticle = {
   articleId: string;

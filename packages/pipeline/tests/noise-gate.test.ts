@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { classifyBatch, parseNoiseGateResponse, type NoiseClassification } from '../src/scoring/noise_gate';
+import { classifyBatch, parseNoiseGateResponse } from '../src/scoring/noise_gate';
 
 describe('noise gate', () => {
   describe('parseNoiseGateResponse', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { dualAnalystRun, reconcileScores, type DualResult } from '../src/dual_analyst';
+import { dualAnalystRun, reconcileScores } from '../src/dual_analyst';
 
 describe('dual analyst', () => {
   describe('reconcileScores', () => {

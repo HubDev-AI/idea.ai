@@ -1,5 +1,5 @@
-import type { FastifyInstance } from 'fastify';
 import type { ConnectorStatusRecord } from '@idea/contracts/src/api';
+import type { FastifyInstance } from 'fastify';
 
 export type { ConnectorStatusRecord } from '@idea/contracts/src/api';
 

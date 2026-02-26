@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { blendedScore } from '../src/scoring/blend';
+import { medianOfThree, scoreBuildability } from '../src/scoring/buildability';
 import { scorePain } from '../src/scoring/pain';
 import { scoreTiming } from '../src/scoring/timing';
-import { scoreBuildability, medianOfThree } from '../src/scoring/buildability';
-import { blendedScore } from '../src/scoring/blend';
 
 describe('scoring pipeline', () => {
   it('keeps pain/timing/buildability in [0,100]', () => {

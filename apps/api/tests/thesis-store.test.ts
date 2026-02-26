@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryThesisStore } from '../src/runtime/thesis_store';
 import type { ThesisDraft } from '../src/jobs/thesis_synthesizer';
+import { InMemoryThesisStore } from '../src/runtime/thesis_store';
 
 describe('thesis store', () => {
   it('upserts thesis candidates', async () => {

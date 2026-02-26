@@ -1,8 +1,8 @@
-import { buildAgentPrompt, parseAgentResponse, type AgentContext, type AgentOutput } from './research_agent';
 import { dualAnalystRun } from '@idea/ai-runtime/src/dual_analyst';
-import type { ThesisStore } from '../runtime/thesis_store';
-import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { RunPromptResult } from '@idea/ai-runtime/src/types';
+import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
+import type { ThesisStore } from '../runtime/thesis_store';
+import { type AgentContext, type AgentOutput, buildAgentPrompt, parseAgentResponse } from './research_agent';
 
 export type AgentRunResult = {
   thesesUpdated: number;

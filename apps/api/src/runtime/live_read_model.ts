@@ -1,37 +1,37 @@
-import type { Cadence, RawEventInput } from '@idea/connectors/src/common/http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import type { Cadence, RawEventInput } from '@idea/connectors/src/common/http';
 import type { RuntimeEnv } from '../config/env';
 import { loadRuntimeEnv } from '../config/env';
+import {
+  type AiJudgeAttempt,
+  type AiJudgeSettings, 
+  isAiJudgeEligible,
+  judgeBuildabilityWithAi,
+  resolveAiJudgeSettings
+} from '../jobs/ai_judges';
+import {
+  type AiPostScrapeAttempt,
+  type AiPostScrapeSettings, 
+  analyzePostScrapeBatchWithAi,
+  resolveAiPostScrapeSettings
+} from '../jobs/ai_post_scrape';
 import { runByoConnectorIngestion } from '../jobs/ingest_byo';
 import {
-  runOpenConnectorIngestionDetailed,
   type OpenConnectorIngestionResult,
-  type OpenConnectorName
+  type OpenConnectorName, 
+  runOpenConnectorIngestionDetailed
 } from '../jobs/ingest_open';
 import { indexSignalMemory } from '../jobs/memory_index';
 import { buildRetrieverQueryText, createInMemoryRetriever, type IndexedMemoryEntry } from '../jobs/memory_retriever';
 import { rankAndPreparePublish } from '../jobs/rank_publish';
 import { scoreSignalWithRetriever } from '../jobs/score';
-import {
-  isAiJudgeEligible,
-  judgeBuildabilityWithAi,
-  resolveAiJudgeSettings,
-  type AiJudgeAttempt,
-  type AiJudgeSettings
-} from '../jobs/ai_judges';
-import {
-  analyzePostScrapeBatchWithAi,
-  resolveAiPostScrapeSettings,
-  type AiPostScrapeAttempt,
-  type AiPostScrapeSettings
-} from '../jobs/ai_post_scrape';
 import type { AiHealthRecord, AiProviderHealthRecord } from '../routes/ai_health';
 import type { ConnectorStatusRecord } from '../routes/connectors';
 import type { FeedRecord } from '../routes/feed';
 import type { ExecutionLogRecord, ListLogsQuery } from '../routes/logs';
-import { createExecutionLogger, createRunId } from './execution_logger';
 import { readExecutionLogs } from './execution_log_reader';
+import { createExecutionLogger, createRunId } from './execution_logger';
 import { createPostgresMemoryStore, type PostgresMemoryStore } from './postgres_memory_store';
 import {
   applySourceQualityPenalty,
@@ -457,7 +457,7 @@ const parseSnapshotPayload = (raw: string): Snapshot | null => {
 export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
   const initialAiJudgeSettings = resolveAiJudgeSettings(process.env);
   const initialAiPostScrapeSettings = resolveAiPostScrapeSettings(process.env);
-  let memoryEntries: IndexedMemoryEntry[] = [];
+  const memoryEntries: IndexedMemoryEntry[] = [];
   let postgresMemoryStore: PostgresMemoryStore | null | undefined;
   let snapshotHydrated = false;
   let refreshInFlight: Promise<Snapshot> | null = null;

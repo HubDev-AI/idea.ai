@@ -1,3 +1,4 @@
+// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React from 'react';
 import type { AiHealthRecord } from '../api';
 

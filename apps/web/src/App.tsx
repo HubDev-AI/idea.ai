@@ -1,24 +1,25 @@
+// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type AgentStatusRecord,
+  type AiHealthRecord,
+  buildApiUrl,
+  type ConnectorRecord,
+  type ExecutionLogRecord,
+  fetchAgentStatus,
+  fetchAiHealth,
+  fetchConnectors,
+  fetchLogs,
+  fetchSignals,
+  fetchTheses,
+  type SignalRecord,
+  type ThesisListItem
+} from './api';
 import { AgentSidebar } from './components/AgentSidebar';
 import { AiHealthPanel } from './components/AiHealthPanel';
 import { ConnectorStatus } from './components/ConnectorStatus';
 import { SignalRow } from './components/SignalRow';
 import { ThesisCard } from './components/ThesisCard';
-import {
-  fetchAgentStatus,
-  fetchAiHealth,
-  buildApiUrl,
-  fetchConnectors,
-  fetchLogs,
-  fetchSignals,
-  fetchTheses,
-  type AgentStatusRecord,
-  type AiHealthRecord,
-  type ConnectorRecord,
-  type ExecutionLogRecord,
-  type SignalRecord,
-  type ThesisListItem
-} from './api';
 
 const PAGE_SIZE = 8;
 const LOG_POLL_INTERVAL_MS = 3_000;
@@ -252,7 +253,7 @@ const App = () => {
     }
 
     list.scrollTop = list.scrollHeight;
-  }, [renderedLogs]);
+  }, []);
 
   const displayTheses = theses.slice(0, 3);
 

@@ -1,9 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, } from 'vitest';
 import {
-  buildAgentPrompt,
-  parseAgentResponse,
   type AgentContext,
-  type AgentOutput
+  buildAgentPrompt,
+  parseAgentResponse
 } from '../src/jobs/research_agent';
 
 describe('research agent', () => {

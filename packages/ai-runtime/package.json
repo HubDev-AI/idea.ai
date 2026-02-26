@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "pnpm --dir ../.. exec vitest --run packages/ai-runtime/tests",
-    "lint": "echo lint:ai-runtime"
+    "test": "pnpm --dir ../.. exec vitest --run packages/ai-runtime/tests"
   }
 }

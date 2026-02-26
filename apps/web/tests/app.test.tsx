@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 
 const mockSignals = [

@@ -1,12 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
-import { classifyBatch } from '@idea/pipeline/src/scoring/noise_gate';
-import { aiScoreSignal } from '@idea/pipeline/src/scoring/ai_score';
-import { reconcileScores, dualAnalystRun } from '@idea/ai-runtime/src/dual_analyst';
+import { dualAnalystRun, reconcileScores } from '@idea/ai-runtime/src/dual_analyst';
 import { embedText } from '@idea/ai-runtime/src/ollama';
-import { mergeByRRF } from '@idea/pipeline/src/memory/hybrid_search';
 import { findDuplicates } from '@idea/pipeline/src/dedup';
-import { InMemoryThesisStore } from '../src/runtime/thesis_store';
+import { mergeByRRF } from '@idea/pipeline/src/memory/hybrid_search';
+import { aiScoreSignal } from '@idea/pipeline/src/scoring/ai_score';
+import { classifyBatch } from '@idea/pipeline/src/scoring/noise_gate';
+import { describe, expect, it, vi } from 'vitest';
 import { runResearchAgent } from '../src/jobs/agent_runner';
+import { InMemoryThesisStore } from '../src/runtime/thesis_store';
 import { buildServer } from '../src/server';
 
 describe('V2 integration', () => {

@@ -1,8 +1,3 @@
-import { aiScoreSignal, type AiScoreResult } from '@idea/pipeline/src/scoring/ai_score';
-import { scorePain } from '@idea/pipeline/src/scoring/pain';
-import { scoreTiming } from '@idea/pipeline/src/scoring/timing';
-import { scoreBuildability } from '@idea/pipeline/src/scoring/buildability';
-import { blendedScore } from '@idea/pipeline/src/scoring/blend';
 import {
   applyPainMemory,
   applyTimingMemory,
@@ -17,6 +12,11 @@ import {
   type MemoryContext,
   type MemoryRetriever
 } from '@idea/pipeline/src/memory/retrieve';
+import { type AiScoreResult, aiScoreSignal } from '@idea/pipeline/src/scoring/ai_score';
+import { blendedScore } from '@idea/pipeline/src/scoring/blend';
+import { scoreBuildability } from '@idea/pipeline/src/scoring/buildability';
+import { scorePain } from '@idea/pipeline/src/scoring/pain';
+import { scoreTiming } from '@idea/pipeline/src/scoring/timing';
 
 export type ScoreSignalInput = {
   text: string;

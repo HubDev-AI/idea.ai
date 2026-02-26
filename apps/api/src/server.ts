@@ -1,10 +1,10 @@
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { registerAiHealthRoute, type AiHealthRecord } from './routes/ai_health';
-import { registerConnectorRoute, type ConnectorStatusRecord } from './routes/connectors';
-import { registerFeedRoute, type FeedRecord } from './routes/feed';
+import { type AiHealthRecord, registerAiHealthRoute } from './routes/ai_health';
+import { type ConnectorStatusRecord, registerConnectorRoute } from './routes/connectors';
+import { type FeedRecord, registerFeedRoute } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
-import { registerLogsRoute, type ExecutionLogRecord, type ListLogsQuery } from './routes/logs';
+import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
 import { registerThesesRoute } from './routes/theses';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';

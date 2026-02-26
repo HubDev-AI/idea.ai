@@ -1,6 +1,6 @@
+import type { ByoConnectorResult } from '@idea/connectors/src/byo_guard';
 import { runExaByoConnector } from '@idea/connectors/src/exa_byo';
 import { runPerigonByoConnector } from '@idea/connectors/src/perigon_byo';
-import type { ByoConnectorResult } from '@idea/connectors/src/byo_guard';
 import { createExecutionLogger, type ExecutionLogger } from '../runtime/execution_logger';
 
 type ConnectorExecutor = (env: NodeJS.ProcessEnv) => Promise<ByoConnectorResult>;

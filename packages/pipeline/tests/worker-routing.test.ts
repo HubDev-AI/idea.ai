@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { routeNextQueue, routeNextQueues } from '../src/worker';
 import { QUEUE_NAMES } from '../src/queues';
+import { routeNextQueue, routeNextQueues } from '../src/worker';
 
 describe('worker routing', () => {
   it('routes ingest jobs to normalize queue', () => {

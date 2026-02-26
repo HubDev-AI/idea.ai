@@ -1,10 +1,10 @@
+import pg from 'pg';
 import { loadEnvFile } from './config/dotenv';
-import { buildServer } from './server';
 import { createLiveReadModel } from './runtime/live_read_model';
-import { InMemoryThesisStore } from './runtime/thesis_store';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
 import { createPostgresThesisStore } from './runtime/postgres_thesis_store';
-import pg from 'pg';
+import { InMemoryThesisStore } from './runtime/thesis_store';
+import { buildServer } from './server';
 
 loadEnvFile();
 

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildServer } from '../src/server';
 import { InMemoryThesisStore } from '../src/runtime/thesis_store';
+import { buildServer } from '../src/server';
 
 describe('GET /v1/theses', () => {
   const servers: FastifyInstance[] = [];

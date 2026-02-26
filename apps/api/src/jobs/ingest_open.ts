@@ -1,4 +1,4 @@
-import { OPEN_CONNECTOR_CADENCE, type Cadence, type RawEventInput } from '@idea/connectors/src/common/http';
+import { type Cadence, OPEN_CONNECTOR_CADENCE, type RawEventInput } from '@idea/connectors/src/common/http';
 import { fetchGithubIssueEvents } from '@idea/connectors/src/github_issues';
 import { fetchGreenhouseJobEvents } from '@idea/connectors/src/greenhouse';
 import { fetchHnEvents } from '@idea/connectors/src/hn';
