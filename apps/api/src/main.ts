@@ -3,6 +3,8 @@ import { buildServer } from './server';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { InMemoryThesisStore } from './runtime/thesis_store';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
+import { createPostgresThesisStore } from './runtime/postgres_thesis_store';
+import pg from 'pg';
 
 loadEnvFile();
 
@@ -14,9 +16,12 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? '')
   .filter(Boolean);
 const apiKey = process.env.API_KEY || undefined;
 const readModel = createLiveReadModel();
-const thesisStore = new InMemoryThesisStore();
-
 const databaseUrl = process.env.DATABASE_URL;
+
+const thesisStore = databaseUrl
+  ? createPostgresThesisStore({ pool: new pg.Pool({ connectionString: databaseUrl, max: 4 }) })
+  : new InMemoryThesisStore();
+
 const memoryStore = databaseUrl
   ? createPostgresMemoryStore({ databaseUrl })
   : null;
@@ -36,6 +41,9 @@ const shutdown = async () => {
   await readModel.close();
   if (memoryStore) {
     await memoryStore.close();
+  }
+  if ('close' in thesisStore) {
+    await (thesisStore as { close: () => Promise<void> }).close();
   }
   await app.close();
   process.exit(0);
