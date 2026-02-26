@@ -1,6 +1,7 @@
 import { buildAgentPrompt, parseAgentResponse, type AgentContext, type AgentOutput } from './research_agent';
 import { dualAnalystRun } from '@idea/ai-runtime/src/dual_analyst';
 import type { ThesisStore } from '../runtime/thesis_store';
+import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { RunPromptResult } from '@idea/ai-runtime/src/types';
 
 export type AgentRunResult = {
@@ -12,6 +13,7 @@ export type AgentRunResult = {
 
 export type AgentRunnerDeps = {
   thesisStore: ThesisStore;
+  memoryStore?: PostgresMemoryStore | null;
   runClaude: (input: { prompt: string; timeoutMs?: number }) => Promise<RunPromptResult>;
   runCodex: (input: { prompt: string; timeoutMs?: number }) => Promise<RunPromptResult>;
 };
@@ -30,10 +32,36 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       evidenceCount: t.evidenceCount
     }));
 
+  // Load recent signals from memory store if available
+  const recentSignals = deps.memoryStore
+    ? (await deps.memoryStore.listAllSignals(50)).map((s) => ({
+        signal_id: s.signal_id,
+        text: s.canonical_text,
+        source: s.source,
+        pain: s.pain,
+        timing: s.timing
+      }))
+    : [];
+
+  // Load trend windows from memory store if available
+  const trendSummary = deps.memoryStore
+    ? (await deps.memoryStore.retriever.getTrendWindows({
+        topic: 'general',
+        source: 'all',
+        canonicalText: ''
+      })).map((tw) => ({
+        topic: tw.topic,
+        window: tw.window,
+        count: tw.count_signals,
+        avg_pain: tw.avg_pain,
+        growth: tw.count_signals > 0 ? 'active' : 'none'
+      }))
+    : [];
+
   const ctx: AgentContext = {
     activeTheses,
-    recentSignals: [], // TODO: wire to DB query for signals since last run
-    trendSummary: []   // TODO: wire to trend window aggregation
+    recentSignals,
+    trendSummary
   };
 
   // 2. Build prompt and run dual analyst
