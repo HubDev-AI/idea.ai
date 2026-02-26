@@ -5,6 +5,7 @@ import { registerFeedRoute, type FeedRecord } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { registerLogsRoute, type ExecutionLogRecord, type ListLogsQuery } from './routes/logs';
 import { registerThesesRoute } from './routes/theses';
+import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
 
 export type ServerDeps = {
@@ -13,6 +14,7 @@ export type ServerDeps = {
   listLogs: (query: ListLogsQuery) => Promise<ExecutionLogRecord[]>;
   getAiHealth: () => Promise<AiHealthRecord>;
   thesisStore?: ThesisStore;
+  memoryStore?: PostgresMemoryStore | null;
 };
 
 const defaultDeps: ServerDeps = {
@@ -81,7 +83,10 @@ export const buildServer = (deps: Partial<ServerDeps> = {}): FastifyInstance => 
   registerHealthRoute(app);
 
   if (resolvedDeps.thesisStore) {
-    registerThesesRoute(app, resolvedDeps.thesisStore);
+    registerThesesRoute(app, {
+      store: resolvedDeps.thesisStore,
+      memoryStore: resolvedDeps.memoryStore ?? null
+    });
   }
 
   return app;

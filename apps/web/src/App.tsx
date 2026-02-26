@@ -63,6 +63,7 @@ const App = () => {
   const [logsCollapsed, setLogsCollapsed] = useState(true);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState('all');
   const [requestedPage, setRequestedPage] = useState(1);
   const [pageInfo, setPageInfo] = useState({
     page: 1,
@@ -73,6 +74,11 @@ const App = () => {
     hasPrev: false
   });
   const activeConnectors = connectors.filter((connector) => connector.status === 'active').length;
+  const uniqueSources = useMemo(() => {
+    const sources = new Set(signals.map((s) => s.top_source));
+    return Array.from(sources).sort();
+  }, [signals]);
+  const filteredSignals = sourceFilter === 'all' ? signals : signals.filter((s) => s.top_source === sourceFilter);
   const latestSignalAt = signals[0]?.updated_at ?? null;
   const topThesis = theses.length > 0 ? theses[0] : null;
   const agentLastRun = agentStatus?.lastRun
@@ -317,30 +323,45 @@ const App = () => {
           <section className="signal-card">
             <div className="signal-header">
               <h2>Opportunity Signals</h2>
-              <div className="signal-pagination">
-                <span>
-                  Page {pageInfo.page} / {pageInfo.totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setRequestedPage((value) => Math.max(1, value - 1))}
-                  disabled={!pageInfo.hasPrev || isLoading}
+              <div className="signal-controls">
+                <select
+                  className="source-filter"
+                  value={sourceFilter}
+                  onChange={(e) => setSourceFilter(e.target.value)}
                 >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRequestedPage((value) => value + 1)}
-                  disabled={!pageInfo.hasNext || isLoading}
-                >
-                  Next
-                </button>
+                  <option value="all">All Sources</option>
+                  {uniqueSources.map((src) => (
+                    <option key={src} value={src}>{src}</option>
+                  ))}
+                </select>
+                <div className="signal-pagination">
+                  <span>
+                    Page {pageInfo.page} / {pageInfo.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRequestedPage((value) => Math.max(1, value - 1))}
+                    disabled={!pageInfo.hasPrev || isLoading}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRequestedPage((value) => value + 1)}
+                    disabled={!pageInfo.hasNext || isLoading}
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             </div>
             <ul className="signal-list">
-              {signals.map((signal) => (
+              {filteredSignals.map((signal) => (
                 <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
               ))}
+              {filteredSignals.length === 0 && signals.length > 0 && (
+                <li className="signal-empty">No signals from this source on this page.</li>
+              )}
             </ul>
           </section>
 

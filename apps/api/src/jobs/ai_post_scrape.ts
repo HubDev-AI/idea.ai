@@ -220,28 +220,24 @@ export const resolveAiPostScrapeSettings = (env: NodeJS.ProcessEnv = process.env
   };
 };
 
-export const analyzePostScrapeBatchWithAi = async ({
-  inputs,
+const BATCH_SIZE = 25;
+
+const analyzeChunk = async ({
+  chunk,
   settings,
   logger,
   run
 }: {
-  inputs: AiPostScrapeInput[];
+  chunk: AiPostScrapeInput[];
   settings: AiPostScrapeSettings;
   logger?: ExecutionLogger;
   run?: (input: RunPromptInput) => Promise<RunPromptResult>;
-}): Promise<AiPostScrapeResult> => {
-  if (!settings.enabled || settings.maxSignals <= 0 || inputs.length === 0) {
-    return {
-      insights: new Map(),
-      fromAi: false,
-      attempted: false,
-      attempts: []
-    };
-  }
-
-  const selected = inputs.slice(0, settings.maxSignals);
-  const prompt = buildPrompt(selected);
+}): Promise<{
+  insights: Map<string, AiPostScrapeInsight>;
+  provider?: Provider;
+  attempts: AiPostScrapeAttempt[];
+}> => {
+  const prompt = buildPrompt(chunk);
   const providersToTry = [settings.preferredProvider];
   if (settings.allowFallback) {
     const fallback = otherProvider(settings.preferredProvider);
@@ -278,7 +274,7 @@ export const analyzePostScrapeBatchWithAi = async ({
           });
           await logger?.warn('ai_post_scrape', 'ai post-scrape analysis parse failed', {
             provider: result.provider,
-            requested_signals: selected.length,
+            requested_signals: chunk.length,
             attempt,
             max_attempts: maxAttempts,
             will_retry: willRetry
@@ -292,20 +288,8 @@ export const analyzePostScrapeBatchWithAi = async ({
           success: true,
           retried: attempt > 1
         });
-        await logger?.info('ai_post_scrape', 'ai post-scrape analysis succeeded', {
-          provider: result.provider,
-          requested_signals: selected.length,
-          analyzed_signals: insights.size,
-          attempt
-        });
 
-        return {
-          insights,
-          fromAi: true,
-          provider: result.provider,
-          attempted: true,
-          attempts
-        };
+        return { insights, provider: result.provider, attempts };
       } catch (error) {
         const willRetry = attempt < maxAttempts;
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -327,10 +311,66 @@ export const analyzePostScrapeBatchWithAi = async ({
     }
   }
 
+  return { insights: new Map(), attempts };
+};
+
+export const analyzePostScrapeBatchWithAi = async ({
+  inputs,
+  settings,
+  logger,
+  run
+}: {
+  inputs: AiPostScrapeInput[];
+  settings: AiPostScrapeSettings;
+  logger?: ExecutionLogger;
+  run?: (input: RunPromptInput) => Promise<RunPromptResult>;
+}): Promise<AiPostScrapeResult> => {
+  if (!settings.enabled || settings.maxSignals <= 0 || inputs.length === 0) {
+    return {
+      insights: new Map(),
+      fromAi: false,
+      attempted: false,
+      attempts: []
+    };
+  }
+
+  const selected = inputs.slice(0, settings.maxSignals);
+  const chunks: AiPostScrapeInput[][] = [];
+  for (let i = 0; i < selected.length; i += BATCH_SIZE) {
+    chunks.push(selected.slice(i, i + BATCH_SIZE));
+  }
+
+  const allInsights = new Map<string, AiPostScrapeInsight>();
+  const allAttempts: AiPostScrapeAttempt[] = [];
+  let lastProvider: Provider | undefined;
+  let anySuccess = false;
+
+  for (const chunk of chunks) {
+    const result = await analyzeChunk({ chunk, settings, logger, run });
+    for (const [id, insight] of result.insights) {
+      allInsights.set(id, insight);
+    }
+    allAttempts.push(...result.attempts);
+    if (result.provider) {
+      lastProvider = result.provider;
+    }
+    if (result.insights.size > 0) {
+      anySuccess = true;
+    }
+  }
+
+  await logger?.info('ai_post_scrape', 'ai post-scrape analysis succeeded', {
+    provider: lastProvider ?? null,
+    requested_signals: selected.length,
+    analyzed_signals: allInsights.size,
+    batches: chunks.length
+  });
+
   return {
-    insights: new Map(),
-    fromAi: false,
+    insights: allInsights,
+    fromAi: anySuccess,
+    provider: lastProvider,
     attempted: true,
-    attempts
+    attempts: allAttempts
   };
 };

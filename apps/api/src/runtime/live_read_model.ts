@@ -414,7 +414,10 @@ const parseSnapshotPayload = (raw: string): Snapshot | null => {
           snippet: entry.snippet,
           source_url: entry.source_url,
           next_action: entry.next_action,
-          updated_at: entry.updated_at
+          updated_at: entry.updated_at,
+          ...(typeof entry.pain === 'number' ? { pain: entry.pain } : {}),
+          ...(typeof entry.timing === 'number' ? { timing: entry.timing } : {}),
+          ...(typeof entry.buildability === 'number' ? { buildability: entry.buildability } : {})
         } satisfies FeedRecord;
       })
       .filter((entry): entry is FeedRecord => entry !== null);
@@ -717,7 +720,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
             aiJudgeAttempts < aiJudgeSettings.maxSignals &&
             isAiJudgeEligible(event.text) &&
             !isLowValueOpportunityTitle(idea);
-          let judgeScores: [number, number, number] = aiInsight?.judgeScores ?? [62, 66, 60];
+          let judgeScores: [number, number, number] = aiInsight?.judgeScores ?? (aiInsight ? [55, 55, 55] : [40, 40, 40]);
           if (aiInsight?.judgeScores) {
             aiJudgeSuccess += 1;
           } else if (shouldUseAiJudge) {

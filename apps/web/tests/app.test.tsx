@@ -161,11 +161,11 @@ describe('web app', () => {
 
     expect(await screen.findByText('SOC2 prep copilot')).toBeDefined();
     expect(screen.getByText('82')).toBeDefined();
-    expect(screen.getByText(/hacker_news/i)).toBeDefined();
+    expect(screen.getAllByText(/hacker_news/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/compliance blockers/i)).toBeDefined();
     expect(screen.getByText('validate_demand')).toBeDefined();
     expect(screen.getByText(/Page 1 \/ 1/i)).toBeDefined();
-    expect(screen.getByRole('link', { name: /Open Source/i })).toBeDefined();
+    expect(screen.getByRole('link', { name: /Source/i })).toBeDefined();
     expect(screen.getByText(/Runtime Logs/i)).toBeDefined();
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getAllByText(/claude/i).length).toBeGreaterThan(0);

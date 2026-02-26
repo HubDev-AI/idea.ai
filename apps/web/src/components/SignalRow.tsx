@@ -11,6 +11,27 @@ const hasBreakdown = (signal: SignalRecord): boolean =>
 const hasExpandedContent = (signal: SignalRecord): boolean =>
   hasBreakdown(signal) || signal.reasoning != null;
 
+const relativeTime = (iso: string): string => {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+};
+
+const ScoreBar = ({ label, value, color }: { label: string; value: number; color: string }) => (
+  <div className="score-bar-group">
+    <span className="score-bar-label">{label}</span>
+    <div className="score-bar-track">
+      <div className="score-bar-fill" style={{ width: `${Math.min(value, 100)}%`, background: color }} />
+    </div>
+    <span className="score-bar-value">{value}</span>
+  </div>
+);
+
 export const SignalRow = ({ signal }: SignalRowProps) => {
   const [expanded, setExpanded] = useState(false);
   const expandable = hasExpandedContent(signal);
@@ -22,17 +43,19 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
         <span className="score">{signal.score}</span>
       </div>
       <p className="meta">
-        <strong>{signal.top_source}</strong> - {signal.snippet}
+        <span className="source-badge">{signal.top_source}</span>
+        {signal.snippet}
       </p>
       <div className="signal-footer">
-        <span className="next-action">{signal.next_action}</span>
+        <div className="signal-footer-left">
+          <span className="next-action">{signal.next_action}</span>
+          <span className="signal-time">{relativeTime(signal.updated_at)}</span>
+        </div>
         {signal.source_url ? (
           <a className="source-link" href={signal.source_url} target="_blank" rel="noreferrer">
-            Open Source
+            Source
           </a>
-        ) : (
-          <span className="source-link disabled">No Source Link</span>
-        )}
+        ) : null}
       </div>
 
       {expandable && (
@@ -49,22 +72,10 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
           {expanded && (
             <div className="signal-details">
               {hasBreakdown(signal) && (
-                <div className="score-breakdown">
-                  {signal.pain != null && (
-                    <span className="breakdown-item breakdown-pain">
-                      Pain: {signal.pain}
-                    </span>
-                  )}
-                  {signal.timing != null && (
-                    <span className="breakdown-item breakdown-timing">
-                      Timing: {signal.timing}
-                    </span>
-                  )}
-                  {signal.buildability != null && (
-                    <span className="breakdown-item breakdown-buildability">
-                      Buildability: {signal.buildability}
-                    </span>
-                  )}
+                <div className="score-breakdown-bars">
+                  {signal.pain != null && <ScoreBar label="Pain" value={signal.pain} color="var(--err)" />}
+                  {signal.timing != null && <ScoreBar label="Timing" value={signal.timing} color="var(--warn)" />}
+                  {signal.buildability != null && <ScoreBar label="Build" value={signal.buildability} color="var(--ok)" />}
                 </div>
               )}
               {signal.reasoning != null && (

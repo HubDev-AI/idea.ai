@@ -8,6 +8,9 @@ export type FeedRecord = {
   source_url: string | null;
   next_action: 'validate_demand' | 'validate_pricing' | 'validate_channel';
   updated_at: string;
+  pain?: number;
+  timing?: number;
+  buildability?: number;
 };
 
 export type PaginatedFeedResponse = {

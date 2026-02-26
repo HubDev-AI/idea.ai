@@ -523,6 +523,20 @@ p {
 .thesis-confidence.promoted { color: var(--ok); }
 .thesis-confidence.watching { color: var(--warn); }
 
+.thesis-confidence-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: #1c2434;
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+
+.thesis-confidence-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
 .thesis-problem {
   color: var(--muted);
   font-size: 0.85rem;
@@ -631,6 +645,64 @@ p {
   color: var(--muted);
 }
 
+/* Source badge */
+.source-badge {
+  display: inline-block;
+  background: var(--chip);
+  border: 1px solid #30394b;
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  font-size: 0.68rem;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--link);
+  margin-right: 0.45rem;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Signal footer layout */
+.signal-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.signal-time {
+  font-size: 0.72rem;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--muted);
+}
+
+/* Signal controls (filter + pagination) */
+.signal-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.source-filter {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.72rem;
+  padding: 0.28rem 0.62rem;
+  cursor: pointer;
+}
+
+.source-filter:focus {
+  outline: 1px solid var(--link);
+  outline-offset: 1px;
+}
+
+.signal-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding: 1rem 0;
+  text-align: center;
+}
+
 /* Expandable signal details */
 .signal-expand-toggle {
   background: var(--chip);
@@ -649,15 +721,42 @@ p {
   margin-top: 0.4rem;
 }
 
-.score-breakdown {
-  display: flex;
-  gap: 0.8rem;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.75rem;
+/* Score bars */
+.score-breakdown-bars {
+  display: grid;
+  gap: 0.35rem;
 }
 
-.breakdown-item {
+.score-bar-group {
+  display: grid;
+  grid-template-columns: 42px 1fr 32px;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.72rem;
+}
+
+.score-bar-label {
   color: var(--muted);
+  text-align: right;
+}
+
+.score-bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #1c2434;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.score-bar-value {
+  color: var(--text);
+  text-align: right;
 }
 
 .signal-reasoning {

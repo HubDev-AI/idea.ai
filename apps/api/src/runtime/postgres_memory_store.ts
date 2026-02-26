@@ -196,9 +196,22 @@ ORDER BY signal_embeddings.embedding <=> $1::vector
 LIMIT $4
 `;
 
+export type MemorySignalRow = {
+  signal_id: string;
+  topic: string;
+  source: string;
+  canonical_text: string;
+  observed_at: string;
+  pain: number;
+  timing: number;
+  buildability: number;
+  blended: number;
+};
+
 export type PostgresMemoryStore = {
   retriever: MemoryRetriever;
   save: (entry: IndexedMemoryEntry) => Promise<void>;
+  listAllSignals: (limit?: number) => Promise<MemorySignalRow[]>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -290,9 +303,42 @@ export const createPostgresMemoryStore = ({
     }
   };
 
+  const listAllSignals = async (limit = 500): Promise<MemorySignalRow[]> => {
+    const result = await pool.query<{
+      signal_id: string;
+      topic: string;
+      source: string;
+      canonical_text: string;
+      observed_at: Date;
+      pain: unknown;
+      timing: unknown;
+      buildability: unknown;
+      blended: unknown;
+    }>(
+      `SELECT signal_id, topic, source, canonical_text, observed_at, pain, timing, buildability, blended
+       FROM signal_memory
+       ORDER BY observed_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    return result.rows.map((row) => ({
+      signal_id: row.signal_id,
+      topic: row.topic,
+      source: row.source,
+      canonical_text: row.canonical_text,
+      observed_at: toIsoString(row.observed_at),
+      pain: toNumber(row.pain),
+      timing: toNumber(row.timing),
+      buildability: toNumber(row.buildability),
+      blended: toNumber(row.blended)
+    }));
+  };
+
   return {
     retriever,
     save,
+    listAllSignals,
     ping,
     close: async () => {
       await pool.end();
