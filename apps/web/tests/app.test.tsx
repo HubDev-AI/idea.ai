@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -207,5 +207,33 @@ describe('web app', () => {
     // Agent sidebar shows fallback
     expect(screen.getByText(/No runs yet/i)).toBeDefined();
     // No warning banner since thesis/agent are non-critical
+  });
+
+  it('clicking thesis card shows filter banner', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    vi.stubGlobal('fetch', buildMockFetch());
+
+    render(<App />);
+
+    // Wait for theses to load
+    const thesisTitle = await screen.findByText('SOC2 Automation Platform');
+    // Click the thesis card
+    fireEvent.click(thesisTitle.closest('.thesis-card')!);
+    // Filter banner should appear
+    expect(screen.queryByText(/Showing signals for/i)).toBeTruthy();
+    // Click clear
+    fireEvent.click(screen.getByText(/Clear filter/i));
+    expect(screen.queryByText(/Showing signals for/i)).toBeNull();
+  });
+
+  it('renders status cards with connector, AI, and agent info', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    vi.stubGlobal('fetch', buildMockFetch());
+
+    render(<App />);
+
+    expect(await screen.findByText(/Connector Health/i)).toBeTruthy();
+    expect(screen.getByText(/AI Agents/i)).toBeDefined();
+    expect(screen.getByText(/Research Agent/i)).toBeDefined();
   });
 });

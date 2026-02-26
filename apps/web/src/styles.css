@@ -501,6 +501,10 @@ p {
   border-radius: 12px;
   padding: 0.8rem;
   background: var(--surface);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  width: 100%;
 }
 
 .thesis-card.promoted {
@@ -564,17 +568,17 @@ p {
 .thesis-status.promoted { color: var(--ok); }
 .thesis-status.watching { color: var(--warn); }
 
-.thesis-card[role="button"] {
+button.thesis-card {
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.thesis-card[role="button"]:hover {
+button.thesis-card:hover {
   border-color: var(--accent);
 }
 
-.thesis-active {
-  border-color: var(--accent) !important;
+.thesis-card.thesis-active {
+  border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
 
@@ -648,43 +652,6 @@ p {
 
 .dot-idle {
   background: #6f788b;
-}
-
-/* Agent Sidebar */
-.agent-sidebar {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.9rem;
-  background: var(--surface);
-}
-
-.agent-sidebar h3 {
-  font-size: 0.9rem;
-  margin-bottom: 0.6rem;
-}
-
-.agent-stats, .agent-last-run, .agent-pending {
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.agent-next {
-  margin-top: 0.6rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--line);
-}
-
-.agent-next-label {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.72rem;
-  color: var(--muted);
-  text-transform: uppercase;
-}
-
-.agent-next-topic {
-  display: block;
-  margin-top: 0.2rem;
-  font-size: 0.85rem;
 }
 
 /* Thesis filter banner */

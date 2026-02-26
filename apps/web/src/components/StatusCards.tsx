@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ConnectorRecord, AiHealthRecord, AgentStatusRecord } from '../api';
+import type { AgentStatusRecord, AiHealthRecord, ConnectorRecord } from '../api';
 
 type StatusCardsProps = {
   connectors: ConnectorRecord[];
