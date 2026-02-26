@@ -63,6 +63,44 @@ describe('API key auth', () => {
   });
 });
 
+describe('schema validation', () => {
+  it('rejects non-numeric page param', async () => {
+    const app = await buildServer({});
+    const res = await app.inject({ method: 'GET', url: '/v1/signals?page=abc' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects non-numeric page_size param', async () => {
+    const app = await buildServer({});
+    const res = await app.inject({ method: 'GET', url: '/v1/signals?page_size=xyz' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('accepts valid numeric page param', async () => {
+    const app = await buildServer({});
+    const res = await app.inject({ method: 'GET', url: '/v1/signals?page=1' });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('rejects non-numeric limit on logs', async () => {
+    const app = await buildServer({});
+    const res = await app.inject({ method: 'GET', url: '/v1/logs?limit=abc' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects invalid level on logs', async () => {
+    const app = await buildServer({});
+    const res = await app.inject({ method: 'GET', url: '/v1/logs?level=critical' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('accepts valid logs query', async () => {
+    const app = await buildServer({});
+    const res = await app.inject({ method: 'GET', url: '/v1/logs?limit=50&level=info' });
+    expect(res.statusCode).toBe(200);
+  });
+});
+
 describe('rate limiting', () => {
   it('returns rate limit headers', async () => {
     const app = await buildServer({ rateLimitMax: 5 });

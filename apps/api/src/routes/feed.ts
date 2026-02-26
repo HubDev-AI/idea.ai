@@ -79,7 +79,17 @@ export const registerFeedRoute = (
   app: FastifyInstance,
   deps: { listSignals: () => Promise<FeedRecord[]> }
 ): void => {
-  app.get<{ Querystring: { page?: string; page_size?: string } }>('/v1/signals', async (request) => {
+  app.get<{ Querystring: { page?: string; page_size?: string } }>('/v1/signals', {
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          page: { type: 'string', pattern: '^[0-9]+$' },
+          page_size: { type: 'string', pattern: '^[0-9]+$' }
+        }
+      }
+    }
+  }, async (request) => {
     const allSignals = await deps.listSignals();
     const requestedPageSize = parsePositiveInt(request.query.page_size, 20);
     const pageSize = Math.min(MAX_PAGE_SIZE, requestedPageSize);

@@ -19,7 +19,17 @@ export const registerThesesRoute = (
     return deps.store.list();
   });
 
-  app.get('/v1/theses/:key', async (request, reply) => {
+  app.get('/v1/theses/:key', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: {
+          key: { type: 'string', minLength: 1, maxLength: 200 }
+        },
+        required: ['key']
+      }
+    }
+  }, async (request, reply) => {
     const { key } = request.params as { key: string };
     if (!key) {
       reply.code(400);

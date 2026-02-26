@@ -65,8 +65,21 @@ export const registerLogsRoute = (
     };
   };
 
+  const logsQuerySchema = {
+    type: 'object' as const,
+    properties: {
+      limit: { type: 'string' as const, pattern: '^[0-9]+$' },
+      level: { type: 'string' as const, enum: ['debug', 'info', 'warn', 'error'] },
+      run_id: { type: 'string' as const },
+      scope: { type: 'string' as const, enum: ['all', 'session'] }
+    }
+  };
+
   app.get<{ Querystring: { limit?: string; level?: string; run_id?: string; scope?: string } }>(
     '/v1/logs',
+    {
+      schema: { querystring: logsQuerySchema }
+    },
     async (request) => {
       return deps.listLogs(resolveQuery(request.query));
     }
@@ -74,6 +87,9 @@ export const registerLogsRoute = (
 
   app.get<{ Querystring: { limit?: string; level?: string; run_id?: string; scope?: string } }>(
     '/v1/logs/stream',
+    {
+      schema: { querystring: logsQuerySchema }
+    },
     async (request, reply) => {
       const query = resolveQuery(request.query);
       const response = reply.raw;
