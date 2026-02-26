@@ -10,6 +10,7 @@
     "lint": "echo lint:api"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^10.3.0",
     "@idea/ai-runtime": "workspace:*",
     "@idea/connectors": "workspace:*",
     "@idea/contracts": "workspace:*",

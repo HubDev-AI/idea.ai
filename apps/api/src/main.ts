@@ -21,7 +21,7 @@ const memoryStore = databaseUrl
   ? createPostgresMemoryStore({ databaseUrl })
   : null;
 
-const app = buildServer({
+const app = await buildServer({
   listSignals: readModel.listSignals,
   listConnectors: readModel.listConnectors,
   listLogs: readModel.listLogs,

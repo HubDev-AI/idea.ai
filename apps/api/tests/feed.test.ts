@@ -1,15 +1,16 @@
+import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildServer } from '../src/server';
 
 describe('feed API', () => {
-  const servers: Array<ReturnType<typeof buildServer>> = [];
+  const servers: FastifyInstance[] = [];
 
   afterEach(async () => {
     await Promise.all(servers.map((server) => server.close()));
   });
 
   it('GET /v1/signals returns one-line feed records', async () => {
-    const server = buildServer({
+    const server = await buildServer({
       listSignals: async () => [
         {
           idea: 'SOC2 prep copilot',
@@ -51,7 +52,7 @@ describe('feed API', () => {
   });
 
   it('GET /v1/signals applies pagination params', async () => {
-    const server = buildServer({
+    const server = await buildServer({
       listSignals: async () =>
         Array.from({ length: 5 }).map((_, index) => ({
           idea: `idea-${index + 1}`,
@@ -100,7 +101,7 @@ describe('feed API', () => {
   });
 
   it('GET /v1/connectors returns status and last run', async () => {
-    const server = buildServer({
+    const server = await buildServer({
       listSignals: async () => [],
       listConnectors: async () => [
         { name: 'hn', status: 'active', last_run: '2026-02-24T01:00:00.000Z' },
@@ -120,7 +121,7 @@ describe('feed API', () => {
   });
 
   it('GET /v1/signals sanitizes malformed unicode for JSON safety', async () => {
-    const server = buildServer({
+    const server = await buildServer({
       listSignals: async () => [
         {
           idea: 'broken-\ud83d',
@@ -146,7 +147,7 @@ describe('feed API', () => {
   });
 
   it('adds CORS headers and handles OPTIONS preflight', async () => {
-    const server = buildServer({
+    const server = await buildServer({
       listSignals: async () => [],
       listConnectors: async () => []
     });
@@ -177,7 +178,7 @@ describe('feed API', () => {
   });
 
   it('GET /v1/logs returns filtered execution logs', async () => {
-    const server = buildServer({
+    const server = await buildServer({
       listSignals: async () => [],
       listConnectors: async () => [],
       listLogs: async (query) => {
@@ -224,7 +225,7 @@ describe('feed API', () => {
   });
 
   it('GET /v1/ai-health returns provider execution health snapshot', async () => {
-    const server = buildServer({
+    const server = await buildServer({
       listSignals: async () => [],
       listConnectors: async () => [],
       getAiHealth: async () => ({

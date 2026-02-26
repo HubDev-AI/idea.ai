@@ -407,7 +407,7 @@ describe('V2 integration', () => {
       evidence: []
     });
 
-    const app = buildServer({ thesisStore: store });
+    const app = await buildServer({ thesisStore: store });
     const response = await app.inject({ method: 'GET', url: '/v1/theses' });
 
     expect(response.statusCode).toBe(200);
@@ -436,7 +436,7 @@ describe('V2 integration', () => {
       evidence: []
     });
 
-    const app = buildServer({ thesisStore: store });
+    const app = await buildServer({ thesisStore: store });
 
     const response = await app.inject({ method: 'GET', url: '/v1/theses/test' });
     expect(response.statusCode).toBe(200);

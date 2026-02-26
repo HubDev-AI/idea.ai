@@ -85,7 +85,7 @@ describe('pipeline e2e', () => {
 
     const published = rankAndPreparePublish(scored);
 
-    const server = buildServer({
+    const server = await buildServer({
       listSignals: async () => published,
       listConnectors: async () => []
     });

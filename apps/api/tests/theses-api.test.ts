@@ -1,9 +1,10 @@
+import type { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildServer } from '../src/server';
 import { InMemoryThesisStore } from '../src/runtime/thesis_store';
 
 describe('GET /v1/theses', () => {
-  const servers: Array<ReturnType<typeof buildServer>> = [];
+  const servers: FastifyInstance[] = [];
 
   afterEach(async () => {
     await Promise.all(servers.map((server) => server.close()));
@@ -11,7 +12,7 @@ describe('GET /v1/theses', () => {
 
   it('returns empty array when no theses exist', async () => {
     const store = new InMemoryThesisStore();
-    const app = buildServer({ thesisStore: store });
+    const app = await buildServer({ thesisStore: store });
     servers.push(app);
 
     const response = await app.inject({ method: 'GET', url: '/v1/theses' });
@@ -57,7 +58,7 @@ describe('GET /v1/theses', () => {
       evidence: []
     });
 
-    const app = buildServer({ thesisStore: store });
+    const app = await buildServer({ thesisStore: store });
     servers.push(app);
 
     const response = await app.inject({ method: 'GET', url: '/v1/theses' });
@@ -69,7 +70,7 @@ describe('GET /v1/theses', () => {
   });
 
   it('does not register thesis route when no store provided', async () => {
-    const app = buildServer();
+    const app = await buildServer();
     servers.push(app);
 
     const response = await app.inject({ method: 'GET', url: '/v1/theses' });
@@ -105,7 +106,7 @@ describe('GET /v1/theses', () => {
       ]
     });
 
-    const app = buildServer({ thesisStore: store });
+    const app = await buildServer({ thesisStore: store });
     servers.push(app);
 
     const response = await app.inject({ method: 'GET', url: '/v1/theses/test-key' });
@@ -118,7 +119,7 @@ describe('GET /v1/theses', () => {
 
   it('GET /v1/theses/:key returns 404 for unknown key', async () => {
     const store = new InMemoryThesisStore();
-    const app = buildServer({ thesisStore: store });
+    const app = await buildServer({ thesisStore: store });
     servers.push(app);
 
     const response = await app.inject({ method: 'GET', url: '/v1/theses/nonexistent' });

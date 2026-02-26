@@ -35,7 +35,9 @@ export const registerThesesRoute = (
     return draft;
   });
 
-  app.post('/v1/theses/synthesize', async (_request, reply) => {
+  app.post('/v1/theses/synthesize', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
+  }, async (_request, reply) => {
     if (!deps.memoryStore) {
       reply.code(503);
       return { error: 'Memory store not available' };

@@ -1,3 +1,4 @@
+import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { registerAiHealthRoute, type AiHealthRecord } from './routes/ai_health';
 import { registerConnectorRoute, type ConnectorStatusRecord } from './routes/connectors';
@@ -17,6 +18,7 @@ export type ServerDeps = {
   memoryStore?: PostgresMemoryStore | null;
   corsOrigins?: string[];
   apiKey?: string;
+  rateLimitMax?: number;
 };
 
 const defaultDeps: ServerDeps = {
@@ -58,7 +60,7 @@ const defaultDeps: ServerDeps = {
   })
 };
 
-export const buildServer = (deps: Partial<ServerDeps> = {}): FastifyInstance => {
+export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<FastifyInstance> => {
   const app = Fastify({ logger: false });
   const resolvedDeps: ServerDeps = {
     ...defaultDeps,
@@ -94,6 +96,12 @@ export const buildServer = (deps: Partial<ServerDeps> = {}): FastifyInstance => 
       }
     });
   }
+
+  const rateLimitMax = resolvedDeps.rateLimitMax ?? 100;
+  await app.register(rateLimit, {
+    max: rateLimitMax,
+    timeWindow: '1 minute'
+  });
 
   registerFeedRoute(app, { listSignals: resolvedDeps.listSignals });
   registerConnectorRoute(app, { listConnectors: resolvedDeps.listConnectors });
