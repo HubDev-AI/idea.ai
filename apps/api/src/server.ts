@@ -15,6 +15,7 @@ export type ServerDeps = {
   getAiHealth: () => Promise<AiHealthRecord>;
   thesisStore?: ThesisStore;
   memoryStore?: PostgresMemoryStore | null;
+  corsOrigins?: string[];
 };
 
 const defaultDeps: ServerDeps = {
@@ -63,12 +64,17 @@ export const buildServer = (deps: Partial<ServerDeps> = {}): FastifyInstance => 
     ...deps
   };
 
-  app.addHook('onRequest', async (request, reply) => {
-    const originHeader = request.headers.origin;
+  const allowedOrigins = new Set(resolvedDeps.corsOrigins ?? []);
+  const openCors = allowedOrigins.size === 0;
 
-    reply.header('Access-Control-Allow-Origin', originHeader ?? '*');
-    reply.header('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type');
+  app.addHook('onRequest', async (request, reply) => {
+    const origin = request.headers.origin;
+
+    if (origin && (openCors || allowedOrigins.has(origin))) {
+      reply.header('Access-Control-Allow-Origin', origin);
+    }
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type,X-Api-Key');
     reply.header('Vary', 'Origin');
 
     if (request.method === 'OPTIONS') {

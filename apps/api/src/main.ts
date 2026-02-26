@@ -8,6 +8,10 @@ loadEnvFile();
 
 const host = process.env.HOST ?? '0.0.0.0';
 const port = Number(process.env.PORT ?? 3000);
+const corsOrigins = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 const readModel = createLiveReadModel();
 const thesisStore = new InMemoryThesisStore();
 
@@ -22,7 +26,8 @@ const app = buildServer({
   listLogs: readModel.listLogs,
   getAiHealth: readModel.getAiHealth,
   thesisStore,
-  memoryStore
+  memoryStore,
+  corsOrigins
 });
 
 const shutdown = async () => {
