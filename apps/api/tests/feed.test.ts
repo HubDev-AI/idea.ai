@@ -224,6 +224,38 @@ describe('feed API', () => {
     ]);
   });
 
+  describe('GET /v1/signals with new params', () => {
+    it('accepts window query param', async () => {
+      const server = await buildServer({});
+      servers.push(server);
+      const res = await server.inject({ method: 'GET', url: '/v1/signals?window=7d' });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body).toHaveProperty('items');
+    });
+
+    it('accepts source filter param', async () => {
+      const server = await buildServer({});
+      servers.push(server);
+      const res = await server.inject({ method: 'GET', url: '/v1/signals?source=hn' });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('accepts thesis_key filter param', async () => {
+      const server = await buildServer({});
+      servers.push(server);
+      const res = await server.inject({ method: 'GET', url: '/v1/signals?thesis_key=test-key' });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('rejects invalid window value', async () => {
+      const server = await buildServer({});
+      servers.push(server);
+      const res = await server.inject({ method: 'GET', url: '/v1/signals?window=99x' });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
   it('GET /v1/ai-health returns provider execution health snapshot', async () => {
     const server = await buildServer({
       listSignals: async () => [],

@@ -103,7 +103,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     timeWindow: '1 minute'
   });
 
-  registerFeedRoute(app, { listSignals: resolvedDeps.listSignals });
+  registerFeedRoute(app, {
+    listSignals: resolvedDeps.listSignals,
+    memoryStore: resolvedDeps.memoryStore,
+  });
   registerConnectorRoute(app, { listConnectors: resolvedDeps.listConnectors });
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
