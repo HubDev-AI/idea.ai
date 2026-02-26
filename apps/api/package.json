@@ -15,6 +15,7 @@
     "@idea/connectors": "workspace:*",
     "@idea/contracts": "workspace:*",
     "@idea/pipeline": "workspace:*",
+    "dotenv": "^17.3.1",
     "fastify": "^5.2.1",
     "pg": "^8.18.0"
   }
