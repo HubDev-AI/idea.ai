@@ -5,7 +5,7 @@ Use this exact run sequence.
 ## 1. Prep
 
 ```bash
-cd /Users/vladimirtrifonov/src/ai/idea.ai
+cd <project-root>
 pnpm install
 cp .env.example .env
 ```
@@ -30,7 +30,7 @@ AI_PROVIDER_MODE=single
 AI_PROVIDER_FALLBACK=false
 AI_PROVIDER_RETRIES=1
 AI_POST_SCRAPE_ENABLED=true
-AI_POST_SCRAPE_MAX_SIGNALS=6
+AI_POST_SCRAPE_MAX_SIGNALS=80
 AI_POST_SCRAPE_TIMEOUT_MS=120000
 AI_JUDGE_MAX_SIGNALS=0
 AI_JUDGE_TIMEOUT_MS=120000
@@ -73,12 +73,13 @@ docker compose -f docker-compose.infra.yml up -d
 docker compose -f docker-compose.infra.yml ps
 ```
 
-## 2.5 Apply DB migrations (RAG schema)
+## 2.5 Apply DB migrations
 
 ```bash
-PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0001_init.sql
-PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0002_memory.sql
+pnpm db:migrate
 ```
+
+This runs all migrations (0001_init through 0004_tsvector) idempotently.
 
 ## 3. Optional AI CLI logins
 
