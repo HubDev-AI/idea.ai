@@ -365,6 +365,72 @@ describe('PostgresMemoryStore', () => {
     expect(windows[2].count_signals).toBe(0);
   });
 
+  /* ---- querySignals ---- */
+
+  describe('querySignals', () => {
+    it('returns paginated signals within time window', async () => {
+      const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: 2 }] }); // count query
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            signal_id: 's1', topic: 'ai', source: 'hn',
+            canonical_text: 'AI tool', observed_at: new Date('2026-02-25'),
+            pain: '75', timing: '80', buildability: '60', blended: '73'
+          },
+          {
+            signal_id: 's2', topic: 'hr', source: 'greenhouse',
+            canonical_text: 'HR gap', observed_at: new Date('2026-02-24'),
+            pain: '60', timing: '50', buildability: '70', blended: '58'
+          }
+        ]
+      });
+      const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+      const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20 });
+      expect(result.items).toHaveLength(2);
+      expect(result.totalItems).toBe(2);
+      expect(result.page).toBe(1);
+      expect(result.hasNext).toBe(false);
+    });
+
+    it('filters by source', async () => {
+      const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: 1 }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          signal_id: 's1', topic: 'ai', source: 'hn',
+          canonical_text: 'test', observed_at: new Date(),
+          pain: '70', timing: '80', buildability: '60', blended: '72'
+        }]
+      });
+      const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+      const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20, source: 'hn' });
+      expect(result.items).toHaveLength(1);
+      // Verify SQL contains source filter
+      const countCall = mockQuery.mock.calls[0];
+      expect(countCall[0]).toContain('source');
+      expect(countCall[1]).toContain('hn');
+    });
+
+    it('filters by thesis key via evidence join', async () => {
+      const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: 1 }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          signal_id: 's1', topic: 'ai', source: 'hn',
+          canonical_text: 'test', observed_at: new Date(),
+          pain: '70', timing: '80', buildability: '60', blended: '72'
+        }]
+      });
+      const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+      const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20, thesisKey: 'remote-dev-tools' });
+      expect(result.items).toHaveLength(1);
+      const sql = mockQuery.mock.calls[0][0];
+      expect(sql).toContain('thesis_evidence');
+      expect(sql).toContain('thesis_candidates');
+    });
+  });
+
   /* ---- close ---- */
 
   it('close calls pool.end', async () => {

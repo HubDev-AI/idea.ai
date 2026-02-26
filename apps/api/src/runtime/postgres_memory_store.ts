@@ -208,10 +208,29 @@ export type MemorySignalRow = {
   blended: number;
 };
 
+export type SignalQueryResult = {
+  items: MemorySignalRow[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+};
+
+export type SignalQueryParams = {
+  windowDays: number;
+  page: number;
+  pageSize: number;
+  source?: string;
+  thesisKey?: string;
+};
+
 export type PostgresMemoryStore = {
   retriever: MemoryRetriever;
   save: (entry: IndexedMemoryEntry) => Promise<void>;
   listAllSignals: (limit?: number) => Promise<MemorySignalRow[]>;
+  querySignals: (params: SignalQueryParams) => Promise<SignalQueryResult>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -335,10 +354,64 @@ export const createPostgresMemoryStore = ({
     }));
   };
 
+  const querySignals = async (params: SignalQueryParams): Promise<SignalQueryResult> => {
+    const { windowDays, page, pageSize, source, thesisKey } = params;
+    const conditions: string[] = [];
+    const values: unknown[] = [];
+    let paramIdx = 1;
+
+    conditions.push(`sm.observed_at >= NOW() - INTERVAL '${windowDays} days'`);
+
+    if (source) {
+      conditions.push(`sm.source = $${paramIdx++}`);
+      values.push(source);
+    }
+
+    let joinClause = '';
+    if (thesisKey) {
+      joinClause = `
+        JOIN thesis_evidence te ON te.signal_id = sm.signal_id
+        JOIN thesis_candidates tc ON tc.id = te.thesis_id`;
+      conditions.push(`tc.canonical_key = $${paramIdx++}`);
+      values.push(thesisKey);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countSql = `SELECT COUNT(DISTINCT sm.signal_id)::int AS count FROM signal_memory sm ${joinClause} ${whereClause}`;
+    const countResult = await pool.query<{ count: number }>(countSql, values);
+    const totalItems = countResult.rows[0]?.count ?? 0;
+
+    const offset = (page - 1) * pageSize;
+    const dataSql = `
+      SELECT DISTINCT sm.signal_id, sm.topic, sm.source, sm.canonical_text,
+             sm.observed_at, sm.pain, sm.timing, sm.buildability, sm.blended
+      FROM signal_memory sm ${joinClause} ${whereClause}
+      ORDER BY sm.blended DESC
+      LIMIT ${pageSize} OFFSET ${offset}`;
+    const dataResult = await pool.query<Record<string, unknown>>(dataSql, values);
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const items: MemorySignalRow[] = dataResult.rows.map((row) => ({
+      signal_id: String(row.signal_id ?? ''),
+      topic: String(row.topic ?? ''),
+      source: String(row.source ?? ''),
+      canonical_text: String(row.canonical_text ?? ''),
+      observed_at: toIsoString(row.observed_at),
+      pain: toNumber(row.pain),
+      timing: toNumber(row.timing),
+      buildability: toNumber(row.buildability),
+      blended: toNumber(row.blended),
+    }));
+
+    return { items, page, pageSize, totalItems, totalPages, hasNext: page < totalPages, hasPrev: page > 1 };
+  };
+
   return {
     retriever,
     save,
     listAllSignals,
+    querySignals,
     ping,
     close: async () => {
       await pool.end();
