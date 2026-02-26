@@ -85,11 +85,25 @@ const toSourceTimestamp = (value: string | undefined): string => {
   return date.toISOString();
 };
 
-const toText = (hit: YcCompanyHit): string =>
-  [hit.name ?? '', hit.one_liner ?? '', hit.long_description ?? '', `Batch: ${hit.batch ?? 'unknown'}`]
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .join('\n');
+const toText = (hit: YcCompanyHit): string => {
+  const name = (hit.name ?? '').trim();
+  const oneLiner = (hit.one_liner ?? '').trim();
+  const description = (hit.long_description ?? '').trim();
+  const batch = (hit.batch ?? '').trim();
+
+  const parts: string[] = [];
+  if (oneLiner) {
+    parts.push(`New YC startup (${batch || 'recent'}): ${oneLiner}`);
+  }
+  if (description) {
+    parts.push(`Problem context: ${description.slice(0, 300)}`);
+  }
+  if (name) {
+    parts.push(`Company: ${name}`);
+  }
+
+  return parts.join('\n');
+};
 
 const toUrl = (hit: YcCompanyHit): string => {
   if (hit.website) {

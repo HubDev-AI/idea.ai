@@ -1,10 +1,9 @@
 import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput, withRetry } from './common/http';
 
 type HnItem = {
-  id: number;
-  time: number;
+  objectID: string;
+  created_at_i: number;
   title?: string;
-  text?: string;
   url?: string;
 };
 
@@ -26,17 +25,19 @@ export const fetchHnEvents = async (
 
   return items
     .slice(0, limit)
-    .filter((item) => Number.isFinite(item.id))
+    .filter((item) => typeof item.objectID === 'string' && item.objectID.length > 0)
     .map((item) => {
       const timestampMs =
-        typeof item.time === 'number' && Number.isFinite(item.time) ? item.time * 1000 : Date.now();
+        typeof item.created_at_i === 'number' && Number.isFinite(item.created_at_i)
+          ? item.created_at_i * 1000
+          : Date.now();
 
       return {
         source: 'hacker_news',
-        source_item_id: String(item.id),
+        source_item_id: item.objectID,
         source_timestamp: new Date(timestampMs).toISOString(),
-        text: `${item.title ?? ''}\n${item.text ?? ''}`.trim(),
-        url: item.url ?? `https://news.ycombinator.com/item?id=${item.id}`
+        text: (item.title ?? '').trim(),
+        url: item.url ?? `https://news.ycombinator.com/item?id=${item.objectID}`
       };
     })
     .filter((item) => item.text.length > 0);

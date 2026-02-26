@@ -33,8 +33,10 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 
 export const spawnCommand: CommandRunner = ({ cmd, args, timeoutMs = DEFAULT_TIMEOUT_MS }) =>
   new Promise((resolve, reject) => {
+    const { CLAUDECODE, ...cleanEnv } = process.env;
     const child = spawn(cmd, args, {
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: cleanEnv
     });
 
     let stdout = '';

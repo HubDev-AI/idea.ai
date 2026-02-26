@@ -14,7 +14,7 @@
     "api:docker:down": "docker compose -f docker-compose.infra.yml -f docker-compose.app.yml stop api",
     "api:docker:logs": "docker compose -f docker-compose.infra.yml -f docker-compose.app.yml logs -f api",
     "api:docker:shell": "docker compose -f docker-compose.infra.yml -f docker-compose.app.yml exec api bash",
-    "db:migrate": "PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0001_init.sql && PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0002_memory.sql && PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0003_thesis.sql"
+    "db:migrate": "PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0001_init.sql && PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0002_memory.sql && PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0003_thesis.sql && PGPASSWORD=idea_ai_dev psql -h 127.0.0.1 -p 5917 -U idea_ai -d idea_ai -f apps/api/db/migrations/0004_tsvector.sql"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

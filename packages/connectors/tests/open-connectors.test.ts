@@ -16,10 +16,9 @@ describe('open connectors', () => {
   it('normalizes Hacker News items', async () => {
     const events = await fetchHnEvents(async () => [
       {
-        id: 123,
-        time: 1700000000,
+        objectID: '123',
+        created_at_i: 1700000000,
         title: 'Founders want better analytics setup',
-        text: 'Need lightweight event tracking',
         url: 'https://example.com/hn/123'
       }
     ]);
