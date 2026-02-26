@@ -1,10 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import type { ConnectorStatusRecord } from '@idea/contracts/src/api';
 
-export type ConnectorStatusRecord = {
-  name: string;
-  status: 'active' | 'disabled' | 'error';
-  last_run: string | null;
-};
+export type { ConnectorStatusRecord } from '@idea/contracts/src/api';
 
 export const registerConnectorRoute = (
   app: FastifyInstance,

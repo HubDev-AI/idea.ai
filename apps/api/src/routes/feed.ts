@@ -1,27 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import type { FeedRecord, PaginatedFeedResponse } from '@idea/contracts/src/api';
 
-export type FeedRecord = {
-  idea: string;
-  score: number;
-  top_source: string;
-  snippet: string;
-  source_url: string | null;
-  next_action: 'validate_demand' | 'validate_pricing' | 'validate_channel';
-  updated_at: string;
-  pain?: number;
-  timing?: number;
-  buildability?: number;
-};
-
-export type PaginatedFeedResponse = {
-  items: FeedRecord[];
-  page: number;
-  page_size: number;
-  total_items: number;
-  total_pages: number;
-  has_next: boolean;
-  has_prev: boolean;
-};
+export type { FeedRecord, PaginatedFeedResponse } from '@idea/contracts/src/api';
 
 const MAX_PAGE_SIZE = 100;
 

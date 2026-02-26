@@ -1,65 +1,23 @@
-export type SignalRecord = {
-  idea: string;
-  score: number;
-  top_source: string;
-  snippet: string;
-  source_url: string | null;
-  next_action: 'validate_demand' | 'validate_pricing' | 'validate_channel';
-  updated_at: string;
-  // V2 score breakdown & reasoning
-  pain?: number;
-  timing?: number;
-  buildability?: number;
-  reasoning?: string;
-};
+import type {
+  FeedRecord as SignalRecord,
+  SignalPage,
+  ConnectorStatusRecord as ConnectorRecord,
+  ExecutionLogRecord,
+  AiProviderHealthRecord,
+  AiHealthRecord,
+  ThesisListItem,
+  AgentStatusRecord
+} from '@idea/contracts/src/api';
 
-export type SignalPage = {
-  items: SignalRecord[];
-  page: number;
-  page_size: number;
-  total_items: number;
-  total_pages: number;
-  has_next: boolean;
-  has_prev: boolean;
-};
-
-export type ConnectorRecord = {
-  name: string;
-  status: 'active' | 'disabled' | 'error';
-  last_run: string | null;
-};
-
-export type ExecutionLogRecord = {
-  ts: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
-  run_id: string;
-  component: string;
-  message: string;
-  context?: Record<string, unknown>;
-};
-
-export type AiProviderHealthRecord = {
-  provider: 'claude' | 'codex';
-  enabled: boolean;
-  status: 'disabled' | 'idle' | 'healthy' | 'degraded' | 'error';
-  attempted: number;
-  succeeded: number;
-  failed: number;
-  retries: number;
-  last_error: string | null;
-};
-
-export type AiHealthRecord = {
-  run_id: string | null;
-  refreshed_at: string | null;
-  provider_setting: 'claude' | 'codex' | 'both';
-  judge_mode: 'single' | 'ensemble';
-  fallback_enabled: boolean;
-  retry_budget: number;
-  post_scrape_enabled: boolean;
-  post_scrape_max_signals: number;
-  judge_max_signals: number;
-  providers: AiProviderHealthRecord[];
+export type {
+  SignalRecord,
+  SignalPage,
+  ConnectorRecord,
+  ExecutionLogRecord,
+  AiProviderHealthRecord,
+  AiHealthRecord,
+  ThesisListItem,
+  AgentStatusRecord
 };
 
 const resolveApiBaseUrl = (): string => {
@@ -137,25 +95,6 @@ export const fetchAiHealth = async (): Promise<AiHealthRecord> => {
   }
 
   return response.json() as Promise<AiHealthRecord>;
-};
-
-export type ThesisListItem = {
-  canonicalKey: string;
-  title: string;
-  confidence: number;
-  status: string;
-  evidenceCount: number;
-  problemStatement: string;
-  sourceCount: number;
-};
-
-export type AgentStatusRecord = {
-  lastRun: {
-    timestamp: string;
-    thesesUpdated: number;
-    newCandidates: number;
-  } | null;
-  investigateNext: string | null;
 };
 
 export const fetchTheses = async (): Promise<ThesisListItem[]> => {

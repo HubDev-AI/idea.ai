@@ -1,22 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import type { ExecutionLogLevel, ExecutionLogRecord, ListLogsQuery } from '@idea/contracts/src/api';
 
-export type ExecutionLogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-export type ExecutionLogRecord = {
-  ts: string;
-  level: ExecutionLogLevel;
-  run_id: string;
-  component: string;
-  message: string;
-  context?: Record<string, unknown>;
-};
-
-export type ListLogsQuery = {
-  limit: number;
-  level?: ExecutionLogLevel;
-  run_id?: string;
-  scope?: 'session' | 'all';
-};
+export type { ExecutionLogLevel, ExecutionLogRecord, ListLogsQuery } from '@idea/contracts/src/api';
 
 const parsePositiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value ?? fallback);
