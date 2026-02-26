@@ -12,6 +12,7 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
+const apiKey = process.env.API_KEY || undefined;
 const readModel = createLiveReadModel();
 const thesisStore = new InMemoryThesisStore();
 
@@ -27,7 +28,8 @@ const app = buildServer({
   getAiHealth: readModel.getAiHealth,
   thesisStore,
   memoryStore,
-  corsOrigins
+  corsOrigins,
+  apiKey
 });
 
 const shutdown = async () => {

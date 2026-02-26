@@ -16,6 +16,7 @@ export type ServerDeps = {
   thesisStore?: ThesisStore;
   memoryStore?: PostgresMemoryStore | null;
   corsOrigins?: string[];
+  apiKey?: string;
 };
 
 const defaultDeps: ServerDeps = {
@@ -81,6 +82,18 @@ export const buildServer = (deps: Partial<ServerDeps> = {}): FastifyInstance => 
       reply.code(204).send();
     }
   });
+
+  const apiKey = resolvedDeps.apiKey;
+  if (apiKey) {
+    app.addHook('onRequest', async (request, reply) => {
+      if (request.method === 'OPTIONS') return;
+      if (request.url === '/health') return;
+      const provided = request.headers['x-api-key'];
+      if (provided !== apiKey) {
+        reply.code(401).send({ error: 'Unauthorized' });
+      }
+    });
+  }
 
   registerFeedRoute(app, { listSignals: resolvedDeps.listSignals });
   registerConnectorRoute(app, { listConnectors: resolvedDeps.listConnectors });
