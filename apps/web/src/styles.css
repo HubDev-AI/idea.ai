@@ -14,6 +14,10 @@
   --warn: #e8c16f;
   --err: #ff7f7f;
   --chip: #1f2735;
+  --surface-1: #141a23;
+  --border: #2a3242;
+  --fg: #e9edf4;
+  --accent: #9ec2ff;
 }
 
 * {
@@ -559,6 +563,92 @@ p {
 
 .thesis-status.promoted { color: var(--ok); }
 .thesis-status.watching { color: var(--warn); }
+
+.thesis-card[role="button"] {
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.thesis-card[role="button"]:hover {
+  border-color: var(--accent);
+}
+
+.thesis-active {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* ── Status Cards Row ────────────────────────────────── */
+.status-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.9rem;
+  margin-bottom: 1.2rem;
+}
+
+.status-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+}
+
+.status-card h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.status-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.status-name {
+  flex: 1;
+  color: var(--fg);
+}
+
+.status-detail {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.status-empty {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.status-card-footer {
+  margin-top: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.dot-ok {
+  background: var(--ok);
+}
+
+.dot-err {
+  background: var(--err);
+}
+
+.dot-idle {
+  background: #6f788b;
+}
 
 /* Agent Sidebar */
 .agent-sidebar {

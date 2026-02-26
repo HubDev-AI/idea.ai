@@ -10,6 +10,8 @@ export type ThesisCardProps = {
     problemStatement: string;
     sourceCount: number;
   };
+  isActive?: boolean;
+  onClick?: () => void;
 };
 
 const confidenceColor = (confidence: number): string => {
@@ -18,14 +20,22 @@ const confidenceColor = (confidence: number): string => {
   return 'var(--muted)';
 };
 
-export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis }) => {
-  const statusClass = thesis.status === 'promoted' ? 'promoted' : thesis.status === 'watching' ? 'watching' : 'candidate';
+export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, isActive, onClick }) => {
+  const statusClass = thesis.status === 'promoted' ? 'promoted' : thesis.status === 'watching' ? 'watching' : '';
 
   return (
-    <article className={`thesis-card ${statusClass}`}>
+    <div
+      className={`thesis-card ${statusClass} ${isActive ? 'thesis-active' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
+    >
       <div className="thesis-header">
-        <h3>{thesis.title}</h3>
-        <span className={`thesis-confidence ${statusClass}`}>{thesis.confidence}%</span>
+        <h3 className="thesis-title">{thesis.title}</h3>
+        <span className="thesis-confidence" style={{ color: confidenceColor(thesis.confidence) }}>
+          {thesis.confidence}%
+        </span>
       </div>
       <div className="thesis-confidence-bar">
         <div
@@ -36,9 +46,9 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis }) => {
       <p className="thesis-problem">{thesis.problemStatement}</p>
       <div className="thesis-meta">
         <span className={`thesis-status ${statusClass}`}>{thesis.status}</span>
-        <span className="thesis-evidence">{thesis.evidenceCount} signals</span>
-        <span className="thesis-sources">{thesis.sourceCount} sources</span>
+        <span>{thesis.evidenceCount} evidence</span>
+        <span>{thesis.sourceCount} sources</span>
       </div>
-    </article>
+    </div>
   );
 };

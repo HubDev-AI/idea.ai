@@ -33,21 +33,26 @@ export const buildApiUrl = (path: string): string => `${API_BASE_URL}${path.star
 
 export const fetchSignals = async ({
   page = 1,
-  pageSize = 8
+  pageSize = 20,
+  window: timeWindow = '7d',
+  source,
+  thesisKey,
 }: {
   page?: number;
   pageSize?: number;
+  window?: string;
+  source?: string;
+  thesisKey?: string;
 } = {}): Promise<SignalPage> => {
-  const params = new URLSearchParams({
-    page: String(Math.max(1, Math.floor(page))),
-    page_size: String(Math.max(1, Math.floor(pageSize)))
-  });
-  const response = await fetch(buildApiUrl(`/v1/signals?${params.toString()}`));
-  if (!response.ok) {
-    throw new Error('Failed to load signals');
-  }
-
-  return response.json() as Promise<SignalPage>;
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('page_size', String(pageSize));
+  params.set('window', timeWindow);
+  if (source) params.set('source', source);
+  if (thesisKey) params.set('thesis_key', thesisKey);
+  const res = await fetch(buildApiUrl(`/v1/signals?${params.toString()}`));
+  if (!res.ok) throw new Error(`fetchSignals failed: ${res.status}`);
+  return res.json();
 };
 
 export const fetchConnectors = async (): Promise<ConnectorRecord[]> => {
