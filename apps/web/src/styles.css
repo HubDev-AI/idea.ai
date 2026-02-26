@@ -687,18 +687,31 @@ p {
   font-size: 0.85rem;
 }
 
-/* Content Grid (agent sidebar + signal feed) */
-.content-grid {
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 0.9rem;
-  align-items: start;
+/* Thesis filter banner */
+.thesis-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.9rem;
+  background: var(--surface-2, #1a2332);
+  border: 1px solid var(--accent, #4e9eff);
+  border-radius: 8px;
+  font-size: 0.85rem;
 }
 
-.feed-column {
-  display: grid;
-  gap: 0.9rem;
-  min-width: 0;
+.thesis-filter-banner button {
+  background: transparent;
+  border: 1px solid var(--muted, #6b7a8d);
+  color: var(--fg, #e1e7ef);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.thesis-filter-banner button:hover {
+  border-color: var(--accent, #4e9eff);
 }
 
 /* Log Drawer */
@@ -870,7 +883,7 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .content-grid {
+  .status-cards {
     grid-template-columns: 1fr;
   }
 

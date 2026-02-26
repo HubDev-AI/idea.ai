@@ -15,10 +15,8 @@ import {
   type SignalRecord,
   type ThesisListItem
 } from './api';
-import { AgentSidebar } from './components/AgentSidebar';
-import { AiHealthPanel } from './components/AiHealthPanel';
-import { ConnectorStatus } from './components/ConnectorStatus';
 import { SignalRow } from './components/SignalRow';
+import { StatusCards } from './components/StatusCards';
 import { ThesisCard } from './components/ThesisCard';
 
 const PAGE_SIZE = 8;
@@ -65,6 +63,8 @@ const App = () => {
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [thesisFilter, setThesisFilter] = useState<string | null>(null);
+  const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
   const [requestedPage, setRequestedPage] = useState(1);
   const [pageInfo, setPageInfo] = useState({
     page: 1,
@@ -75,11 +75,6 @@ const App = () => {
     hasPrev: false
   });
   const activeConnectors = connectors.filter((connector) => connector.status === 'active').length;
-  const uniqueSources = useMemo(() => {
-    const sources = new Set(signals.map((s) => s.top_source));
-    return Array.from(sources).sort();
-  }, [signals]);
-  const filteredSignals = sourceFilter === 'all' ? signals : signals.filter((s) => s.top_source === sourceFilter);
   const latestSignalAt = signals[0]?.updated_at ?? null;
   const topThesis = theses.length > 0 ? theses[0] : null;
   const agentLastRun = agentStatus?.lastRun
@@ -94,7 +89,12 @@ const App = () => {
         setIsLoading(true);
       }
       const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult] = await Promise.allSettled([
-        fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
+        fetchSignals({
+          page: requestedPage,
+          pageSize: PAGE_SIZE,
+          source: sourceFilter === 'all' ? undefined : sourceFilter,
+          thesisKey: thesisFilter ?? undefined,
+        }),
         fetchConnectors(),
         fetchAiHealth(),
         fetchTheses(),
@@ -159,7 +159,7 @@ const App = () => {
     return () => {
       clearInterval(timer);
     };
-  }, [requestedPage]);
+  }, [requestedPage, sourceFilter, thesisFilter]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -297,79 +297,93 @@ const App = () => {
 
       {/* TOP THESES: horizontal cards */}
       <section className="thesis-board-section">
-        <h2>Top Theses</h2>
-        {displayTheses.length > 0 ? (
-          <div className="thesis-board">
-            {displayTheses.map((thesis) => (
-              <ThesisCard key={thesis.canonicalKey} thesis={thesis} />
-            ))}
-          </div>
-        ) : (
+        <h2 className="section-heading">Top Theses</h2>
+        <div className="thesis-board">
+          {displayTheses.map((t) => (
+            <ThesisCard
+              key={t.canonicalKey}
+              thesis={t}
+              isActive={thesisFilter === t.canonicalKey}
+              onClick={() => {
+                if (thesisFilter === t.canonicalKey) {
+                  setThesisFilter(null);
+                  setThesisFilterTitle('');
+                } else {
+                  setThesisFilter(t.canonicalKey);
+                  setThesisFilterTitle(t.title);
+                  setRequestedPage(1);
+                }
+              }}
+            />
+          ))}
+        </div>
+        {theses.length === 0 && (
           <p className="thesis-empty">No theses yet. The research agent will synthesize theses from incoming signals.</p>
         )}
       </section>
 
-      {/* CONTENT GRID: agent sidebar + signal feed */}
-      <div className="content-grid">
-        {/* Agent Activity sidebar (left column) */}
-        <AgentSidebar
-          lastRun={agentStatus?.lastRun ?? null}
-          investigateNext={agentStatus?.investigateNext ?? null}
-        />
+      {/* Status Cards Row */}
+      <StatusCards
+        connectors={connectors}
+        aiHealth={aiHealth}
+        agentStatus={agentStatus}
+      />
 
-        {/* Signal Feed as main content (right column) */}
-        <div className="feed-column">
-          <AiHealthPanel aiHealth={aiHealth} />
-
-          <section className="signal-card">
-            <div className="signal-header">
-              <h2>Opportunity Signals</h2>
-              <div className="signal-controls">
-                <select
-                  className="source-filter"
-                  value={sourceFilter}
-                  onChange={(e) => setSourceFilter(e.target.value)}
-                >
-                  <option value="all">All Sources</option>
-                  {uniqueSources.map((src) => (
-                    <option key={src} value={src}>{src}</option>
-                  ))}
-                </select>
-                <div className="signal-pagination">
-                  <span>
-                    Page {pageInfo.page} / {pageInfo.totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setRequestedPage((value) => Math.max(1, value - 1))}
-                    disabled={!pageInfo.hasPrev || isLoading}
-                  >
-                    Prev
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRequestedPage((value) => value + 1)}
-                    disabled={!pageInfo.hasNext || isLoading}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </div>
-            <ul className="signal-list">
-              {filteredSignals.map((signal) => (
-                <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
-              ))}
-              {filteredSignals.length === 0 && signals.length > 0 && (
-                <li className="signal-empty">No signals from this source on this page.</li>
-              )}
-            </ul>
-          </section>
-
-          {/* Connector health as compact inline row */}
-          <ConnectorStatus connectors={connectors} />
+      {/* Thesis filter banner */}
+      {thesisFilter && (
+        <div className="thesis-filter-banner">
+          <span>Showing signals for: <strong>{thesisFilterTitle}</strong></span>
+          <button type="button" onClick={() => { setThesisFilter(null); setThesisFilterTitle(''); setRequestedPage(1); }}>
+            Clear filter
+          </button>
         </div>
-      </div>
+      )}
+
+      {/* Opportunity Signals — full width */}
+      <section className="signal-card">
+        <div className="signal-header">
+          <h2>Opportunity Signals</h2>
+          <div className="signal-controls">
+            <select
+              className="source-filter"
+              value={sourceFilter}
+              onChange={(e) => { setSourceFilter(e.target.value); setRequestedPage(1); }}
+            >
+              <option value="all">All Sources</option>
+              {connectors.map((c) => (
+                <option key={c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+            <div className="signal-pagination">
+              <span>
+                Page {pageInfo.page} / {pageInfo.totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setRequestedPage((value) => Math.max(1, value - 1))}
+                disabled={!pageInfo.hasPrev || isLoading}
+              >
+                Prev
+              </button>
+              <button
+                type="button"
+                onClick={() => setRequestedPage((value) => value + 1)}
+                disabled={!pageInfo.hasNext || isLoading}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+        <ul className="signal-list">
+          {signals.map((signal) => (
+            <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
+          ))}
+          {signals.length === 0 && (
+            <li className="signal-empty">No signals found for the current filters.</li>
+          )}
+        </ul>
+      </section>
 
       {/* LOGS: collapsed drawer at bottom */}
       <section className={`log-drawer ${logsCollapsed ? 'collapsed' : ''}`}>

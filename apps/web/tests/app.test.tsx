@@ -172,7 +172,7 @@ describe('web app', () => {
     expect(screen.getAllByText(/claude/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/ai judge call failed for provider/i)).toBeDefined();
 
-    // V2 layout: thesis board and agent sidebar
+    // V2 layout: thesis board and status cards
     expect(screen.getByText(/Top Theses/i)).toBeDefined();
     expect(screen.getByText('SOC2 Automation Platform')).toBeDefined();
     expect(screen.getByText('Developer Onboarding Tool')).toBeDefined();
@@ -180,7 +180,7 @@ describe('web app', () => {
     expect(screen.getByText('62%')).toBeDefined();
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
     expect(screen.getByText(/API security testing tools/i)).toBeDefined();
-    expect(screen.getByText(/2 theses updated/i)).toBeDefined();
+    expect(screen.getByText(/2 updated/i)).toBeDefined();
   });
 
   it('shows partial data and error hint when one API request fails', async () => {
@@ -189,7 +189,7 @@ describe('web app', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('hn')).toBeDefined();
+    expect((await screen.findAllByText('hn')).length).toBeGreaterThan(0);
     expect(screen.getByText(/Top Theses/i)).toBeDefined();
     expect(screen.getByText(/Some data could not be loaded/i)).toBeDefined();
   });
