@@ -150,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
         {agentRunning && (
-          <p className="sidebar-agent-status running">Analyzing signals and updating theses\u2026</p>
+          <p className="sidebar-agent-status running">Analyzing signals and updating theses{'\u2026'}</p>
         )}
         {!agentRunning && agentRunResult && (
           <p className={`sidebar-agent-status ${agentRunResult === 'failed' ? 'error' : 'success'}`}>
