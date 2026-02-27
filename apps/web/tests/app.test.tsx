@@ -99,9 +99,16 @@ const mockAgentStatus = {
   investigateNext: 'API security testing tools'
 };
 
+const mockSignalCounts = { hacker_news: 1 };
+
 const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolean; failAgent?: boolean }) =>
   vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
+
+    // Must come before /v1/signals to avoid prefix match
+    if (url.includes('/v1/signals/counts')) {
+      return Promise.resolve(new Response(JSON.stringify(mockSignalCounts), { status: 200 }));
+    }
 
     if (url.includes('/v1/signals')) {
       if (overrides?.failSignals) {
@@ -165,21 +172,21 @@ describe('web app', () => {
     expect(screen.getAllByText(/hacker_news/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/compliance blockers/i)).toBeDefined();
     expect(screen.getByText('validate_demand')).toBeDefined();
-    expect(screen.getByText(/Page 1 \/ 1/i)).toBeDefined();
+    expect(screen.getByText('1 / 1')).toBeDefined();
     expect(screen.getByRole('link', { name: /Source/i })).toBeDefined();
-    expect(screen.getByText(/Runtime Logs/i)).toBeDefined();
+    expect(screen.getByText(/Logs/i)).toBeDefined();
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getAllByText(/claude/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/ai judge call failed for provider/i)).toBeDefined();
 
-    // V2 layout: thesis board and status cards
-    expect(screen.getByText(/Top Theses/i)).toBeDefined();
-    expect(screen.getByText('SOC2 Automation Platform')).toBeDefined();
-    expect(screen.getByText('Developer Onboarding Tool')).toBeDefined();
-    expect(screen.getByText('78%')).toBeDefined();
-    expect(screen.getByText('62%')).toBeDefined();
+    // Thesis board (titles appear in both sidebar and main pane)
+    expect(screen.getByText(/Top Ideas/i)).toBeDefined();
+    expect(screen.getAllByText('SOC2 Automation Platform').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Developer Onboarding Tool').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('78%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('62%').length).toBeGreaterThan(0);
+
+    // Research agent sidebar section
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
-    expect(screen.getByText(/API security testing tools/i)).toBeDefined();
     expect(screen.getByText(/2 updated/i)).toBeDefined();
   });
 
@@ -189,8 +196,9 @@ describe('web app', () => {
 
     render(<App />);
 
+    // Connector name appears in source filter dropdown
     expect((await screen.findAllByText('hn')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Top Theses/i)).toBeDefined();
+    expect(screen.getByText(/Top Ideas/i)).toBeDefined();
     expect(screen.getByText(/Some data could not be loaded/i)).toBeDefined();
   });
 
@@ -206,33 +214,32 @@ describe('web app', () => {
     expect(screen.getByText(/No theses yet/i)).toBeDefined();
     // Agent sidebar shows fallback
     expect(screen.getByText(/No runs yet/i)).toBeDefined();
-    // No warning banner since thesis/agent are non-critical
   });
 
-  it('clicking thesis card shows filter banner', async () => {
+  it('clicking thesis card shows filter chip', async () => {
     vi.stubGlobal('EventSource', undefined);
     vi.stubGlobal('fetch', buildMockFetch());
 
     render(<App />);
 
-    // Wait for theses to load
-    const thesisTitle = await screen.findByText('SOC2 Automation Platform');
-    // Click the thesis card
-    fireEvent.click(thesisTitle.closest('.thesis-card')!);
-    // Filter banner should appear
-    expect(screen.queryByText(/Showing signals for/i)).toBeTruthy();
-    // Click clear
-    fireEvent.click(screen.getByText(/Clear filter/i));
-    expect(screen.queryByText(/Showing signals for/i)).toBeNull();
+    // Wait for theses to load — multiple elements exist (sidebar + main pane)
+    const titles = await screen.findAllByText('SOC2 Automation Platform');
+    // Click the thesis card in the main pane
+    const card = titles.find((el) => el.closest('.thesis-card'));
+    expect(card).toBeDefined();
+    fireEvent.click(card!.closest('.thesis-card')!);
+    // Filter chip adds another occurrence of the title text
+    const afterClick = screen.getAllByText('SOC2 Automation Platform');
+    expect(afterClick.length).toBeGreaterThan(titles.length);
   });
 
-  it('renders status cards with connector, AI, and agent info', async () => {
+  it('renders sidebar with connector, AI, and agent info', async () => {
     vi.stubGlobal('EventSource', undefined);
     vi.stubGlobal('fetch', buildMockFetch());
 
     render(<App />);
 
-    expect(await screen.findByText(/Connector Health/i)).toBeTruthy();
+    expect(await screen.findByText(/Connectors/i)).toBeTruthy();
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
   });

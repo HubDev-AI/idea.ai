@@ -14,7 +14,8 @@ import {
   fetchSignals,
   fetchTheses,
   type SignalRecord,
-  type ThesisListItem
+  type ThesisListItem,
+  triggerAgentRun
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
@@ -60,6 +61,7 @@ const App = () => {
   const [aiHealth, setAiHealth] = useState<AiHealthRecord | null>(null);
   const [theses, setTheses] = useState<ThesisListItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
+  const [agentRunning, setAgentRunning] = useState(false);
   const [signalCounts, setSignalCounts] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsRealtime, setLogsRealtime] = useState(false);
@@ -72,6 +74,7 @@ const App = () => {
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [splitPct, setSplitPct] = useState(50);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pageInfo, setPageInfo] = useState({
     page: 1,
     pageSize: PAGE_SIZE,
@@ -307,8 +310,21 @@ const App = () => {
     setRequestedPage(1);
   };
 
+  const handleRunAgent = async () => {
+    setAgentRunning(true);
+    try {
+      await triggerAgentRun();
+      const status = await fetchAgentStatus();
+      setAgentStatus(status);
+    } catch {
+      // Silently fail — status card will still show old state
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       <Sidebar
         connectors={connectors}
         aiHealth={aiHealth}
@@ -319,7 +335,17 @@ const App = () => {
         signalCount={pageInfo.totalItems}
         latestSignalAt={latestSignalAt}
         signalCounts={signalCounts}
+        onRunAgent={handleRunAgent}
+        agentRunning={agentRunning}
       />
+      <button
+        type="button"
+        className="sidebar-toggle"
+        onClick={() => setSidebarOpen((v) => !v)}
+        title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+      >
+        {sidebarOpen ? '\u25C0' : '\u25B6'}
+      </button>
 
       <main className="main-content">
         {loadWarning ? <p role="alert">{loadWarning}</p> : null}

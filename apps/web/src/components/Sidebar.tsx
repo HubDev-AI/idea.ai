@@ -12,6 +12,8 @@ type SidebarProps = {
   signalCount: number;
   latestSignalAt: string | null;
   signalCounts: Record<string, number>;
+  onRunAgent?: () => void;
+  agentRunning?: boolean;
 };
 
 const dotClass = (status: string, enabled?: boolean): string => {
@@ -45,6 +47,7 @@ const providerDisplayName: Record<string, string> = {
 export const Sidebar: React.FC<SidebarProps> = ({
   connectors, aiHealth, agentStatus, theses,
   thesisFilter, onThesisFilter, signalCount, latestSignalAt, signalCounts,
+  onRunAgent, agentRunning,
 }) => {
   const activeConnectors = connectors.filter((c) => c.status === 'active').length;
   const enabledProviders = aiHealth?.providers?.filter((p) => p.enabled) ?? [];
@@ -110,7 +113,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <nav className="sidebar-section">
-        <h3 className="sidebar-label">Research Agent</h3>
+        <div className="sidebar-label-row">
+          <h3 className="sidebar-label">Research Agent</h3>
+          {onRunAgent && (
+            <button
+              type="button"
+              className="sidebar-run-btn"
+              onClick={onRunAgent}
+              disabled={agentRunning}
+            >
+              {agentRunning ? 'Running...' : 'Run'}
+            </button>
+          )}
+        </div>
         {agentStatus?.lastRun ? (
           <div className="sidebar-agent-info">
             <span>{new Date(agentStatus.lastRun.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>

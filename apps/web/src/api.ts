@@ -114,6 +114,19 @@ export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
   return response.json() as Promise<AgentStatusRecord>;
 };
 
+export type AgentRunResult = {
+  thesesUpdated: number;
+  newCandidates: number;
+  alerts: string[];
+  investigateNext: string;
+};
+
+export const triggerAgentRun = async (): Promise<AgentRunResult> => {
+  const response = await fetch(buildApiUrl('/v1/agent/run'), { method: 'POST' });
+  if (!response.ok) throw new Error('Failed to trigger agent run');
+  return response.json() as Promise<AgentRunResult>;
+};
+
 export const fetchSignalCounts = async (): Promise<Record<string, number>> => {
   const response = await fetch(buildApiUrl('/v1/signals/counts'));
   if (!response.ok) throw new Error('Failed to load signal counts');

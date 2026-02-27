@@ -43,6 +43,49 @@ h1, h2, h3, p {
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   min-height: 100dvh;
+  position: relative;
+  transition: grid-template-columns 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 0px 1fr;
+}
+
+.app-shell.sidebar-collapsed .sidebar {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  left: var(--sidebar-w);
+  bottom: 3rem;
+  z-index: 10;
+  width: 22px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  color: var(--muted);
+  font-size: 0.55rem;
+  cursor: pointer;
+  transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+              color 0.15s,
+              background 0.15s;
+}
+
+.sidebar-toggle:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.app-shell.sidebar-collapsed .sidebar-toggle {
+  left: 0;
 }
 
 /* ── Sidebar ────────────────────────────────────────── */
@@ -59,6 +102,7 @@ h1, h2, h3, p {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   scrollbar-width: thin;
   scrollbar-color: var(--surface-2) transparent;
 }
@@ -79,6 +123,7 @@ h1, h2, h3, p {
 .sidebar-header {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 0.1rem;
   padding-bottom: 0.25rem;
 }
@@ -160,6 +205,35 @@ h1, h2, h3, p {
   color: var(--muted);
   margin-bottom: 0.1rem;
   font-weight: 500;
+}
+
+.sidebar-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.1rem;
+}
+
+.sidebar-label-row .sidebar-label {
+  margin-bottom: 0;
+}
+
+.sidebar-run-btn {
+  background: var(--accent, #0ff);
+  color: var(--bg, #0a0a0a);
+  border: none;
+  padding: 1px 8px;
+  font-size: 0.6rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 3px;
+}
+
+.sidebar-run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .sidebar-row {

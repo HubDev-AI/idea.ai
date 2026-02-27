@@ -1,11 +1,14 @@
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
+import type { AgentStatusRecord } from '@idea/contracts/src/api';
 import { type AiHealthRecord, registerAiHealthRoute } from './routes/ai_health';
+import { type AgentStatusDeps, registerAgentStatusRoute } from './routes/agent_status';
 import { type ConnectorStatusRecord, registerConnectorRoute } from './routes/connectors';
 import { type FeedRecord, registerFeedRoute } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
 import { registerThesesRoute } from './routes/theses';
+import type { AgentRunResult } from './jobs/agent_runner';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
 
@@ -19,6 +22,8 @@ export type ServerDeps = {
   corsOrigins?: string[];
   apiKey?: string;
   rateLimitMax?: number;
+  getAgentStatus?: () => AgentStatusRecord;
+  triggerAgentRun?: () => Promise<AgentRunResult>;
 };
 
 const defaultDeps: ServerDeps = {
@@ -115,6 +120,13 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
   registerHealthRoute(app);
+
+  if (resolvedDeps.getAgentStatus && resolvedDeps.triggerAgentRun) {
+    registerAgentStatusRoute(app, {
+      getAgentStatus: resolvedDeps.getAgentStatus,
+      triggerRun: resolvedDeps.triggerAgentRun
+    });
+  }
 
   if (resolvedDeps.thesisStore) {
     registerThesesRoute(app, {
