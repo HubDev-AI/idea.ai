@@ -40,7 +40,7 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
   return (
     <li className="signal-row">
       <div className="signal-top">
-        <h3>{signal.idea}</h3>
+        <h3 className="signal-idea">{signal.idea.split('|')[0].trim()}</h3>
         <span className="score">{signal.score}</span>
       </div>
       <p className="meta">
