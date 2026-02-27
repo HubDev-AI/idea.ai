@@ -70,6 +70,7 @@ const App = () => {
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsRealtime, setLogsRealtime] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
+  const failCountRef = useRef(0);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
@@ -184,8 +185,13 @@ const App = () => {
       }
 
       if (warnings.length > 0) {
-        setLoadWarning(`Some data could not be loaded (${warnings.join(', ')})`);
+        failCountRef.current++;
+        // Show warning immediately on initial load, after 2+ consecutive on background polls
+        if (showLoading || failCountRef.current >= 2) {
+          setLoadWarning(`Some data could not be loaded (${warnings.join(', ')})`);
+        }
       } else {
+        failCountRef.current = 0;
         setLoadWarning(null);
       }
 

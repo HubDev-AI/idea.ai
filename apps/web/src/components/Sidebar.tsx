@@ -158,34 +158,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </p>
         )}
         {agentStatus?.lastRun ? (
-          <div className="sidebar-agent-info">
-            <span>{new Date(agentStatus.lastRun.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <span className="sidebar-row-detail">{agentStatus.lastRun.thesesUpdated} updated</span>
-            <span className="sidebar-row-detail">{agentStatus.lastRun.newCandidates} new</span>
-          </div>
+          <>
+            <div className="sidebar-row">
+              <span className="sidebar-row-name">Last run</span>
+              <span className="sidebar-row-detail">{new Date(agentStatus.lastRun.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            <div className="sidebar-row">
+              <span className="sidebar-row-name">Updated</span>
+              <span className="sidebar-row-detail detail-count">{agentStatus.lastRun.thesesUpdated}</span>
+            </div>
+            <div className="sidebar-row">
+              <span className="sidebar-row-name">New</span>
+              <span className="sidebar-row-detail detail-count">{agentStatus.lastRun.newCandidates}</span>
+            </div>
+            <div className="sidebar-row">
+              <span className="sidebar-row-name">Clusters</span>
+              <span className="sidebar-row-detail detail-count">{agentStatus.lastRun.clustersAnalyzed}</span>
+            </div>
+            <div className="sidebar-row">
+              <span className="sidebar-row-name">Deep dives</span>
+              <span className="sidebar-row-detail detail-count">{agentStatus.lastRun.deepDivesPerformed}</span>
+            </div>
+            <div className="sidebar-row">
+              <span className="sidebar-row-name">Journal</span>
+              <span className="sidebar-row-detail detail-count">{agentStatus.lastRun.journalEntriesWritten}</span>
+            </div>
+          </>
         ) : (
           !agentRunning && <p className="sidebar-empty">No runs yet</p>
-        )}
-        {agentStatus?.lastRun && (
-          <div className="sidebar-agent-details">
-            <span>{agentStatus.lastRun.clustersAnalyzed} clusters</span>
-            <span>{agentStatus.lastRun.deepDivesPerformed} deep dives</span>
-            <span>{agentStatus.lastRun.journalEntriesWritten} journal</span>
-          </div>
         )}
       </nav>
 
       {theses.length > 0 && (
         <nav className="sidebar-section">
           <h3 className="sidebar-label">Theses Overview</h3>
-          <div className="sidebar-thesis-stats">
-            <span>{theses.length} total</span>
-            <span>{theses.filter((t) => t.status === 'promoted').length} promoted</span>
-            <span>{theses.filter((t) => t.status === 'watching').length} watching</span>
+          <div className="sidebar-row">
+            <span className="sidebar-row-name">Total</span>
+            <span className="sidebar-row-detail detail-count">{theses.length}</span>
           </div>
-          <div className="sidebar-thesis-stats">
-            <span>{theses.reduce((sum, t) => sum + t.evidenceCount, 0)} evidence</span>
-            <span>{theses.reduce((sum, t) => sum + t.sourceCount, 0)} sources</span>
+          <div className="sidebar-row">
+            <span className="sidebar-row-name">Promoted</span>
+            <span className="sidebar-row-detail detail-count">{theses.filter((t) => t.status === 'promoted').length}</span>
+          </div>
+          <div className="sidebar-row">
+            <span className="sidebar-row-name">Watching</span>
+            <span className="sidebar-row-detail detail-count">{theses.filter((t) => t.status === 'watching').length}</span>
+          </div>
+          <div className="sidebar-row">
+            <span className="sidebar-row-name">Evidence</span>
+            <span className="sidebar-row-detail detail-count">{theses.reduce((sum, t) => sum + (t.evidenceCount || 0), 0)}</span>
+          </div>
+          <div className="sidebar-row">
+            <span className="sidebar-row-name">Sources</span>
+            <span className="sidebar-row-detail detail-count">{theses.reduce((sum, t) => sum + (t.sourceCount || 0), 0)}</span>
           </div>
         </nav>
       )}
