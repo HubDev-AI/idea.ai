@@ -29,7 +29,7 @@ const toScope = (v: unknown): ThesisDraft['estimatedScope'] => {
   return validScopes.has(s) ? (s as 'small' | 'medium' | 'large') : null;
 };
 
-const rowToDraft = (row: ThesisRow): ThesisDraft => ({
+const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   canonicalKey: row.canonical_key,
   title: row.title,
   topic: row.topic,
@@ -40,6 +40,7 @@ const rowToDraft = (row: ThesisRow): ThesisDraft => ({
   targetBuyer: row.target_buyer,
   proposedSolution: row.proposed_solution,
   evidenceCount: toNumber(row.evidence_count),
+  sourceCount: toNumber(row.source_count),
   avgPain: 0,
   avgTiming: 0,
   avgBuildability: 0,

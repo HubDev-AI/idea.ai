@@ -52,6 +52,11 @@ const titleOverlap = (a: string, b: string): number => {
 const clampDelta = (delta: number): number =>
   Math.max(-20, Math.min(20, delta));
 
+const VALID_ENTRY_TYPES = new Set(['trend_shift', 'emerging_pattern', 'thesis_evolution', 'market_signal', 'run_summary']);
+
+const sanitizeEntryType = (raw: string): JournalEntry['entry_type'] =>
+  VALID_ENTRY_TYPES.has(raw) ? (raw as JournalEntry['entry_type']) : 'market_signal';
+
 export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunResult> => {
   const runId = `agent-${Date.now()}`;
   let thesesUpdated = 0;
@@ -183,7 +188,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     for (const obs of broadOutput.observations) {
       allJournalEntries.push({
         run_id: runId,
-        entry_type: obs.entry_type as JournalEntry['entry_type'],
+        entry_type: sanitizeEntryType(obs.entry_type),
         topic: obs.topic,
         insight: obs.insight,
         narrative: obs.narrative,
@@ -344,7 +349,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       for (const entry of diveOutput.journal_entries) {
         allJournalEntries.push({
           run_id: runId,
-          entry_type: entry.entry_type as JournalEntry['entry_type'],
+          entry_type: sanitizeEntryType(entry.entry_type),
           topic: entry.topic,
           insight: entry.insight,
           narrative: entry.narrative,

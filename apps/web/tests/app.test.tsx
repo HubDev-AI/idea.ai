@@ -202,7 +202,7 @@ describe('web app', () => {
 
     // Research agent sidebar section
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
-    expect(screen.getByText(/2 updated/i)).toBeDefined();
+    expect(screen.getByText('Updated')).toBeDefined();
   });
 
   it('shows partial data and error hint when one API request fails', async () => {

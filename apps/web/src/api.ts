@@ -127,7 +127,10 @@ export type AgentRunResult = {
 };
 
 export const triggerAgentRun = async (): Promise<AgentRunResult> => {
-  const response = await fetch(buildApiUrl('/v1/agent/run'), { method: 'POST' });
+  const response = await fetch(buildApiUrl('/v1/agent/run'), {
+    method: 'POST',
+    signal: AbortSignal.timeout(300_000)
+  });
   if (!response.ok) throw new Error('Failed to trigger agent run');
   return response.json() as Promise<AgentRunResult>;
 };

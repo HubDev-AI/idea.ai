@@ -9,7 +9,8 @@ export default defineConfig({
     proxy: {
       '/v1': {
         target: proxyTarget,
-        changeOrigin: true
+        changeOrigin: true,
+        timeout: 300_000
       }
     }
   },
