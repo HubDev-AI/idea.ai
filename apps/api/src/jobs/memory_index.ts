@@ -21,7 +21,7 @@ export type SignalEmbeddingRecord = {
   model: string;
 };
 
-const EMBEDDING_DIMENSION = 32;
+const EMBEDDING_DIMENSION = 768;
 const EMBEDDING_MODEL = 'local-hash-v1';
 const OLLAMA_EMBEDDING_MODEL = 'ollama-nomic-embed-text';
 

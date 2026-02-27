@@ -16,7 +16,7 @@ describe('memory indexing', () => {
     });
 
     expect(canonical).toContain('SOC2 workflow copilot');
-    expect(buildLocalEmbedding(canonical)).toHaveLength(32);
+    expect(buildLocalEmbedding(canonical)).toHaveLength(768);
   });
 
   it('creates memory and embedding records from scored signal input', async () => {

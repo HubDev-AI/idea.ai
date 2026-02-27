@@ -45,8 +45,15 @@ describe('ai runtime client', () => {
     expect(result.text).toBe('from codex fallback');
   });
 
-  it('uses codex exec --json and parses JSONL from stdout', async () => {
+  it('uses codex exec --json and parses item.completed JSONL from stdout', async () => {
     const seen: Array<{ cmd: string; args: string[] }> = [];
+    const codexJsonl = [
+      '{"type":"thread.started","thread_id":"abc-123"}',
+      '{"type":"turn.started"}',
+      '{"type":"item.completed","item":{"id":"item_0","type":"reasoning","text":"Thinking..."}}',
+      '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"codex final text"}}',
+      '{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":10}}'
+    ].join('\n');
 
     const result = await runCodexPrompt(
       { prompt: 'hello', timeoutMs: 1000 },
@@ -56,7 +63,7 @@ describe('ai runtime client', () => {
 
           return {
             exitCode: 0,
-            stdout: '{"type":"event","text":"ignore"}\n{"type":"final","text":"codex final text"}\n',
+            stdout: codexJsonl,
             stderr: '',
             timedOut: false
           };

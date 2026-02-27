@@ -21,7 +21,7 @@ vi.doMock('pg', () => ({
 /* Mock buildLocalEmbedding (used by retriever.findSimilar) so we
    don't depend on the real hashing implementation in tests */
 vi.doMock('../src/jobs/memory_index', () => ({
-  buildLocalEmbedding: vi.fn(() => Array.from({ length: 32 }, () => 0.1))
+  buildLocalEmbedding: vi.fn(() => Array.from({ length: 768 }, () => 0.1))
 }));
 
 /* ------------------------------------------------------------------ */
