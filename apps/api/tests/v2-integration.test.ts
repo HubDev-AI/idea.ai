@@ -326,10 +326,16 @@ describe('V2 integration', () => {
       evidence: []
     });
 
-    const agentResponse = JSON.stringify({
-      theses_updated: [
+    const broadOutput = {
+      thesis_updates: [
         { canonicalKey: 'compliance:soc2', confidence_delta: 10, reasoning: 'strong new signals' }
       ],
+      dig_deeper: [{ topic: 'billing', reason: 'growing demand', related_cluster_ids: [0] }],
+      observations: []
+    };
+
+    const deepOutput = {
+      thesis_updates: [],
       new_theses: [
         {
           title: 'Billing Copilot',
@@ -339,24 +345,26 @@ describe('V2 integration', () => {
           supporting_signal_ids: ['s1']
         }
       ],
-      alerts: ['compliance:soc2'],
-      investigate_next: 'pricing'
+      journal_entries: []
+    };
+
+    // First call = broad scan, second call = deep dive
+    let callCount = 0;
+    const mockClaude = vi.fn().mockImplementation(() => {
+      callCount++;
+      const output = callCount === 1 ? broadOutput : deepOutput;
+      return Promise.resolve({ text: JSON.stringify(output), provider: 'claude', meta: {} });
     });
 
     const result = await runResearchAgent({
       thesisStore: store,
-      runClaude: vi.fn().mockResolvedValue({
-        text: agentResponse,
-        provider: 'claude',
-        meta: {}
-      }),
+      runClaude: mockClaude,
       runCodex: vi.fn().mockRejectedValue(new Error('unavailable'))
     });
 
     expect(result.thesesUpdated).toBe(1);
     expect(result.newCandidates).toBe(1);
     expect(result.alerts).toContain('compliance:soc2');
-    expect(result.investigateNext).toBe('pricing');
 
     // Verify thesis was updated: 72 + 10 = 82 -> promoted
     const updated = await store.getByKey('compliance:soc2');

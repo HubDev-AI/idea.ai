@@ -2,9 +2,11 @@ import pg from 'pg';
 import type { AgentStatusRecord } from '@idea/contracts/src/api';
 import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
 import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
+import { embedText } from '@idea/ai-runtime/src/ollama';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { loadEnvFile } from './config/dotenv';
 import { createLiveReadModel } from './runtime/live_read_model';
+import { createPostgresJournalStore } from './runtime/journal_store';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
 import { createPostgresThesisStore } from './runtime/postgres_thesis_store';
 import { InMemoryThesisStore } from './runtime/thesis_store';
@@ -30,6 +32,10 @@ const memoryStore = databaseUrl
   ? createPostgresMemoryStore({ databaseUrl })
   : null;
 
+const journalStore = databaseUrl
+  ? createPostgresJournalStore({ databaseUrl })
+  : null;
+
 let agentStatus: AgentStatusRecord = { lastRun: null, investigateNext: null };
 let agentRunInFlight: Promise<AgentRunResult> | null = null;
 
@@ -39,6 +45,8 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
   agentRunInFlight = runResearchAgent({
     thesisStore,
     memoryStore,
+    journalStore,
+    embedText: (text: string) => embedText(text, { fallbackToNull: true }),
     runClaude: runClaudePrompt,
     runCodex: runCodexPrompt
   }).finally(() => {
