@@ -14,6 +14,7 @@ type SidebarProps = {
   signalCounts: Record<string, number>;
   onRunAgent?: () => void;
   agentRunning?: boolean;
+  agentRunResult?: string | null;
 };
 
 const dotClass = (status: string, enabled?: boolean): string => {
@@ -47,7 +48,7 @@ const providerDisplayName: Record<string, string> = {
 export const Sidebar: React.FC<SidebarProps> = ({
   connectors, aiHealth, agentStatus, theses,
   thesisFilter, onThesisFilter, signalCount, latestSignalAt, signalCounts,
-  onRunAgent, agentRunning,
+  onRunAgent, agentRunning, agentRunResult,
 }) => {
   const activeConnectors = connectors.filter((c) => c.status === 'active').length;
   const enabledProviders = aiHealth?.providers?.filter((p) => p.enabled) ?? [];
@@ -118,21 +119,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {onRunAgent && (
             <button
               type="button"
-              className="sidebar-run-btn"
+              className={`sidebar-run-btn ${agentRunning ? 'running' : ''}`}
               onClick={onRunAgent}
               disabled={agentRunning}
             >
-              {agentRunning ? 'Running...' : 'Run'}
+              {agentRunning ? 'Running\u2026' : 'Run'}
             </button>
           )}
         </div>
+        {agentRunning && (
+          <p className="sidebar-agent-status running">Analyzing signals and updating theses\u2026</p>
+        )}
+        {!agentRunning && agentRunResult && (
+          <p className={`sidebar-agent-status ${agentRunResult === 'failed' ? 'error' : 'success'}`}>
+            {agentRunResult === 'failed' ? 'Run failed' : agentRunResult}
+          </p>
+        )}
         {agentStatus?.lastRun ? (
           <div className="sidebar-agent-info">
             <span>{new Date(agentStatus.lastRun.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             <span className="sidebar-row-detail">{agentStatus.lastRun.thesesUpdated} updated</span>
           </div>
         ) : (
-          <p className="sidebar-empty">No runs yet</p>
+          !agentRunning && <p className="sidebar-empty">No runs yet</p>
         )}
       </nav>
 

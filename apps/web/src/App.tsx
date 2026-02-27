@@ -62,6 +62,7 @@ const App = () => {
   const [theses, setTheses] = useState<ThesisListItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
   const [agentRunning, setAgentRunning] = useState(false);
+  const [agentRunResult, setAgentRunResult] = useState<string | null>(null);
   const [signalCounts, setSignalCounts] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsRealtime, setLogsRealtime] = useState(false);
@@ -312,12 +313,34 @@ const App = () => {
 
   const handleRunAgent = async () => {
     setAgentRunning(true);
+    setAgentRunResult(null);
+    setLogDrawerOpen(true);
     try {
-      await triggerAgentRun();
-      const status = await fetchAgentStatus();
-      setAgentStatus(status);
+      const result = await triggerAgentRun();
+      // Refresh all data since the agent creates/updates theses
+      const [statusRes, thesesRes, signalsRes, countsRes] = await Promise.allSettled([
+        fetchAgentStatus(),
+        fetchTheses(),
+        fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
+        fetchSignalCounts()
+      ]);
+      if (statusRes.status === 'fulfilled') setAgentStatus(statusRes.value);
+      if (thesesRes.status === 'fulfilled') setTheses(thesesRes.value);
+      if (signalsRes.status === 'fulfilled') {
+        setSignals(signalsRes.value.items);
+        setPageInfo({
+          page: signalsRes.value.page,
+          pageSize: signalsRes.value.page_size,
+          totalItems: signalsRes.value.total_items,
+          totalPages: signalsRes.value.total_pages,
+          hasNext: signalsRes.value.has_next,
+          hasPrev: signalsRes.value.has_prev
+        });
+      }
+      if (countsRes.status === 'fulfilled') setSignalCounts(countsRes.value);
+      setAgentRunResult(`${result.thesesUpdated} updated, ${result.newCandidates} new`);
     } catch {
-      // Silently fail — status card will still show old state
+      setAgentRunResult('failed');
     } finally {
       setAgentRunning(false);
     }
@@ -337,6 +360,7 @@ const App = () => {
         signalCounts={signalCounts}
         onRunAgent={handleRunAgent}
         agentRunning={agentRunning}
+        agentRunResult={agentRunResult}
       />
       <button
         type="button"

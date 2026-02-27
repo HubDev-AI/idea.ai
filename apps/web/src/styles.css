@@ -236,6 +236,39 @@ h1, h2, h3, p {
   cursor: not-allowed;
 }
 
+.sidebar-run-btn.running {
+  animation: pulse-btn 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-btn {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.sidebar-agent-status {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.35rem;
+  margin: 0;
+}
+
+.sidebar-agent-status.running {
+  color: var(--accent, #0ff);
+  animation: pulse-text 1.5s ease-in-out infinite;
+}
+
+.sidebar-agent-status.success {
+  color: var(--ok, #0f0);
+}
+
+.sidebar-agent-status.error {
+  color: var(--err, #f44);
+}
+
 .sidebar-row {
   display: flex;
   align-items: center;
