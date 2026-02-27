@@ -11,6 +11,7 @@ type ThesisRow = {
   problem_statement: string;
   target_buyer: string;
   proposed_solution: string;
+  estimated_scope: string | null;
   first_seen_at: Date;
   last_seen_at: Date;
   evidence_count: number;
@@ -20,6 +21,12 @@ type ThesisRow = {
 const toNumber = (v: unknown): number => {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
+};
+
+const validScopes = new Set(['small', 'medium', 'large']);
+const toScope = (v: unknown): ThesisDraft['estimatedScope'] => {
+  const s = String(v ?? '');
+  return validScopes.has(s) ? (s as 'small' | 'medium' | 'large') : null;
 };
 
 const rowToDraft = (row: ThesisRow): ThesisDraft => ({
@@ -37,7 +44,8 @@ const rowToDraft = (row: ThesisRow): ThesisDraft => ({
   avgTiming: 0,
   avgBuildability: 0,
   latestObservedAt: new Date(row.last_seen_at).toISOString(),
-  evidence: []
+  evidence: [],
+  estimatedScope: toScope(row.estimated_scope)
 });
 
 export const createPostgresThesisStore = ({ pool }: { pool: Pool }): ThesisStore & { close: () => Promise<void> } => ({
@@ -73,11 +81,11 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): ThesisStore
   },
 
   async upsert(draft: ThesisDraft): Promise<void> {
-    await pool.query(
+    const result = await pool.query<{ id: string }>(
       `INSERT INTO thesis_candidates
         (canonical_key, title, topic, status, confidence, problem_statement,
-         target_buyer, proposed_solution, first_seen_at, last_seen_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+         target_buyer, proposed_solution, estimated_scope, first_seen_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
        ON CONFLICT (canonical_key) DO UPDATE SET
          title = EXCLUDED.title,
          status = EXCLUDED.status,
@@ -85,14 +93,33 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): ThesisStore
          problem_statement = EXCLUDED.problem_statement,
          target_buyer = EXCLUDED.target_buyer,
          proposed_solution = EXCLUDED.proposed_solution,
+         estimated_scope = COALESCE(EXCLUDED.estimated_scope, thesis_candidates.estimated_scope),
          last_seen_at = NOW(),
-         updated_at = NOW()`,
+         updated_at = NOW()
+       RETURNING id`,
       [
         draft.canonicalKey, draft.title, draft.topic, draft.status,
         draft.confidence, draft.problemStatement,
-        draft.targetBuyer, draft.proposedSolution
+        draft.targetBuyer, draft.proposedSolution,
+        draft.estimatedScope ?? null
       ]
     );
+
+    if (draft.evidence.length > 0 && result.rows[0]) {
+      const thesisId = result.rows[0].id;
+      for (const ev of draft.evidence) {
+        await pool.query(
+          `INSERT INTO thesis_evidence (thesis_id, signal_id, relation, weight, snippet, observed_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (thesis_id, signal_id) DO UPDATE SET
+             relation = EXCLUDED.relation,
+             weight = EXCLUDED.weight,
+             snippet = EXCLUDED.snippet,
+             observed_at = EXCLUDED.observed_at`,
+          [thesisId, ev.signal_id, ev.relation, ev.weight, ev.snippet, ev.observed_at]
+        );
+      }
+    }
   },
 
   async close(): Promise<void> {}

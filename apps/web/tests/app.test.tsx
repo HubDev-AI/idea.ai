@@ -77,7 +77,8 @@ const mockTheses = [
     status: 'promoted',
     evidenceCount: 5,
     problemStatement: 'Startups struggle with SOC2 compliance prep',
-    sourceCount: 3
+    sourceCount: 3,
+    estimatedScope: 'small' as const
   },
   {
     canonicalKey: 'dev-onboarding',
@@ -86,7 +87,8 @@ const mockTheses = [
     status: 'watching',
     evidenceCount: 3,
     problemStatement: 'Engineering teams waste weeks onboarding new developers',
-    sourceCount: 2
+    sourceCount: 2,
+    estimatedScope: 'medium' as const
   }
 ];
 
@@ -94,9 +96,18 @@ const mockAgentStatus = {
   lastRun: {
     timestamp: '2026-02-24T03:00:00.000Z',
     thesesUpdated: 2,
-    newCandidates: 1
+    newCandidates: 1,
+    clustersAnalyzed: 3,
+    deepDivesPerformed: 1,
+    journalEntriesWritten: 5
   },
   investigateNext: 'API security testing tools'
+};
+
+const mockInfraStatus = {
+  postgres: 'ok',
+  ollama: 'error',
+  embeddings: { total: 154, withEmbedding: 100, fallbackModel: 'local-hash-v1' }
 };
 
 const mockSignalCounts = { hacker_news: 1 };
@@ -152,6 +163,10 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       return Promise.resolve(new Response(JSON.stringify(mockAgentStatus), { status: 200 }));
     }
 
+    if (url.includes('/v1/infra/status')) {
+      return Promise.resolve(new Response(JSON.stringify(mockInfraStatus), { status: 200 }));
+    }
+
     // Default: connectors
     return Promise.resolve(new Response(JSON.stringify(mockConnectors), { status: 200 }));
   });
@@ -178,10 +193,10 @@ describe('web app', () => {
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getAllByText(/claude/i).length).toBeGreaterThan(0);
 
-    // Thesis board (titles appear in both sidebar and main pane)
+    // Thesis board (titles in main pane only, sidebar shows overview)
     expect(screen.getByText(/Top Ideas/i)).toBeDefined();
-    expect(screen.getAllByText('SOC2 Automation Platform').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Developer Onboarding Tool').length).toBeGreaterThan(0);
+    expect(screen.getByText('SOC2 Automation Platform')).toBeDefined();
+    expect(screen.getByText('Developer Onboarding Tool')).toBeDefined();
     expect(screen.getAllByText('78%').length).toBeGreaterThan(0);
     expect(screen.getAllByText('62%').length).toBeGreaterThan(0);
 
@@ -222,15 +237,15 @@ describe('web app', () => {
 
     render(<App />);
 
-    // Wait for theses to load — multiple elements exist (sidebar + main pane)
-    const titles = await screen.findAllByText('SOC2 Automation Platform');
-    // Click the thesis card in the main pane
-    const card = titles.find((el) => el.closest('.thesis-card'));
+    // Wait for thesis to load in main pane
+    const title = await screen.findByText('SOC2 Automation Platform');
+    // Click the thesis card
+    const card = title.closest('.thesis-card');
     expect(card).toBeDefined();
-    fireEvent.click(card!.closest('.thesis-card')!);
+    fireEvent.click(card!);
     // Filter chip adds another occurrence of the title text
     const afterClick = screen.getAllByText('SOC2 Automation Platform');
-    expect(afterClick.length).toBeGreaterThan(titles.length);
+    expect(afterClick.length).toBeGreaterThan(1);
   });
 
   it('renders sidebar with connector, AI, and agent info', async () => {

@@ -58,12 +58,17 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
     lastRun: {
       timestamp: new Date().toISOString(),
       thesesUpdated: result.thesesUpdated,
-      newCandidates: result.newCandidates
+      newCandidates: result.newCandidates,
+      clustersAnalyzed: result.clustersAnalyzed,
+      deepDivesPerformed: result.deepDivesPerformed,
+      journalEntriesWritten: result.journalEntriesWritten
     },
     investigateNext: result.investigateNext || null
   };
   return result;
 };
+
+const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
 
 const serverDeps: Parameters<typeof buildServer>[0] = {
   listSignals: readModel.listSignals,
@@ -74,7 +79,22 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   memoryStore,
   getAgentStatus: () => agentStatus,
   triggerAgentRun: executeAgentRun,
-  corsOrigins
+  corsOrigins,
+  infraStatusDeps: {
+    checkPostgres: async () => {
+      if (!memoryStore) return false;
+      await memoryStore.ping();
+      return true;
+    },
+    checkOllama: async () => {
+      const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+      return res.ok;
+    },
+    getEmbeddingStats: async () => {
+      if (!memoryStore) return { total: 0, withEmbedding: 0, fallbackModel: 'none' };
+      return memoryStore.getEmbeddingStats();
+    }
+  }
 };
 if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);

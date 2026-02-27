@@ -87,9 +87,10 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
         timing,
         buildability,
         blended,
+        source_url,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
       ON CONFLICT (signal_id)
       DO UPDATE SET
         topic = EXCLUDED.topic,
@@ -100,6 +101,7 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
         timing = EXCLUDED.timing,
         buildability = EXCLUDED.buildability,
         blended = EXCLUDED.blended,
+        source_url = COALESCE(EXCLUDED.source_url, signal_memory.source_url),
         updated_at = NOW()
     `,
     [
@@ -111,7 +113,8 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
       entry.memoryRecord.pain,
       entry.memoryRecord.timing,
       entry.memoryRecord.buildability,
-      entry.memoryRecord.blended
+      entry.memoryRecord.blended,
+      entry.memoryRecord.source_url ?? null
     ]
   );
 
@@ -206,6 +209,7 @@ export type MemorySignalRow = {
   timing: number;
   buildability: number;
   blended: number;
+  source_url: string | null;
 };
 
 export type SignalQueryResult = {
@@ -226,6 +230,12 @@ export type SignalQueryParams = {
   thesisKey?: string;
 };
 
+export type EmbeddingStats = {
+  total: number;
+  withEmbedding: number;
+  fallbackModel: string;
+};
+
 export type PostgresMemoryStore = {
   retriever: MemoryRetriever;
   save: (entry: IndexedMemoryEntry) => Promise<void>;
@@ -233,6 +243,7 @@ export type PostgresMemoryStore = {
   querySignals: (params: SignalQueryParams) => Promise<SignalQueryResult>;
   countSignalsBySource: () => Promise<Record<string, number>>;
   getEmbeddings: (signalIds: string[]) => Promise<Map<string, number[]>>;
+  getEmbeddingStats: () => Promise<EmbeddingStats>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -335,8 +346,9 @@ export const createPostgresMemoryStore = ({
       timing: unknown;
       buildability: unknown;
       blended: unknown;
+      source_url: string | null;
     }>(
-      `SELECT signal_id, topic, source, canonical_text, observed_at, pain, timing, buildability, blended
+      `SELECT signal_id, topic, source, canonical_text, observed_at, pain, timing, buildability, blended, source_url
        FROM signal_memory
        ORDER BY observed_at DESC
        LIMIT $1`,
@@ -352,7 +364,8 @@ export const createPostgresMemoryStore = ({
       pain: toNumber(row.pain),
       timing: toNumber(row.timing),
       buildability: toNumber(row.buildability),
-      blended: toNumber(row.blended)
+      blended: toNumber(row.blended),
+      source_url: row.source_url ?? null
     }));
   };
 
@@ -387,7 +400,7 @@ export const createPostgresMemoryStore = ({
     const offset = (page - 1) * pageSize;
     const dataSql = `
       SELECT DISTINCT sm.signal_id, sm.topic, sm.source, sm.canonical_text,
-             sm.observed_at, sm.pain, sm.timing, sm.buildability, sm.blended
+             sm.observed_at, sm.pain, sm.timing, sm.buildability, sm.blended, sm.source_url
       FROM signal_memory sm ${joinClause} ${whereClause}
       ORDER BY sm.blended DESC
       LIMIT ${pageSize} OFFSET ${offset}`;
@@ -404,6 +417,7 @@ export const createPostgresMemoryStore = ({
       timing: toNumber(row.timing),
       buildability: toNumber(row.buildability),
       blended: toNumber(row.blended),
+      source_url: row.source_url ? String(row.source_url) : null,
     }));
 
     return { items, page, pageSize, totalItems, totalPages, hasNext: page < totalPages, hasPrev: page > 1 };
@@ -442,6 +456,21 @@ export const createPostgresMemoryStore = ({
     return map;
   };
 
+  const getEmbeddingStats = async (): Promise<EmbeddingStats> => {
+    const result = await pool.query<{ total: number; with_embedding: number; fallback_model: string | null }>(`
+      SELECT
+        (SELECT COUNT(*)::int FROM signal_memory) AS total,
+        (SELECT COUNT(*)::int FROM signal_embeddings) AS with_embedding,
+        (SELECT model FROM signal_embeddings ORDER BY created_at DESC LIMIT 1) AS fallback_model
+    `);
+    const row = result.rows[0];
+    return {
+      total: row?.total ?? 0,
+      withEmbedding: row?.with_embedding ?? 0,
+      fallbackModel: row?.fallback_model ?? 'none'
+    };
+  };
+
   return {
     retriever,
     save,
@@ -449,6 +478,7 @@ export const createPostgresMemoryStore = ({
     querySignals,
     countSignalsBySource,
     getEmbeddings,
+    getEmbeddingStats,
     ping,
     close: async () => {
       await pool.end();

@@ -8,6 +8,7 @@ import { type FeedRecord, registerFeedRoute } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
 import { registerThesesRoute } from './routes/theses';
+import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_status';
 import type { AgentRunResult } from './jobs/agent_runner';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
@@ -24,6 +25,7 @@ export type ServerDeps = {
   rateLimitMax?: number;
   getAgentStatus?: () => AgentStatusRecord;
   triggerAgentRun?: () => Promise<AgentRunResult>;
+  infraStatusDeps?: InfraStatusDeps;
 };
 
 const defaultDeps: ServerDeps = {
@@ -133,6 +135,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
       store: resolvedDeps.thesisStore,
       memoryStore: resolvedDeps.memoryStore ?? null
     });
+  }
+
+  if (resolvedDeps.infraStatusDeps) {
+    registerInfraStatusRoute(app, resolvedDeps.infraStatusDeps);
   }
 
   return app;

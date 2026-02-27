@@ -781,7 +781,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
             pain: score.pain,
             timing: score.timing,
             buildability: score.buildability,
-            blended
+            blended,
+            sourceUrl: event.url || null
           });
 
           memoryEntries.push(indexedEntry);

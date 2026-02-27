@@ -6,9 +6,11 @@ import {
   buildApiUrl,
   type ConnectorRecord,
   type ExecutionLogRecord,
+  type InfraStatusRecord,
   fetchAgentStatus,
   fetchAiHealth,
   fetchConnectors,
+  fetchInfraStatus,
   fetchLogs,
   fetchSignalCounts,
   fetchSignals,
@@ -63,6 +65,7 @@ const App = () => {
   const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentRunResult, setAgentRunResult] = useState<string | null>(null);
+  const [infraStatus, setInfraStatus] = useState<InfraStatusRecord | null>(null);
   const [signalCounts, setSignalCounts] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsRealtime, setLogsRealtime] = useState(false);
@@ -119,7 +122,7 @@ const App = () => {
       if (showLoading) {
         setIsLoading(true);
       }
-      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult] = await Promise.allSettled([
+      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult, infraResult] = await Promise.allSettled([
         fetchSignals({
           page: requestedPage,
           pageSize: PAGE_SIZE,
@@ -130,7 +133,8 @@ const App = () => {
         fetchAiHealth(),
         fetchTheses(),
         fetchAgentStatus(),
-        fetchSignalCounts()
+        fetchSignalCounts(),
+        fetchInfraStatus()
       ]);
       const warnings: string[] = [];
 
@@ -173,6 +177,10 @@ const App = () => {
 
       if (countsResult.status === 'fulfilled') {
         setSignalCounts(countsResult.value);
+      }
+
+      if (infraResult.status === 'fulfilled') {
+        setInfraStatus(infraResult.value);
       }
 
       if (warnings.length > 0) {
@@ -352,6 +360,7 @@ const App = () => {
         connectors={connectors}
         aiHealth={aiHealth}
         agentStatus={agentStatus}
+        infraStatus={infraStatus}
         theses={theses}
         thesisFilter={thesisFilter}
         onThesisFilter={handleThesisFilter}

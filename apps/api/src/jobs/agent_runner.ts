@@ -3,6 +3,7 @@ import type { RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types
 import type { JournalEntry, JournalStore } from '../runtime/journal_store';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { ThesisStore } from '../runtime/thesis_store';
+import type { ThesisEvidenceDraft } from './thesis_synthesizer';
 import { type ClusterableSignal, clusterSignals } from './signal_clusterer';
 import {
   type AgentThesisSummary,
@@ -35,6 +36,18 @@ export type AgentRunnerDeps = {
 
 const MAX_DEEP_DIVES = 2;
 const AGENT_TIMEOUT_MS = 60_000;
+
+const titleWords = (title: string): Set<string> =>
+  new Set(title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2));
+
+const titleOverlap = (a: string, b: string): number => {
+  const wordsA = titleWords(a);
+  const wordsB = titleWords(b);
+  if (wordsA.size === 0 || wordsB.size === 0) return 0;
+  let matches = 0;
+  for (const w of wordsA) if (wordsB.has(w)) matches++;
+  return matches / Math.min(wordsA.size, wordsB.size);
+};
 
 const clampDelta = (delta: number): number =>
   Math.max(-20, Math.min(20, delta));
@@ -285,8 +298,26 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         }
       }
 
-      // Create new thesis candidates from deep dive
+      // Create new thesis candidates from deep dive (with dedup)
       for (const proposal of diveOutput.new_theses) {
+        // Dedup: skip if an existing thesis has >60% word overlap
+        const duplicate = allTheses.find((t) => titleOverlap(t.title, proposal.title) > 0.6);
+        if (duplicate) {
+          // Boost existing thesis confidence instead
+          const newConf = Math.min(100, duplicate.confidence + 5);
+          await deps.thesisStore.upsert({ ...duplicate, confidence: newConf });
+          thesesUpdated++;
+          continue;
+        }
+
+        const evidence: ThesisEvidenceDraft[] = proposal.supporting_signal_ids.map((id) => ({
+          signal_id: id,
+          relation: 'supporting' as const,
+          weight: 1,
+          snippet: '',
+          observed_at: new Date().toISOString()
+        }));
+
         const key = `agent:${proposal.title.toLowerCase().replace(/\s+/g, '_').slice(0, 40)}`;
         await deps.thesisStore.upsert({
           canonicalKey: key,
@@ -303,7 +334,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           avgTiming: 50,
           avgBuildability: 50,
           latestObservedAt: new Date().toISOString(),
-          evidence: []
+          evidence,
+          estimatedScope: proposal.estimated_scope ?? null
         });
         newCandidates++;
       }
