@@ -1,5 +1,6 @@
 import { dualAnalystRun } from '@idea/ai-runtime/src/dual_analyst';
 import type { RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
+import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { JournalEntry, JournalStore } from '../runtime/journal_store';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { ThesisStore } from '../runtime/thesis_store';
@@ -32,6 +33,7 @@ export type AgentRunnerDeps = {
   embedText?: (text: string) => Promise<number[] | null>;
   runClaude: (input: RunPromptInput) => Promise<RunPromptResult>;
   runCodex: (input: RunPromptInput) => Promise<RunPromptResult>;
+  logger?: ExecutionLogger;
 };
 
 const MAX_DEEP_DIVES = 2;
@@ -57,7 +59,13 @@ const VALID_ENTRY_TYPES = new Set(['trend_shift', 'emerging_pattern', 'thesis_ev
 const sanitizeEntryType = (raw: string): JournalEntry['entry_type'] =>
   VALID_ENTRY_TYPES.has(raw) ? (raw as JournalEntry['entry_type']) : 'market_signal';
 
+const noopLog = async () => {};
+const noopLogger: Pick<ExecutionLogger, 'info' | 'warn' | 'debug' | 'error'> = {
+  info: noopLog, warn: noopLog, debug: noopLog, error: noopLog
+};
+
 export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunResult> => {
+  const log = deps.logger ?? noopLogger;
   const runId = `agent-${Date.now()}`;
   let thesesUpdated = 0;
   let newCandidates = 0;
@@ -103,6 +111,14 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   }
 
   const clusters = clusterSignals(clusterableSignals);
+
+  await log.info('agent_runner', 'clustering complete', {
+    signal_count: recentSignals.length,
+    clusterable: clusterableSignals.length,
+    cluster_count: clusters.length,
+    thesis_count: allTheses.length,
+    top_clusters: clusters.slice(0, 5).map((c) => c.label)
+  });
 
   // Load trend windows
   const trendSummary = deps.memoryStore
@@ -152,6 +168,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     trendSummary
   };
 
+  await log.info('agent_runner', 'broad scan started', { cluster_count: clusters.length });
+
   const broadPrompt = buildBroadScanPrompt(broadCtx);
   const broadResult = await dualAnalystRun<BroadScanOutput>(
     { prompt: broadPrompt, timeoutMs: AGENT_TIMEOUT_MS },
@@ -162,11 +180,20 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         const parsed = parseBroadScanResponse(text);
         if (!parsed) throw new Error('Failed to parse broad scan response');
         return parsed;
-      }
+      },
+      logger: deps.logger
     }
   );
 
   const broadOutput = broadResult.claude ?? broadResult.codex;
+
+  await log.info('agent_runner', 'broad scan complete', {
+    has_output: !!broadOutput,
+    provider: broadResult.claude ? 'claude' : broadResult.codex ? 'codex' : 'none',
+    updates: broadOutput?.thesis_updates?.length ?? 0,
+    observations: broadOutput?.observations?.length ?? 0,
+    dig_deeper: broadOutput?.dig_deeper?.length ?? 0
+  });
 
   // Apply broad scan thesis updates
   if (broadOutput) {
@@ -178,6 +205,13 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         const newStatus = newConfidence >= 80 ? 'promoted' : newConfidence >= 55 ? 'watching' : existing.status;
         await deps.thesisStore.upsert({ ...existing, confidence: newConfidence, status: newStatus });
         thesesUpdated++;
+        await log.info('agent_runner', 'thesis updated', {
+          key: update.canonicalKey,
+          old_confidence: existing.confidence,
+          new_confidence: newConfidence,
+          delta,
+          status: newStatus
+        });
         if (newConfidence >= 80 && existing.confidence < 80) {
           allAlerts.push(update.canonicalKey);
         }
@@ -206,6 +240,12 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
 
   for (const dig of digTopics) {
     investigateNext = dig.topic;
+
+    await log.info('agent_runner', 'deep dive started', {
+      topic: dig.topic,
+      reason: dig.reason,
+      related_clusters: dig.related_cluster_ids?.length ?? 0
+    });
 
     // Gather current cluster signals for this topic
     const relatedClusters = clusters.filter((c) =>
@@ -282,11 +322,20 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           const parsed = parseDeepDiveResponse(text);
           if (!parsed) throw new Error('Failed to parse deep dive response');
           return parsed;
-        }
+        },
+        logger: deps.logger
       }
     );
 
     const diveOutput = diveResult.claude ?? diveResult.codex;
+
+    await log.info('agent_runner', 'deep dive complete', {
+      topic: dig.topic,
+      has_output: !!diveOutput,
+      new_theses: diveOutput?.new_theses?.length ?? 0,
+      updates: diveOutput?.thesis_updates?.length ?? 0
+    });
+
     if (diveOutput) {
       // Apply deep dive thesis updates
       for (const update of diveOutput.thesis_updates) {
@@ -312,6 +361,10 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           const newConf = Math.min(100, duplicate.confidence + 5);
           await deps.thesisStore.upsert({ ...duplicate, confidence: newConf });
           thesesUpdated++;
+          await log.info('agent_runner', 'dedup skipped', {
+            duplicate_title: proposal.title,
+            existing_key: duplicate.canonicalKey
+          });
           continue;
         }
 
@@ -343,6 +396,12 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           estimatedScope: proposal.estimated_scope ?? null
         });
         newCandidates++;
+        await log.info('agent_runner', 'thesis created', {
+          title: proposal.title,
+          key,
+          confidence: 45,
+          scope: proposal.estimated_scope ?? null
+        });
       }
 
       // Collect deep dive journal entries

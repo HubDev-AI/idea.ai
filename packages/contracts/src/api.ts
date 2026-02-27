@@ -104,6 +104,16 @@ export type ThesisListItem = {
   estimatedScope: 'small' | 'medium' | 'large' | null;
 };
 
+export type ThesisPage = {
+  items: ThesisListItem[];
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+};
+
 export type AgentStatusRecord = {
   lastRun: {
     timestamp: string;
