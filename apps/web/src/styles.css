@@ -889,6 +889,18 @@ a.signal-idea-link:hover {
   color: var(--muted);
 }
 
+.signal-breakdown {
+  display: inline-flex;
+  gap: 0.4rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+
+.breakdown-item {
+  letter-spacing: -0.02em;
+}
+
 .signal-empty {
   color: var(--muted);
   font-size: 0.82rem;
