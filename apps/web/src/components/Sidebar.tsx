@@ -83,23 +83,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.postgres ?? 'idle')}`} />
           <span className="sidebar-row-name">Postgres</span>
-          <span className={`sidebar-row-detail ${infraStatus?.postgres === 'ok' ? 'detail-ok' : 'detail-standby'}`}>
-            {infraStatus?.postgres ?? 'unknown'}
-          </span>
         </div>
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.ollama ?? 'idle')}`} />
           <span className="sidebar-row-name">Ollama</span>
-          <span className={`sidebar-row-detail ${infraStatus?.ollama === 'ok' ? 'detail-ok' : 'detail-standby'}`}>
-            {infraStatus?.ollama ?? 'unknown'}
-          </span>
         </div>
         <div className="sidebar-row">
           <span className={`status-dot ${infraStatus && infraStatus.embeddings.withEmbedding > 0 ? 'dot-ok' : 'dot-warn'}`} />
           <span className="sidebar-row-name">Embeddings</span>
-          <span className="sidebar-row-detail">
-            {infraStatus ? `${infraStatus.embeddings.withEmbedding}/${infraStatus.embeddings.total}` : '--'}
-          </span>
+          {infraStatus && (
+            <span className="sidebar-row-detail detail-count">
+              {infraStatus.embeddings.withEmbedding}/{infraStatus.embeddings.total}
+            </span>
+          )}
         </div>
       </nav>
 
