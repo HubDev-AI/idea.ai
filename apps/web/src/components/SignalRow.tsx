@@ -45,11 +45,11 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
         <div className="signal-footer-left">
           <span className="next-action">{signal.next_action}</span>
           {showBreakdown && (
-            <span className="signal-breakdown">
-              {signal.pain != null && <span className="breakdown-item">Pain {signal.pain}</span>}
-              {signal.timing != null && <span className="breakdown-item">Timing {signal.timing}</span>}
-              {signal.buildability != null && <span className="breakdown-item">Build {signal.buildability}</span>}
-            </span>
+            <>
+              {signal.pain != null && <span className="breakdown-chip">Pain <strong>{signal.pain}</strong></span>}
+              {signal.timing != null && <span className="breakdown-chip">Timing <strong>{signal.timing}</strong></span>}
+              {signal.buildability != null && <span className="breakdown-chip">Build <strong>{signal.buildability}</strong></span>}
+            </>
           )}
           <span className="signal-time">{relativeTime(signal.updated_at)}</span>
         </div>
