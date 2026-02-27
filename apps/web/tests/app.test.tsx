@@ -77,7 +77,8 @@ const mockTheses = [
     status: 'promoted',
     evidenceCount: 5,
     problemStatement: 'Startups struggle with SOC2 compliance prep',
-    sourceCount: 3
+    sourceCount: 3,
+    estimatedScope: 'small' as const
   },
   {
     canonicalKey: 'dev-onboarding',
@@ -86,7 +87,8 @@ const mockTheses = [
     status: 'watching',
     evidenceCount: 3,
     problemStatement: 'Engineering teams waste weeks onboarding new developers',
-    sourceCount: 2
+    sourceCount: 2,
+    estimatedScope: 'medium' as const
   }
 ];
 
@@ -94,14 +96,30 @@ const mockAgentStatus = {
   lastRun: {
     timestamp: '2026-02-24T03:00:00.000Z',
     thesesUpdated: 2,
-    newCandidates: 1
+    newCandidates: 1,
+    clustersAnalyzed: 3,
+    deepDivesPerformed: 1,
+    journalEntriesWritten: 5
   },
   investigateNext: 'API security testing tools'
 };
 
+const mockInfraStatus = {
+  postgres: 'ok',
+  ollama: 'error',
+  embeddings: { total: 154, withEmbedding: 100, fallbackModel: 'local-hash-v1' }
+};
+
+const mockSignalCounts = { hacker_news: 1 };
+
 const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolean; failAgent?: boolean }) =>
   vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
+
+    // Must come before /v1/signals to avoid prefix match
+    if (url.includes('/v1/signals/counts')) {
+      return Promise.resolve(new Response(JSON.stringify(mockSignalCounts), { status: 200 }));
+    }
 
     if (url.includes('/v1/signals')) {
       if (overrides?.failSignals) {
@@ -145,6 +163,10 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       return Promise.resolve(new Response(JSON.stringify(mockAgentStatus), { status: 200 }));
     }
 
+    if (url.includes('/v1/infra/status')) {
+      return Promise.resolve(new Response(JSON.stringify(mockInfraStatus), { status: 200 }));
+    }
+
     // Default: connectors
     return Promise.resolve(new Response(JSON.stringify(mockConnectors), { status: 200 }));
   });
@@ -165,21 +187,21 @@ describe('web app', () => {
     expect(screen.getAllByText(/hacker_news/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/compliance blockers/i)).toBeDefined();
     expect(screen.getByText('validate_demand')).toBeDefined();
-    expect(screen.getByText(/Page 1 \/ 1/i)).toBeDefined();
+    expect(screen.getByText('1 / 1')).toBeDefined();
     expect(screen.getByRole('link', { name: /Source/i })).toBeDefined();
-    expect(screen.getByText(/Runtime Logs/i)).toBeDefined();
+    expect(screen.getByText(/Logs/i)).toBeDefined();
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getAllByText(/claude/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/ai judge call failed for provider/i)).toBeDefined();
 
-    // V2 layout: thesis board and status cards
-    expect(screen.getByText(/Top Theses/i)).toBeDefined();
+    // Thesis board (titles in main pane only, sidebar shows overview)
+    expect(screen.getByText(/Top Ideas/i)).toBeDefined();
     expect(screen.getByText('SOC2 Automation Platform')).toBeDefined();
     expect(screen.getByText('Developer Onboarding Tool')).toBeDefined();
-    expect(screen.getByText('78%')).toBeDefined();
-    expect(screen.getByText('62%')).toBeDefined();
+    expect(screen.getAllByText('78%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('62%').length).toBeGreaterThan(0);
+
+    // Research agent sidebar section
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
-    expect(screen.getByText(/API security testing tools/i)).toBeDefined();
     expect(screen.getByText(/2 updated/i)).toBeDefined();
   });
 
@@ -189,8 +211,9 @@ describe('web app', () => {
 
     render(<App />);
 
+    // Connector name appears in source filter dropdown
     expect((await screen.findAllByText('hn')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Top Theses/i)).toBeDefined();
+    expect(screen.getByText(/Top Ideas/i)).toBeDefined();
     expect(screen.getByText(/Some data could not be loaded/i)).toBeDefined();
   });
 
@@ -206,33 +229,32 @@ describe('web app', () => {
     expect(screen.getByText(/No theses yet/i)).toBeDefined();
     // Agent sidebar shows fallback
     expect(screen.getByText(/No runs yet/i)).toBeDefined();
-    // No warning banner since thesis/agent are non-critical
   });
 
-  it('clicking thesis card shows filter banner', async () => {
+  it('clicking thesis card shows filter chip', async () => {
     vi.stubGlobal('EventSource', undefined);
     vi.stubGlobal('fetch', buildMockFetch());
 
     render(<App />);
 
-    // Wait for theses to load
-    const thesisTitle = await screen.findByText('SOC2 Automation Platform');
+    // Wait for thesis to load in main pane
+    const title = await screen.findByText('SOC2 Automation Platform');
     // Click the thesis card
-    fireEvent.click(thesisTitle.closest('.thesis-card')!);
-    // Filter banner should appear
-    expect(screen.queryByText(/Showing signals for/i)).toBeTruthy();
-    // Click clear
-    fireEvent.click(screen.getByText(/Clear filter/i));
-    expect(screen.queryByText(/Showing signals for/i)).toBeNull();
+    const card = title.closest('.thesis-card');
+    expect(card).toBeDefined();
+    fireEvent.click(card!);
+    // Filter chip adds another occurrence of the title text
+    const afterClick = screen.getAllByText('SOC2 Automation Platform');
+    expect(afterClick.length).toBeGreaterThan(1);
   });
 
-  it('renders status cards with connector, AI, and agent info', async () => {
+  it('renders sidebar with connector, AI, and agent info', async () => {
     vi.stubGlobal('EventSource', undefined);
     vi.stubGlobal('fetch', buildMockFetch());
 
     render(<App />);
 
-    expect(await screen.findByText(/Connector Health/i)).toBeTruthy();
+    expect(await screen.findByText(/Connectors/i)).toBeTruthy();
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
   });

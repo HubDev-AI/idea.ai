@@ -1,6 +1,12 @@
 import pg from 'pg';
+import type { AgentStatusRecord } from '@idea/contracts/src/api';
+import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
+import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
+import { embedText } from '@idea/ai-runtime/src/ollama';
+import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { loadEnvFile } from './config/dotenv';
 import { createLiveReadModel } from './runtime/live_read_model';
+import { createPostgresJournalStore } from './runtime/journal_store';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
 import { createPostgresThesisStore } from './runtime/postgres_thesis_store';
 import { InMemoryThesisStore } from './runtime/thesis_store';
@@ -26,6 +32,44 @@ const memoryStore = databaseUrl
   ? createPostgresMemoryStore({ databaseUrl })
   : null;
 
+const journalStore = databaseUrl
+  ? createPostgresJournalStore({ databaseUrl })
+  : null;
+
+let agentStatus: AgentStatusRecord = { lastRun: null, investigateNext: null };
+let agentRunInFlight: Promise<AgentRunResult> | null = null;
+
+const executeAgentRun = async (): Promise<AgentRunResult> => {
+  if (agentRunInFlight) return agentRunInFlight;
+
+  agentRunInFlight = runResearchAgent({
+    thesisStore,
+    memoryStore,
+    journalStore,
+    embedText: (text: string) => embedText(text, { fallbackToNull: true }),
+    runClaude: runClaudePrompt,
+    runCodex: runCodexPrompt
+  }).finally(() => {
+    agentRunInFlight = null;
+  });
+
+  const result = await agentRunInFlight;
+  agentStatus = {
+    lastRun: {
+      timestamp: new Date().toISOString(),
+      thesesUpdated: result.thesesUpdated,
+      newCandidates: result.newCandidates,
+      clustersAnalyzed: result.clustersAnalyzed,
+      deepDivesPerformed: result.deepDivesPerformed,
+      journalEntriesWritten: result.journalEntriesWritten
+    },
+    investigateNext: result.investigateNext || null
+  };
+  return result;
+};
+
+const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
+
 const serverDeps: Parameters<typeof buildServer>[0] = {
   listSignals: readModel.listSignals,
   listConnectors: readModel.listConnectors,
@@ -33,12 +77,32 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getAiHealth: readModel.getAiHealth,
   thesisStore,
   memoryStore,
-  corsOrigins
+  getAgentStatus: () => agentStatus,
+  triggerAgentRun: executeAgentRun,
+  corsOrigins,
+  infraStatusDeps: {
+    checkPostgres: async () => {
+      if (!memoryStore) return false;
+      await memoryStore.ping();
+      return true;
+    },
+    checkOllama: async () => {
+      const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+      return res.ok;
+    },
+    getEmbeddingStats: async () => {
+      if (!memoryStore) return { total: 0, withEmbedding: 0, fallbackModel: 'none' };
+      return memoryStore.getEmbeddingStats();
+    }
+  }
 };
 if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
+let agentTimer: ReturnType<typeof setInterval> | undefined;
+
 const shutdown = async () => {
+  clearInterval(agentTimer);
   await readModel.close();
   if (memoryStore) {
     await memoryStore.close();
@@ -62,6 +126,12 @@ app
   .listen({ host, port })
   .then((address) => {
     console.log(`API ready on ${address}`);
+    const AGENT_INTERVAL_MS = 30 * 60 * 1000;
+    agentTimer = setInterval(() => {
+      void executeAgentRun().catch((err) => {
+        console.error('research agent cron failed:', err);
+      });
+    }, AGENT_INTERVAL_MS);
   })
   .catch((error) => {
     console.error(error);

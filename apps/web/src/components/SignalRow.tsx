@@ -40,7 +40,13 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
   return (
     <li className="signal-row">
       <div className="signal-top">
-        <h3 className="signal-idea">{signal.idea.split('|')[0].trim()}</h3>
+        {signal.source_url ? (
+          <a className="signal-idea signal-idea-link" href={signal.source_url} target="_blank" rel="noreferrer">
+            {signal.idea.split('|')[0].trim()}
+          </a>
+        ) : (
+          <h3 className="signal-idea">{signal.idea.split('|')[0].trim()}</h3>
+        )}
         <span className="score">{signal.score}</span>
       </div>
       <p className="meta">

@@ -6,15 +6,18 @@ import {
   buildApiUrl,
   type ConnectorRecord,
   type ExecutionLogRecord,
+  type InfraStatusRecord,
   fetchAgentStatus,
   fetchAiHealth,
   fetchConnectors,
+  fetchInfraStatus,
   fetchLogs,
   fetchSignalCounts,
   fetchSignals,
   fetchTheses,
   type SignalRecord,
-  type ThesisListItem
+  type ThesisListItem,
+  triggerAgentRun
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
@@ -60,6 +63,9 @@ const App = () => {
   const [aiHealth, setAiHealth] = useState<AiHealthRecord | null>(null);
   const [theses, setTheses] = useState<ThesisListItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentRunResult, setAgentRunResult] = useState<string | null>(null);
+  const [infraStatus, setInfraStatus] = useState<InfraStatusRecord | null>(null);
   const [signalCounts, setSignalCounts] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsRealtime, setLogsRealtime] = useState(false);
@@ -72,6 +78,7 @@ const App = () => {
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [splitPct, setSplitPct] = useState(50);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pageInfo, setPageInfo] = useState({
     page: 1,
     pageSize: PAGE_SIZE,
@@ -115,7 +122,7 @@ const App = () => {
       if (showLoading) {
         setIsLoading(true);
       }
-      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult] = await Promise.allSettled([
+      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult, infraResult] = await Promise.allSettled([
         fetchSignals({
           page: requestedPage,
           pageSize: PAGE_SIZE,
@@ -126,7 +133,8 @@ const App = () => {
         fetchAiHealth(),
         fetchTheses(),
         fetchAgentStatus(),
-        fetchSignalCounts()
+        fetchSignalCounts(),
+        fetchInfraStatus()
       ]);
       const warnings: string[] = [];
 
@@ -169,6 +177,10 @@ const App = () => {
 
       if (countsResult.status === 'fulfilled') {
         setSignalCounts(countsResult.value);
+      }
+
+      if (infraResult.status === 'fulfilled') {
+        setInfraStatus(infraResult.value);
       }
 
       if (warnings.length > 0) {
@@ -307,19 +319,66 @@ const App = () => {
     setRequestedPage(1);
   };
 
+  const handleRunAgent = async () => {
+    setAgentRunning(true);
+    setAgentRunResult(null);
+    setLogDrawerOpen(true);
+    try {
+      const result = await triggerAgentRun();
+      // Refresh all data since the agent creates/updates theses
+      const [statusRes, thesesRes, signalsRes, countsRes] = await Promise.allSettled([
+        fetchAgentStatus(),
+        fetchTheses(),
+        fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
+        fetchSignalCounts()
+      ]);
+      if (statusRes.status === 'fulfilled') setAgentStatus(statusRes.value);
+      if (thesesRes.status === 'fulfilled') setTheses(thesesRes.value);
+      if (signalsRes.status === 'fulfilled') {
+        setSignals(signalsRes.value.items);
+        setPageInfo({
+          page: signalsRes.value.page,
+          pageSize: signalsRes.value.page_size,
+          totalItems: signalsRes.value.total_items,
+          totalPages: signalsRes.value.total_pages,
+          hasNext: signalsRes.value.has_next,
+          hasPrev: signalsRes.value.has_prev
+        });
+      }
+      if (countsRes.status === 'fulfilled') setSignalCounts(countsRes.value);
+      setAgentRunResult(`${result.thesesUpdated} updated, ${result.newCandidates} new`);
+    } catch {
+      setAgentRunResult('failed');
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       <Sidebar
         connectors={connectors}
         aiHealth={aiHealth}
         agentStatus={agentStatus}
+        infraStatus={infraStatus}
         theses={theses}
         thesisFilter={thesisFilter}
         onThesisFilter={handleThesisFilter}
         signalCount={pageInfo.totalItems}
         latestSignalAt={latestSignalAt}
         signalCounts={signalCounts}
+        onRunAgent={handleRunAgent}
+        agentRunning={agentRunning}
+        agentRunResult={agentRunResult}
       />
+      <button
+        type="button"
+        className="sidebar-toggle"
+        onClick={() => setSidebarOpen((v) => !v)}
+        title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+      >
+        {sidebarOpen ? '\u25C0' : '\u25B6'}
+      </button>
 
       <main className="main-content">
         {loadWarning ? <p role="alert">{loadWarning}</p> : null}

@@ -86,7 +86,8 @@ describe('PostgresMemoryStore', () => {
       pain: 70,
       timing: 80,
       buildability: 60,
-      blended: 72
+      blended: 72,
+      source_url: null
     });
     // Verify query used the limit parameter
     expect(mockQuery.mock.calls[0]![1]).toEqual([10]);

@@ -1,21 +1,25 @@
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React from 'react';
-import type { AgentStatusRecord, AiHealthRecord, ConnectorRecord, ThesisListItem } from '../api';
+import type { AgentStatusRecord, AiHealthRecord, ConnectorRecord, InfraStatusRecord, ThesisListItem } from '../api';
 
 type SidebarProps = {
   connectors: ConnectorRecord[];
   aiHealth: AiHealthRecord | null;
   agentStatus: AgentStatusRecord | null;
+  infraStatus: InfraStatusRecord | null;
   theses: ThesisListItem[];
   thesisFilter: string | null;
   onThesisFilter: (key: string | null, title: string) => void;
   signalCount: number;
   latestSignalAt: string | null;
   signalCounts: Record<string, number>;
+  onRunAgent?: () => void;
+  agentRunning?: boolean;
+  agentRunResult?: string | null;
 };
 
 const dotClass = (status: string, enabled?: boolean): string => {
-  if (status === 'active' || status === 'healthy') return 'dot-ok';
+  if (status === 'active' || status === 'healthy' || status === 'ok') return 'dot-ok';
   if (status === 'degraded') return 'dot-warn';
   if (status === 'error') return 'dot-err';
   if (status === 'idle' && enabled) return 'dot-standby';
@@ -43,8 +47,9 @@ const providerDisplayName: Record<string, string> = {
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({
-  connectors, aiHealth, agentStatus, theses,
+  connectors, aiHealth, agentStatus, infraStatus, theses,
   thesisFilter, onThesisFilter, signalCount, latestSignalAt, signalCounts,
+  onRunAgent, agentRunning, agentRunResult,
 }) => {
   const activeConnectors = connectors.filter((c) => c.status === 'active').length;
   const enabledProviders = aiHealth?.providers?.filter((p) => p.enabled) ?? [];
@@ -72,6 +77,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="sidebar-stat-label">last update</span>
         </div>
       </div>
+
+      <nav className="sidebar-section">
+        <h3 className="sidebar-label">Infrastructure</h3>
+        <div className="sidebar-row">
+          <span className={`status-dot ${dotClass(infraStatus?.postgres ?? 'idle')}`} />
+          <span className="sidebar-row-name">Postgres</span>
+          <span className={`sidebar-row-detail ${infraStatus?.postgres === 'ok' ? 'detail-ok' : 'detail-standby'}`}>
+            {infraStatus?.postgres ?? 'unknown'}
+          </span>
+        </div>
+        <div className="sidebar-row">
+          <span className={`status-dot ${dotClass(infraStatus?.ollama ?? 'idle')}`} />
+          <span className="sidebar-row-name">Ollama</span>
+          <span className={`sidebar-row-detail ${infraStatus?.ollama === 'ok' ? 'detail-ok' : 'detail-standby'}`}>
+            {infraStatus?.ollama ?? 'unknown'}
+          </span>
+        </div>
+        <div className="sidebar-row">
+          <span className={`status-dot ${infraStatus && infraStatus.embeddings.withEmbedding > 0 ? 'dot-ok' : 'dot-warn'}`} />
+          <span className="sidebar-row-name">Embeddings</span>
+          <span className="sidebar-row-detail">
+            {infraStatus ? `${infraStatus.embeddings.withEmbedding}/${infraStatus.embeddings.total}` : '--'}
+          </span>
+        </div>
+      </nav>
 
       <nav className="sidebar-section">
         <h3 className="sidebar-label">Connectors</h3>
@@ -110,39 +140,57 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <nav className="sidebar-section">
-        <h3 className="sidebar-label">Research Agent</h3>
+        <div className="sidebar-label-row">
+          <h3 className="sidebar-label">Research Agent</h3>
+          {onRunAgent && (
+            <button
+              type="button"
+              className={`sidebar-run-btn ${agentRunning ? 'running' : ''}`}
+              onClick={onRunAgent}
+              disabled={agentRunning}
+            >
+              {agentRunning ? 'Running\u2026' : 'Run'}
+            </button>
+          )}
+        </div>
+        {agentRunning && (
+          <p className="sidebar-agent-status running">Analyzing signals and updating theses\u2026</p>
+        )}
+        {!agentRunning && agentRunResult && (
+          <p className={`sidebar-agent-status ${agentRunResult === 'failed' ? 'error' : 'success'}`}>
+            {agentRunResult === 'failed' ? 'Run failed' : agentRunResult}
+          </p>
+        )}
         {agentStatus?.lastRun ? (
           <div className="sidebar-agent-info">
             <span>{new Date(agentStatus.lastRun.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             <span className="sidebar-row-detail">{agentStatus.lastRun.thesesUpdated} updated</span>
+            <span className="sidebar-row-detail">{agentStatus.lastRun.newCandidates} new</span>
           </div>
         ) : (
-          <p className="sidebar-empty">No runs yet</p>
+          !agentRunning && <p className="sidebar-empty">No runs yet</p>
+        )}
+        {agentStatus?.lastRun && (
+          <div className="sidebar-agent-details">
+            <span>{agentStatus.lastRun.clustersAnalyzed} clusters</span>
+            <span>{agentStatus.lastRun.deepDivesPerformed} deep dives</span>
+            <span>{agentStatus.lastRun.journalEntriesWritten} journal</span>
+          </div>
         )}
       </nav>
 
       {theses.length > 0 && (
         <nav className="sidebar-section">
-          <h3 className="sidebar-label">Theses</h3>
-          {theses.slice(0, 5).map((t) => (
-            <button
-              key={t.canonicalKey}
-              type="button"
-              className={`sidebar-thesis ${thesisFilter === t.canonicalKey ? 'active' : ''}`}
-              onClick={() => {
-                if (thesisFilter === t.canonicalKey) {
-                  onThesisFilter(null, '');
-                } else {
-                  onThesisFilter(t.canonicalKey, t.title);
-                }
-              }}
-            >
-              <span className="sidebar-thesis-title">{t.title}</span>
-              <span className={`sidebar-thesis-conf ${t.status === 'promoted' ? 'promoted' : ''}`}>
-                {t.confidence}%
-              </span>
-            </button>
-          ))}
+          <h3 className="sidebar-label">Theses Overview</h3>
+          <div className="sidebar-thesis-stats">
+            <span>{theses.length} total</span>
+            <span>{theses.filter((t) => t.status === 'promoted').length} promoted</span>
+            <span>{theses.filter((t) => t.status === 'watching').length} watching</span>
+          </div>
+          <div className="sidebar-thesis-stats">
+            <span>{theses.reduce((sum, t) => sum + t.evidenceCount, 0)} evidence</span>
+            <span>{theses.reduce((sum, t) => sum + t.sourceCount, 0)} sources</span>
+          </div>
         </nav>
       )}
     </aside>
