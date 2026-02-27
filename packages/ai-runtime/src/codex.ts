@@ -1,6 +1,18 @@
 import type { CommandRunner, CommandSpec, RunPromptInput, RunPromptResult } from './types';
 import { spawnCommand } from './types';
 
+type CodexEvent = {
+  type?: string;
+  item?: {
+    type?: string;
+    text?: string;
+  };
+  text?: string;
+  output_text?: string;
+  output?: string;
+  content?: string;
+};
+
 const parseCodexText = (jsonl: string): string => {
   const lines = jsonl
     .split('\n')
@@ -11,32 +23,35 @@ const parseCodexText = (jsonl: string): string => {
     return '';
   }
 
-  let fallbackText = '';
+  let lastAgentMessage = '';
   let parsedAnyJson = false;
 
   for (const line of lines) {
     try {
-      const parsed = JSON.parse(line) as {
-        type?: string;
-        text?: string;
-        output_text?: string;
-        output?: string;
-        content?: string;
-      };
+      const parsed = JSON.parse(line) as CodexEvent;
       parsedAnyJson = true;
 
+      // codex-cli 0.1xx+ format: {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+      if (
+        parsed.type === 'item.completed' &&
+        parsed.item?.type === 'agent_message' &&
+        typeof parsed.item.text === 'string'
+      ) {
+        lastAgentMessage = parsed.item.text;
+        continue;
+      }
+
+      // Legacy / future formats
       if (parsed.type === 'final' && typeof parsed.text === 'string') {
         return parsed.text;
       }
 
       if (typeof parsed.output_text === 'string') {
-        fallbackText = parsed.output_text;
+        lastAgentMessage = parsed.output_text;
       } else if (typeof parsed.output === 'string') {
-        fallbackText = parsed.output;
+        lastAgentMessage = parsed.output;
       } else if (typeof parsed.content === 'string') {
-        fallbackText = parsed.content;
-      } else if (typeof parsed.text === 'string') {
-        fallbackText = parsed.text;
+        lastAgentMessage = parsed.content;
       }
     } catch {
       // Ignore malformed lines.
@@ -47,7 +62,7 @@ const parseCodexText = (jsonl: string): string => {
     return jsonl.trim();
   }
 
-  return fallbackText;
+  return lastAgentMessage;
 };
 
 export const runCodexPrompt = async (
