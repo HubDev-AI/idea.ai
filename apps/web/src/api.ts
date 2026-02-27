@@ -119,6 +119,9 @@ export type AgentRunResult = {
   newCandidates: number;
   alerts: string[];
   investigateNext: string;
+  journalEntriesWritten: number;
+  clustersAnalyzed: number;
+  deepDivesPerformed: number;
 };
 
 export const triggerAgentRun = async (): Promise<AgentRunResult> => {
