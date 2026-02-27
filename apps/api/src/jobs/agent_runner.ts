@@ -364,15 +364,9 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   };
 };
 
-// Helper: load embeddings for a batch of signal IDs
-// This queries signal_embeddings directly. We add this as a method
-// on the memory store in a later step, but for now use a raw query workaround.
 async function loadEmbeddings(
   memoryStore: PostgresMemoryStore,
-  _signalIds: string[]
+  signalIds: string[]
 ): Promise<Map<string, number[]>> {
-  // The proper implementation will query signal_embeddings directly
-  // For now, return empty — we'll wire this properly in Task 7
-  void memoryStore;
-  return new Map<string, number[]>();
+  return memoryStore.getEmbeddings(signalIds);
 }

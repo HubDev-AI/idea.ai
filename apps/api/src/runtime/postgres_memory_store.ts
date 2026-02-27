@@ -232,6 +232,7 @@ export type PostgresMemoryStore = {
   listAllSignals: (limit?: number) => Promise<MemorySignalRow[]>;
   querySignals: (params: SignalQueryParams) => Promise<SignalQueryResult>;
   countSignalsBySource: () => Promise<Record<string, number>>;
+  getEmbeddings: (signalIds: string[]) => Promise<Map<string, number[]>>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -419,12 +420,35 @@ export const createPostgresMemoryStore = ({
     return counts;
   };
 
+  const getEmbeddings = async (signalIds: string[]): Promise<Map<string, number[]>> => {
+    if (signalIds.length === 0) return new Map();
+    const placeholders = signalIds.map((_, i) => `$${i + 1}`).join(',');
+    const result = await pool.query<{ signal_id: string; embedding: string }>(
+      `SELECT signal_id, embedding::text FROM signal_embeddings WHERE signal_id IN (${placeholders})`,
+      signalIds
+    );
+    const map = new Map<string, number[]>();
+    for (const row of result.rows) {
+      // pgvector returns embedding as "[0.1,0.2,...]" string
+      const nums = row.embedding
+        .replace(/^\[/, '').replace(/\]$/, '')
+        .split(',')
+        .map(Number)
+        .filter(Number.isFinite);
+      if (nums.length > 0) {
+        map.set(row.signal_id, nums);
+      }
+    }
+    return map;
+  };
+
   return {
     retriever,
     save,
     listAllSignals,
     querySignals,
     countSignalsBySource,
+    getEmbeddings,
     ping,
     close: async () => {
       await pool.end();
