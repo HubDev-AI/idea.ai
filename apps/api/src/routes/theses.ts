@@ -26,7 +26,7 @@ export const registerThesesRoute = (
       return (deps.store as PaginatedThesisStore).listPaginated({
         page,
         pageSize,
-        status: query.status
+        ...(query.status ? { status: query.status } : {})
       });
     }
 
