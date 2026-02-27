@@ -153,7 +153,15 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       if (overrides?.failTheses) {
         return Promise.resolve(new Response('not found', { status: 404 }));
       }
-      return Promise.resolve(new Response(JSON.stringify(mockTheses), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({
+        items: mockTheses,
+        page: 1,
+        page_size: 10,
+        total_items: mockTheses.length,
+        total_pages: 1,
+        has_next: false,
+        has_prev: false
+      }), { status: 200 }));
     }
 
     if (url.includes('/v1/agent/status')) {

@@ -7,7 +7,8 @@ import type {
   InfraStatusRecord,
   SignalPage,
   FeedRecord as SignalRecord,
-  ThesisListItem
+  ThesisListItem,
+  ThesisPage
 } from '@idea/contracts/src/api';
 
 export type {
@@ -18,6 +19,7 @@ export type {
   AiProviderHealthRecord,
   AiHealthRecord,
   ThesisListItem,
+  ThesisPage,
   AgentStatusRecord,
   InfraStatusRecord
 };
@@ -104,10 +106,22 @@ export const fetchAiHealth = async (): Promise<AiHealthRecord> => {
   return response.json() as Promise<AiHealthRecord>;
 };
 
-export const fetchTheses = async (): Promise<ThesisListItem[]> => {
-  const response = await fetch(buildApiUrl('/v1/theses'));
+export const fetchTheses = async ({
+  page = 1,
+  pageSize = 10,
+  status
+}: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+} = {}): Promise<ThesisPage> => {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('page_size', String(pageSize));
+  if (status) params.set('status', status);
+  const response = await fetch(buildApiUrl(`/v1/theses?${params.toString()}`));
   if (!response.ok) throw new Error('Failed to load theses');
-  return response.json() as Promise<ThesisListItem[]>;
+  return response.json() as Promise<ThesisPage>;
 };
 
 export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
