@@ -4,17 +4,17 @@ import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { JournalEntry, JournalStore } from '../runtime/journal_store';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { ThesisStore } from '../runtime/thesis_store';
-import type { ThesisEvidenceDraft } from './thesis_synthesizer';
-import { type ClusterableSignal, clusterSignals } from './signal_clusterer';
 import {
   type AgentThesisSummary,
   type BroadScanOutput,
-  type DeepDiveOutput,
   buildBroadScanPrompt,
   buildDeepDivePrompt,
+  type DeepDiveOutput,
   parseBroadScanResponse,
   parseDeepDiveResponse,
 } from './research_agent';
+import { type ClusterableSignal, clusterSignals } from './signal_clusterer';
+import type { ThesisEvidenceDraft } from './thesis_synthesizer';
 
 export type AgentRunResult = {
   thesesUpdated: number;
@@ -181,7 +181,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         if (!parsed) throw new Error('Failed to parse broad scan response');
         return parsed;
       },
-      logger: deps.logger
+      ...(deps.logger ? { logger: deps.logger } : {})
     }
   );
 
@@ -323,7 +323,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           if (!parsed) throw new Error('Failed to parse deep dive response');
           return parsed;
         },
-        logger: deps.logger
+        ...(deps.logger ? { logger: deps.logger } : {})
       }
     );
 

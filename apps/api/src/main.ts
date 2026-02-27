@@ -1,17 +1,17 @@
-import pg from 'pg';
-import type { AgentStatusRecord } from '@idea/contracts/src/api';
 import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
 import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import { embedText } from '@idea/ai-runtime/src/ollama';
-import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
+import type { AgentStatusRecord } from '@idea/contracts/src/api';
+import pg from 'pg';
 import { loadEnvFile } from './config/dotenv';
-import { createLiveReadModel } from './runtime/live_read_model';
+import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
+import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
+import { createExecutionLogger } from './runtime/execution_logger';
 import { createPostgresJournalStore } from './runtime/journal_store';
+import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
 import { createPostgresThesisStore } from './runtime/postgres_thesis_store';
 import { InMemoryThesisStore } from './runtime/thesis_store';
-import { createAgentRunStore, type AgentRunStore } from './runtime/agent_run_store';
-import { createExecutionLogger } from './runtime/execution_logger';
 import { buildServer } from './server';
 
 loadEnvFile();

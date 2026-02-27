@@ -6,8 +6,6 @@ import {
   buildApiUrl,
   type ConnectorRecord,
   type ExecutionLogRecord,
-  type InfraStatusRecord,
-  type ThesisPage,
   fetchAgentStatus,
   fetchAiHealth,
   fetchConnectors,
@@ -16,6 +14,7 @@ import {
   fetchSignalCounts,
   fetchSignals,
   fetchTheses,
+  type InfraStatusRecord,
   type SignalRecord,
   type ThesisListItem,
   triggerAgentRun
@@ -180,15 +179,20 @@ const App = () => {
 
       if (thesesResult.status === 'fulfilled') {
         const tp = thesesResult.value;
-        setTheses(tp.items);
-        setThesisPageInfo({
-          page: tp.page,
-          pageSize: tp.page_size,
-          totalItems: tp.total_items,
-          totalPages: tp.total_pages,
-          hasNext: tp.has_next,
-          hasPrev: tp.has_prev
-        });
+        if (Array.isArray(tp)) {
+          // Legacy flat array response (server not yet updated)
+          setTheses(tp);
+        } else {
+          setTheses(tp.items);
+          setThesisPageInfo({
+            page: tp.page,
+            pageSize: tp.page_size,
+            totalItems: tp.total_items,
+            totalPages: tp.total_pages,
+            hasNext: tp.has_next,
+            hasPrev: tp.has_prev
+          });
+        }
       }
 
       if (agentResult.status === 'fulfilled') {
@@ -359,16 +363,21 @@ const App = () => {
       ]);
       if (statusRes.status === 'fulfilled') setAgentStatus(statusRes.value);
       if (thesesRes.status === 'fulfilled') {
-        setTheses(thesesRes.value.items);
-        setRequestedThesisPage(1);
-        setThesisPageInfo({
-          page: thesesRes.value.page,
-          pageSize: thesesRes.value.page_size,
-          totalItems: thesesRes.value.total_items,
-          totalPages: thesesRes.value.total_pages,
-          hasNext: thesesRes.value.has_next,
-          hasPrev: thesesRes.value.has_prev
-        });
+        const tp = thesesRes.value;
+        if (Array.isArray(tp)) {
+          setTheses(tp);
+        } else {
+          setTheses(tp.items);
+          setRequestedThesisPage(1);
+          setThesisPageInfo({
+            page: tp.page,
+            pageSize: tp.page_size,
+            totalItems: tp.total_items,
+            totalPages: tp.total_pages,
+            hasNext: tp.has_next,
+            hasPrev: tp.has_prev
+          });
+        }
       }
       if (signalsRes.status === 'fulfilled') {
         setSignals(signalsRes.value.items);

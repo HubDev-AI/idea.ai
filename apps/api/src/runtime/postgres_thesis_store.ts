@@ -1,5 +1,5 @@
-import type { Pool } from 'pg';
 import type { ThesisPage } from '@idea/contracts/src/api';
+import type { Pool } from 'pg';
 import type { ThesisDraft } from '../jobs/thesis_synthesizer';
 import type { ThesisStore, ThesisStoreFilter } from './thesis_store';
 
@@ -168,7 +168,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         evidenceCount: d.evidenceCount,
         problemStatement: d.problemStatement,
         sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
-        estimatedScope: d.estimatedScope
+        estimatedScope: d.estimatedScope ?? null
       })),
       page: safePage,
       page_size: pageSize,

@@ -114,14 +114,14 @@ export const fetchTheses = async ({
   page?: number;
   pageSize?: number;
   status?: string;
-} = {}): Promise<ThesisPage> => {
+} = {}): Promise<ThesisPage | ThesisListItem[]> => {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('page_size', String(pageSize));
   if (status) params.set('status', status);
   const response = await fetch(buildApiUrl(`/v1/theses?${params.toString()}`));
   if (!response.ok) throw new Error('Failed to load theses');
-  return response.json() as Promise<ThesisPage>;
+  return response.json() as Promise<ThesisPage | ThesisListItem[]>;
 };
 
 export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
