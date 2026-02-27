@@ -113,3 +113,9 @@ export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
   if (!response.ok) throw new Error('Failed to load agent status');
   return response.json() as Promise<AgentStatusRecord>;
 };
+
+export const fetchSignalCounts = async (): Promise<Record<string, number>> => {
+  const response = await fetch(buildApiUrl('/v1/signals/counts'));
+  if (!response.ok) throw new Error('Failed to load signal counts');
+  return response.json() as Promise<Record<string, number>>;
+};

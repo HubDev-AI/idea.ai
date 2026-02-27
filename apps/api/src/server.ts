@@ -108,7 +108,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   };
   if (resolvedDeps.memoryStore != null) feedDeps.memoryStore = resolvedDeps.memoryStore;
   registerFeedRoute(app, feedDeps);
-  registerConnectorRoute(app, { listConnectors: resolvedDeps.listConnectors });
+  registerConnectorRoute(app, {
+    listConnectors: resolvedDeps.listConnectors,
+    memoryStore: resolvedDeps.memoryStore ?? null
+  });
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
   registerHealthRoute(app);

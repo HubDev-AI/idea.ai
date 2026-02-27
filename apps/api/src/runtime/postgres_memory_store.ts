@@ -231,6 +231,7 @@ export type PostgresMemoryStore = {
   save: (entry: IndexedMemoryEntry) => Promise<void>;
   listAllSignals: (limit?: number) => Promise<MemorySignalRow[]>;
   querySignals: (params: SignalQueryParams) => Promise<SignalQueryResult>;
+  countSignalsBySource: () => Promise<Record<string, number>>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -407,11 +408,23 @@ export const createPostgresMemoryStore = ({
     return { items, page, pageSize, totalItems, totalPages, hasNext: page < totalPages, hasPrev: page > 1 };
   };
 
+  const countSignalsBySource = async (): Promise<Record<string, number>> => {
+    const result = await pool.query<{ source: string; count: number }>(
+      'SELECT source, COUNT(*)::int AS count FROM signal_memory GROUP BY source'
+    );
+    const counts: Record<string, number> = {};
+    for (const row of result.rows) {
+      counts[row.source] = row.count;
+    }
+    return counts;
+  };
+
   return {
     retriever,
     save,
     listAllSignals,
     querySignals,
+    countSignalsBySource,
     ping,
     close: async () => {
       await pool.end();
