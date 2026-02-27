@@ -36,6 +36,7 @@ export type ThesisDraft = {
   avgBuildability: number;
   latestObservedAt: string;
   evidence: ThesisEvidenceDraft[];
+  estimatedScope?: 'small' | 'medium' | 'large' | null;
 };
 
 const stopWords = new Set([

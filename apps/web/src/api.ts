@@ -1,9 +1,10 @@
 import type {
-  AgentStatusRecord, 
+  AgentStatusRecord,
   AiHealthRecord,
   AiProviderHealthRecord,
   ConnectorStatusRecord as ConnectorRecord,
   ExecutionLogRecord,
+  InfraStatusRecord,
   SignalPage,
   FeedRecord as SignalRecord,
   ThesisListItem
@@ -17,7 +18,8 @@ export type {
   AiProviderHealthRecord,
   AiHealthRecord,
   ThesisListItem,
-  AgentStatusRecord
+  AgentStatusRecord,
+  InfraStatusRecord
 };
 
 const resolveApiBaseUrl = (): string => {
@@ -112,4 +114,35 @@ export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
   const response = await fetch(buildApiUrl('/v1/agent/status'));
   if (!response.ok) throw new Error('Failed to load agent status');
   return response.json() as Promise<AgentStatusRecord>;
+};
+
+export type AgentRunResult = {
+  thesesUpdated: number;
+  newCandidates: number;
+  alerts: string[];
+  investigateNext: string;
+  journalEntriesWritten: number;
+  clustersAnalyzed: number;
+  deepDivesPerformed: number;
+};
+
+export const triggerAgentRun = async (): Promise<AgentRunResult> => {
+  const response = await fetch(buildApiUrl('/v1/agent/run'), {
+    method: 'POST',
+    signal: AbortSignal.timeout(300_000)
+  });
+  if (!response.ok) throw new Error('Failed to trigger agent run');
+  return response.json() as Promise<AgentRunResult>;
+};
+
+export const fetchSignalCounts = async (): Promise<Record<string, number>> => {
+  const response = await fetch(buildApiUrl('/v1/signals/counts'));
+  if (!response.ok) throw new Error('Failed to load signal counts');
+  return response.json() as Promise<Record<string, number>>;
+};
+
+export const fetchInfraStatus = async (): Promise<InfraStatusRecord> => {
+  const response = await fetch(buildApiUrl('/v1/infra/status'));
+  if (!response.ok) throw new Error('Failed to load infra status');
+  return response.json() as Promise<InfraStatusRecord>;
 };

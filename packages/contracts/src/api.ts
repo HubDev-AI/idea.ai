@@ -101,6 +101,7 @@ export type ThesisListItem = {
   evidenceCount: number;
   problemStatement: string;
   sourceCount: number;
+  estimatedScope: 'small' | 'medium' | 'large' | null;
 };
 
 export type AgentStatusRecord = {
@@ -108,6 +109,19 @@ export type AgentStatusRecord = {
     timestamp: string;
     thesesUpdated: number;
     newCandidates: number;
+    clustersAnalyzed: number;
+    deepDivesPerformed: number;
+    journalEntriesWritten: number;
   } | null;
   investigateNext: string | null;
+};
+
+export type InfraStatusRecord = {
+  postgres: 'ok' | 'error';
+  ollama: 'ok' | 'error';
+  embeddings: {
+    total: number;
+    withEmbedding: number;
+    fallbackModel: string;
+  };
 };

@@ -1,28 +1,34 @@
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AgentStatusRecord,
   type AiHealthRecord,
   buildApiUrl,
   type ConnectorRecord,
   type ExecutionLogRecord,
+  type InfraStatusRecord,
   fetchAgentStatus,
   fetchAiHealth,
   fetchConnectors,
+  fetchInfraStatus,
   fetchLogs,
+  fetchSignalCounts,
   fetchSignals,
   fetchTheses,
   type SignalRecord,
-  type ThesisListItem
+  type ThesisListItem,
+  triggerAgentRun
 } from './api';
+import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
-import { StatusCards } from './components/StatusCards';
 import { ThesisCard } from './components/ThesisCard';
 
 const PAGE_SIZE = 8;
 const LOG_POLL_INTERVAL_MS = 3_000;
 const LOG_LIMIT = 120;
 const DATA_POLL_INTERVAL_MS = 15_000;
+const MIN_PANE_PCT = 20;
+const MAX_PANE_PCT = 80;
 
 const formatLogContext = (context: Record<string, unknown> | undefined): string => {
   if (!context || Object.keys(context).length === 0) {
@@ -57,14 +63,23 @@ const App = () => {
   const [aiHealth, setAiHealth] = useState<AiHealthRecord | null>(null);
   const [theses, setTheses] = useState<ThesisListItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentRunResult, setAgentRunResult] = useState<string | null>(null);
+  const [infraStatus, setInfraStatus] = useState<InfraStatusRecord | null>(null);
+  const [signalCounts, setSignalCounts] = useState<Record<string, number>>({});
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsRealtime, setLogsRealtime] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
+  const failCountRef = useRef(0);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
   const [requestedPage, setRequestedPage] = useState(1);
+  const [logDrawerOpen, setLogDrawerOpen] = useState(false);
+  const [logAtBottom, setLogAtBottom] = useState(true);
+  const [splitPct, setSplitPct] = useState(50);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pageInfo, setPageInfo] = useState({
     page: 1,
     pageSize: PAGE_SIZE,
@@ -73,21 +88,42 @@ const App = () => {
     hasNext: false,
     hasPrev: false
   });
-  const activeConnectors = connectors.filter((connector) => connector.status === 'active').length;
   const latestSignalAt = signals[0]?.updated_at ?? null;
-  const topThesis = theses.length > 0 ? theses[0] : null;
-  const agentLastRun = agentStatus?.lastRun
-    ? new Date(agentStatus.lastRun.timestamp).toLocaleTimeString()
-    : 'pending';
   const renderedLogs = useMemo(() => logs.slice().reverse(), [logs]);
   const logListRef = useRef<HTMLUListElement | null>(null);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Resize handle drag logic
+  const onResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = splitContainerRef.current;
+    if (!container) return;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const pct = ((moveEvent.clientX - rect.left) / rect.width) * 100;
+      setSplitPct(Math.min(MAX_PANE_PCT, Math.max(MIN_PANE_PCT, pct)));
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, []);
 
   useEffect(() => {
     const load = async (showLoading = false) => {
       if (showLoading) {
         setIsLoading(true);
       }
-      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult] = await Promise.allSettled([
+      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult, infraResult] = await Promise.allSettled([
         fetchSignals({
           page: requestedPage,
           pageSize: PAGE_SIZE,
@@ -97,7 +133,9 @@ const App = () => {
         fetchConnectors(),
         fetchAiHealth(),
         fetchTheses(),
-        fetchAgentStatus()
+        fetchAgentStatus(),
+        fetchSignalCounts(),
+        fetchInfraStatus()
       ]);
       const warnings: string[] = [];
 
@@ -133,15 +171,27 @@ const App = () => {
       if (thesesResult.status === 'fulfilled') {
         setTheses(thesesResult.value);
       }
-      // Thesis/agent failures are non-critical; don't add to warnings
 
       if (agentResult.status === 'fulfilled') {
         setAgentStatus(agentResult.value);
       }
 
+      if (countsResult.status === 'fulfilled') {
+        setSignalCounts(countsResult.value);
+      }
+
+      if (infraResult.status === 'fulfilled') {
+        setInfraStatus(infraResult.value);
+      }
+
       if (warnings.length > 0) {
-        setLoadWarning(`Some data could not be loaded (${warnings.join(', ')})`);
+        failCountRef.current++;
+        // Show warning immediately on initial load, after 2+ consecutive on background polls
+        if (showLoading || failCountRef.current >= 2) {
+          setLoadWarning(`Some data could not be loaded (${warnings.join(', ')})`);
+        }
       } else {
+        failCountRef.current = 0;
         setLoadWarning(null);
       }
 
@@ -245,178 +295,261 @@ const App = () => {
     };
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: renderedLogs triggers scroll-to-bottom on new entries
+  // biome-ignore lint/correctness/useExhaustiveDependencies: renderedLogs+logDrawerOpen trigger scroll-to-bottom
   useEffect(() => {
     const list = logListRef.current;
-    if (!list) {
+    if (!list || !logAtBottom) {
       return;
     }
 
     list.scrollTop = list.scrollHeight;
-  }, [renderedLogs]);
+  }, [renderedLogs, logDrawerOpen]);
 
-  const displayTheses = theses.slice(0, 3);
+  const handleLogScroll = useCallback(() => {
+    const list = logListRef.current;
+    if (!list) return;
+    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 40;
+    setLogAtBottom(atBottom);
+  }, []);
+
+  const scrollLogsToBottom = useCallback(() => {
+    const list = logListRef.current;
+    if (!list) return;
+    list.scrollTop = list.scrollHeight;
+    setLogAtBottom(true);
+  }, []);
+
+  const handleThesisFilter = (key: string | null, title: string) => {
+    setThesisFilter(key);
+    setThesisFilterTitle(title);
+    setRequestedPage(1);
+  };
+
+  const handleRunAgent = async () => {
+    setAgentRunning(true);
+    setAgentRunResult(null);
+    setLogDrawerOpen(true);
+    try {
+      const result = await triggerAgentRun();
+      // Refresh all data since the agent creates/updates theses
+      const [statusRes, thesesRes, signalsRes, countsRes] = await Promise.allSettled([
+        fetchAgentStatus(),
+        fetchTheses(),
+        fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
+        fetchSignalCounts()
+      ]);
+      if (statusRes.status === 'fulfilled') setAgentStatus(statusRes.value);
+      if (thesesRes.status === 'fulfilled') setTheses(thesesRes.value);
+      if (signalsRes.status === 'fulfilled') {
+        setSignals(signalsRes.value.items);
+        setPageInfo({
+          page: signalsRes.value.page,
+          pageSize: signalsRes.value.page_size,
+          totalItems: signalsRes.value.total_items,
+          totalPages: signalsRes.value.total_pages,
+          hasNext: signalsRes.value.has_next,
+          hasPrev: signalsRes.value.has_prev
+        });
+      }
+      if (countsRes.status === 'fulfilled') setSignalCounts(countsRes.value);
+      setAgentRunResult(`${result.thesesUpdated} updated, ${result.newCandidates} new`);
+    } catch {
+      setAgentRunResult('failed');
+    } finally {
+      setAgentRunning(false);
+    }
+  };
 
   return (
-    <main className="future-shell">
-      <div className="halo halo-one" />
-      <div className="halo halo-two" />
-
-      {/* HEADER: Stats bar */}
-      <header className="hero-panel">
-        <div className="hero-copy">
-          <p className="eyebrow">Sixth Sense Idea Engine</p>
-          <h1>Future Market Radar</h1>
-          <p className="refresh">Live opportunity intelligence with memory-aware scoring.</p>
-        </div>
-        <div className="stat-grid">
-          <article className="stat-card">
-            <span>Signals</span>
-            <strong>{pageInfo.totalItems}</strong>
-          </article>
-          <article className="stat-card">
-            <span>Connectors</span>
-            <strong>{activeConnectors}</strong>
-          </article>
-          <article className="stat-card">
-            <span>Last Update</span>
-            <strong>{latestSignalAt ? new Date(latestSignalAt).toLocaleTimeString() : 'pending'}</strong>
-          </article>
-          <article className="stat-card">
-            <span>Top Thesis</span>
-            <strong>{topThesis ? `${topThesis.title.slice(0, 22)}${topThesis.title.length > 22 ? '\u2026' : ''}` : 'none'}</strong>
-          </article>
-          <article className="stat-card">
-            <span>Agent Last Run</span>
-            <strong>{agentLastRun}</strong>
-          </article>
-        </div>
-      </header>
-
-      {loadWarning ? <p role="alert">{loadWarning}</p> : null}
-
-      {/* TOP THESES: horizontal cards */}
-      <section className="thesis-board-section">
-        <h2 className="section-heading">Top Theses</h2>
-        <div className="thesis-board">
-          {displayTheses.map((t) => (
-            <ThesisCard
-              key={t.canonicalKey}
-              thesis={t}
-              isActive={thesisFilter === t.canonicalKey}
-              onClick={() => {
-                if (thesisFilter === t.canonicalKey) {
-                  setThesisFilter(null);
-                  setThesisFilterTitle('');
-                } else {
-                  setThesisFilter(t.canonicalKey);
-                  setThesisFilterTitle(t.title);
-                  setRequestedPage(1);
-                }
-              }}
-            />
-          ))}
-        </div>
-        {theses.length === 0 && (
-          <p className="thesis-empty">No theses yet. The research agent will synthesize theses from incoming signals.</p>
-        )}
-      </section>
-
-      {/* Status Cards Row */}
-      <StatusCards
+    <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
+      <Sidebar
         connectors={connectors}
         aiHealth={aiHealth}
         agentStatus={agentStatus}
+        infraStatus={infraStatus}
+        theses={theses}
+        thesisFilter={thesisFilter}
+        onThesisFilter={handleThesisFilter}
+        signalCount={pageInfo.totalItems}
+        latestSignalAt={latestSignalAt}
+        signalCounts={signalCounts}
+        onRunAgent={handleRunAgent}
+        agentRunning={agentRunning}
+        agentRunResult={agentRunResult}
       />
+      <button
+        type="button"
+        className="sidebar-toggle"
+        onClick={() => setSidebarOpen((v) => !v)}
+        title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+      >
+        {sidebarOpen ? '\u25C0' : '\u25B6'}
+      </button>
 
-      {/* Thesis filter banner */}
-      {thesisFilter && (
-        <div className="thesis-filter-banner">
-          <span>Showing signals for: <strong>{thesisFilterTitle}</strong></span>
-          <button type="button" onClick={() => { setThesisFilter(null); setThesisFilterTitle(''); setRequestedPage(1); }}>
-            Clear filter
-          </button>
-        </div>
-      )}
+      <main className="main-content">
+        {loadWarning ? <p role="alert">{loadWarning}</p> : null}
 
-      {/* Main workspace: signals + logs side by side */}
-      <div className="main-workspace">
-        {/* Opportunity Signals — left half */}
-        <section className="signal-card workspace-panel">
-          <div className="signal-header">
-            <h2>Opportunity Signals</h2>
-            <div className="signal-controls">
-              <select
-                className="source-filter"
-                value={sourceFilter}
-                onChange={(e) => { setSourceFilter(e.target.value); setRequestedPage(1); }}
-              >
-                <option value="all">All Sources</option>
-                {connectors.map((c) => (
-                  <option key={c.name} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-              <div className="signal-pagination">
-                <span>
-                  Page {pageInfo.page} / {pageInfo.totalPages}
-                </span>
+        {/* Split pane: theses | signals */}
+        <div className="split-pane" ref={splitContainerRef}>
+          {/* Left pane — Top Ideas (theses) */}
+          <section className="pane pane-left" style={{ width: `${splitPct}%` }}>
+            <div className="pane-header">
+              <h2 className="pane-title">Top Ideas</h2>
+              <span className="pane-count">{theses.length}</span>
+            </div>
+            <div className="pane-scroll">
+              {theses.map((t) => (
+                <ThesisCard
+                  key={t.canonicalKey}
+                  thesis={t}
+                  isActive={thesisFilter === t.canonicalKey}
+                  onClick={() => {
+                    if (thesisFilter === t.canonicalKey) {
+                      setThesisFilter(null);
+                      setThesisFilterTitle('');
+                      setRequestedPage(1);
+                    } else {
+                      setThesisFilter(t.canonicalKey);
+                      setThesisFilterTitle(t.title);
+                      setRequestedPage(1);
+                    }
+                  }}
+                />
+              ))}
+              {theses.length === 0 && (
+                <div className="pane-empty">
+                  <p>No theses yet</p>
+                  <p className="pane-empty-hint">The research agent will synthesize top ideas from incoming signals.</p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Resize handle */}
+          {/* biome-ignore lint/a11y/useKeyboardHandler: resize is mouse-only, keyboard users can use default 50/50 */}
+          <div className="resize-handle" onMouseDown={onResizeStart} role="separator" aria-orientation="vertical" />
+
+          {/* Right pane — Signal Feed */}
+          <section className="pane pane-right" style={{ width: `${100 - splitPct}%` }}>
+            <div className="pane-header">
+              <div className="pane-header-left">
+                <h2 className="pane-title">Signals</h2>
+                <select
+                  className="source-filter"
+                  value={sourceFilter}
+                  onChange={(e) => { setSourceFilter(e.target.value); setRequestedPage(1); }}
+                >
+                  <option value="all">All Sources</option>
+                  {connectors.map((c) => (
+                    <option key={c.name} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+                {thesisFilter && (
+                  <div className="filter-chip">
+                    <span>{thesisFilterTitle}</span>
+                    <button type="button" onClick={() => { setThesisFilter(null); setThesisFilterTitle(''); setRequestedPage(1); }}>
+                      &times;
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="pane-header-right">
                 <button
                   type="button"
+                  className="page-btn"
+                  onClick={() => setRequestedPage(1)}
+                  disabled={!pageInfo.hasPrev || isLoading}
+                  title="First page"
+                >
+                  &laquo;
+                </button>
+                <button
+                  type="button"
+                  className="page-btn"
                   onClick={() => setRequestedPage((value) => Math.max(1, value - 1))}
                   disabled={!pageInfo.hasPrev || isLoading}
                 >
                   Prev
                 </button>
+                <span className="page-info">
+                  {pageInfo.page} / {pageInfo.totalPages}
+                </span>
                 <button
                   type="button"
+                  className="page-btn"
                   onClick={() => setRequestedPage((value) => value + 1)}
                   disabled={!pageInfo.hasNext || isLoading}
                 >
                   Next
                 </button>
+                <button
+                  type="button"
+                  className="page-btn"
+                  onClick={() => setRequestedPage(pageInfo.totalPages)}
+                  disabled={!pageInfo.hasNext || isLoading}
+                  title="Last page"
+                >
+                  &raquo;
+                </button>
               </div>
             </div>
-          </div>
-          <ul className="signal-list">
-            {signals.map((signal) => (
-              <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
-            ))}
-            {signals.length === 0 && (
-              <li className="signal-empty">No signals found for the current filters.</li>
-            )}
-          </ul>
-        </section>
+            <div className="pane-scroll">
+              <ul className="signal-list">
+                {signals.map((signal) => (
+                  <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
+                ))}
+                {signals.length === 0 && (
+                  <li className="signal-empty">No signals found for the current filters.</li>
+                )}
+              </ul>
+            </div>
+          </section>
+        </div>
 
-        {/* LOGS: scrolling console — right half */}
-        <section className="log-console workspace-panel">
-          <div className="log-console-header">
-            <span>
-              Runtime Logs
-              <span className={`log-hint ${logsRealtime ? 'online' : 'offline'}`}>
-                {' '}<span className={`status-dot ${logsRealtime ? 'active' : 'disabled'}`} aria-hidden="true" />
-                {' '}{logsRealtime ? 'LIVE' : 'POLLING'} &middot; {logs.length} entries
+        {/* Log drawer — collapsible bottom */}
+        <section className={`log-drawer ${logDrawerOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className="log-drawer-toggle"
+            onClick={() => setLogDrawerOpen((v) => !v)}
+          >
+            <span className="log-drawer-title">
+              Logs
+              <span className="log-drawer-count">{logs.length}</span>
+              <span className={`log-drawer-status ${logsRealtime ? 'live' : ''}`}>
+                {logsRealtime ? 'LIVE' : 'POLLING'}
               </span>
             </span>
-          </div>
-          <ul ref={logListRef} className="log-list terminal-list">
-            {renderedLogs.map((entry, index) => (
-              <li
-                key={`${entry.ts}-${entry.run_id}-${entry.component}-${entry.message}-${index}`}
-                className={`log-row terminal-row ${entry.level}`}
-              >
-                <code className="terminal-line">
-                  <span className={`terminal-icon ${entry.level}`} aria-hidden="true">
-                    {logLevelIcons[entry.level]}
-                  </span>
-                  {formatTerminalLine(entry)}
-                </code>
-              </li>
-            ))}
-            {logs.length === 0 ? <li className="log-empty">No execution logs yet.</li> : null}
-          </ul>
+            <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
+          </button>
+          {logDrawerOpen && (
+            <div className="log-scroll-wrapper">
+              <ul ref={logListRef} className="log-list terminal-list" onScroll={handleLogScroll}>
+                {renderedLogs.map((entry, index) => (
+                  <li
+                    key={`${entry.ts}-${entry.run_id}-${entry.component}-${entry.message}-${index}`}
+                    className={`log-row terminal-row ${entry.level}`}
+                  >
+                    <code className="terminal-line">
+                      <span className={`terminal-icon ${entry.level}`} aria-hidden="true">
+                        {logLevelIcons[entry.level]}
+                      </span>
+                      {formatTerminalLine(entry)}
+                    </code>
+                  </li>
+                ))}
+                {logs.length === 0 ? <li className="log-empty">No execution logs yet.</li> : null}
+              </ul>
+              {!logAtBottom && (
+                <button type="button" className="log-scroll-bottom" onClick={scrollLogsToBottom}>
+                  {'\u25BC'} Latest
+                </button>
+              )}
+            </div>
+          )}
         </section>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 };
 

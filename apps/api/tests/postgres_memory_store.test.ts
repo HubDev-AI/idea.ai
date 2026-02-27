@@ -21,7 +21,7 @@ vi.doMock('pg', () => ({
 /* Mock buildLocalEmbedding (used by retriever.findSimilar) so we
    don't depend on the real hashing implementation in tests */
 vi.doMock('../src/jobs/memory_index', () => ({
-  buildLocalEmbedding: vi.fn(() => Array.from({ length: 32 }, () => 0.1))
+  buildLocalEmbedding: vi.fn(() => Array.from({ length: 768 }, () => 0.1))
 }));
 
 /* ------------------------------------------------------------------ */
@@ -86,7 +86,8 @@ describe('PostgresMemoryStore', () => {
       pain: 70,
       timing: 80,
       buildability: 60,
-      blended: 72
+      blended: 72,
+      source_url: null
     });
     // Verify query used the limit parameter
     expect(mockQuery.mock.calls[0]![1]).toEqual([10]);

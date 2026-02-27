@@ -13,6 +13,7 @@ export type ScoredSignalInput = {
   timing: number;
   buildability: number;
   blended: number;
+  sourceUrl?: string | null;
 };
 
 export type SignalEmbeddingRecord = {
@@ -21,7 +22,7 @@ export type SignalEmbeddingRecord = {
   model: string;
 };
 
-const EMBEDDING_DIMENSION = 32;
+const EMBEDDING_DIMENSION = 768;
 const EMBEDDING_MODEL = 'local-hash-v1';
 const OLLAMA_EMBEDDING_MODEL = 'ollama-nomic-embed-text';
 
@@ -71,7 +72,8 @@ export const indexSignalMemory = async (
   input: ScoredSignalInput
 ): Promise<{ memoryRecord: SignalMemoryRecord; embeddingRecord: SignalEmbeddingRecord }> => {
   const canonicalText = buildCanonicalText(input);
-  const embedding = await embedText(canonicalText, { fallbackToNull: true });
+  const ollamaEmbedding = await embedText(canonicalText, { fallbackToNull: true });
+  const finalEmbedding = ollamaEmbedding ?? buildLocalEmbedding(canonicalText);
 
   return {
     memoryRecord: {
@@ -83,12 +85,13 @@ export const indexSignalMemory = async (
       pain: input.pain,
       timing: input.timing,
       buildability: input.buildability,
-      blended: input.blended
+      blended: input.blended,
+      source_url: input.sourceUrl ?? null
     },
     embeddingRecord: {
       signal_id: input.signalId,
-      embedding,
-      model: embedding ? OLLAMA_EMBEDDING_MODEL : EMBEDDING_MODEL
+      embedding: finalEmbedding,
+      model: ollamaEmbedding ? OLLAMA_EMBEDDING_MODEL : EMBEDDING_MODEL
     }
   };
 };

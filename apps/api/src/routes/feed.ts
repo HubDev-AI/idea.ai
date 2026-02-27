@@ -68,7 +68,7 @@ const signalToFeedRecord = (row: MemorySignalRow): FeedRecord => ({
   score: row.blended,
   top_source: row.source,
   snippet: row.canonical_text.slice(0, 200),
-  source_url: null,
+  source_url: row.source_url ?? null,
   next_action: 'validate_demand',
   updated_at: row.observed_at,
   pain: row.pain,

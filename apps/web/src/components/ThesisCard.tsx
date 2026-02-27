@@ -9,6 +9,7 @@ export type ThesisCardProps = {
     evidenceCount: number;
     problemStatement: string;
     sourceCount: number;
+    estimatedScope?: 'small' | 'medium' | 'large' | null;
   };
   isActive?: boolean;
   onClick?: () => void;
@@ -18,6 +19,12 @@ const confidenceColor = (confidence: number): string => {
   if (confidence >= 70) return 'var(--ok)';
   if (confidence >= 40) return 'var(--warn)';
   return 'var(--muted)';
+};
+
+const scopeLabel: Record<string, { text: string; color: string }> = {
+  small: { text: 'S', color: 'var(--ok)' },
+  medium: { text: 'M', color: 'var(--warn)' },
+  large: { text: 'L', color: 'var(--err)' }
 };
 
 export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, isActive, onClick }) => {
@@ -32,9 +39,20 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, isActive, onClic
     >
       <div className="thesis-header">
         <h3 className="thesis-title">{thesis.title}</h3>
-        <span className="thesis-confidence" style={{ color: confidenceColor(thesis.confidence) }}>
-          {thesis.confidence}%
-        </span>
+        <div className="thesis-header-right">
+          {thesis.estimatedScope && scopeLabel[thesis.estimatedScope] && (
+            <span
+              className="thesis-scope-badge"
+              style={{ borderColor: scopeLabel[thesis.estimatedScope].color, color: scopeLabel[thesis.estimatedScope].color }}
+              title={`${thesis.estimatedScope} app`}
+            >
+              {scopeLabel[thesis.estimatedScope].text}
+            </span>
+          )}
+          <span className="thesis-confidence" style={{ color: confidenceColor(thesis.confidence) }}>
+            {thesis.confidence}%
+          </span>
+        </div>
       </div>
       <div className="thesis-confidence-bar">
         <div

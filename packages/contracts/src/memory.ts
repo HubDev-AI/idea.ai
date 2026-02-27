@@ -13,7 +13,8 @@ export const signalMemoryRecordSchema = z
     pain: scoreSchema,
     timing: scoreSchema,
     buildability: scoreSchema,
-    blended: scoreSchema
+    blended: scoreSchema,
+    source_url: z.string().nullish()
   })
   .strict();
 
