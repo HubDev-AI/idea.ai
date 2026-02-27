@@ -29,8 +29,8 @@ describe('V2 integration', () => {
     );
 
     expect(result).toHaveLength(2);
-    expect(result[0].classification).toBe('strong');
-    expect(result[1].classification).toBe('noise');
+    expect(result[0]!.classification).toBe('strong');
+    expect(result[1]!.classification).toBe('noise');
   });
 
   it('AI scoring produces structured scores', async () => {
@@ -134,7 +134,7 @@ describe('V2 integration', () => {
     const fakeEmbedding = Array.from({ length: 384 }, (_, i) => i * 0.001);
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ embedding: fakeEmbedding })
+      json: async () => ({ embeddings: [fakeEmbedding] })
     });
 
     const result = await embedText('test document text', {
@@ -144,7 +144,7 @@ describe('V2 integration', () => {
     expect(result).not.toBeNull();
     expect(result).toHaveLength(384);
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:11434/api/embeddings',
+      'http://localhost:11434/api/embed',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('test document text')
@@ -174,7 +174,7 @@ describe('V2 integration', () => {
     );
 
     // 'b' appears in both lists, so it should have the highest RRF score
-    expect(merged[0].signal_id).toBe('b');
+    expect(merged[0]!.signal_id).toBe('b');
     expect(merged.length).toBe(3);
 
     // Verify RRF scores are positive numbers
@@ -201,9 +201,9 @@ describe('V2 integration', () => {
     ], { threshold: 0.99 });
 
     expect(dupes).toHaveLength(1);
-    expect(dupes[0].signals).toContain('hn-1');
-    expect(dupes[0].signals).toContain('gh-1');
-    expect(dupes[0].similarity).toBeGreaterThanOrEqual(0.99);
+    expect(dupes[0]!.signals).toContain('hn-1');
+    expect(dupes[0]!.signals).toContain('gh-1');
+    expect(dupes[0]!.similarity).toBeGreaterThanOrEqual(0.99);
   });
 
   it('cross-source dedup skips same-source signals', () => {
@@ -303,7 +303,7 @@ describe('V2 integration', () => {
 
     const promoted = await store.list({ status: 'promoted' });
     expect(promoted).toHaveLength(1);
-    expect(promoted[0].title).toBe('B');
+    expect(promoted[0]!.title).toBe('B');
   });
 
   it('research agent updates thesis confidence and creates candidates', async () => {

@@ -312,19 +312,19 @@ export const judgeBuildabilityWithAi = async ({
 
       if (results.length === 1) {
         return {
-          judgeScores: results[0].scores,
+          judgeScores: results[0]!.scores,
           fromAi: true,
-          provider: results[0].provider,
-          providers: [results[0].provider],
+          provider: results[0]!.provider,
+          providers: [results[0]!.provider],
           attempts
         };
       }
 
       return {
-        judgeScores: combineScores(results[0].scores, results[1].scores),
+        judgeScores: combineScores(results[0]!.scores, results[1]!.scores),
         fromAi: true,
-        provider: results[0].provider,
-        providers: [results[0].provider, results[1].provider],
+        provider: results[0]!.provider,
+        providers: [results[0]!.provider, results[1]!.provider],
         attempts
       };
     }

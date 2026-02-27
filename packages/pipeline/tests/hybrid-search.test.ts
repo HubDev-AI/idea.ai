@@ -19,8 +19,8 @@ describe('hybrid search', () => {
 
       // 'b' appears in both lists (rank 2 + rank 1) → highest RRF
       // 'a' appears in both lists (rank 1 + rank 3) → second highest
-      expect(merged[0].signal_id).toBe('b');
-      expect(merged[1].signal_id).toBe('a');
+      expect(merged[0]!.signal_id).toBe('b');
+      expect(merged[1]!.signal_id).toBe('a');
       expect(merged.length).toBe(4);
     });
 

@@ -62,8 +62,13 @@ const toPositiveInt = (value: string | undefined, fallback: number): number => {
   return Math.floor(parsed);
 };
 
+const stripMarkdownFences = (text: string): string => {
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  return fenceMatch?.[1] ? fenceMatch[1].trim() : text;
+};
+
 const parseJsonObject = (text: string): unknown => {
-  const trimmed = text.trim();
+  const trimmed = stripMarkdownFences(text.trim());
   if (!trimmed) {
     return null;
   }
@@ -129,16 +134,17 @@ export const parseAiPostScrapeInsights = (text: string): Map<string, AiPostScrap
     const isNoise = typeof row.is_noise === 'boolean' ? row.is_noise : undefined;
     const rationale = typeof row.rationale === 'string' ? row.rationale.trim() : undefined;
 
-    insights.set(id, {
-      id,
-      idea: idea && idea.length > 0 ? idea.slice(0, 90) : undefined,
-      pain,
-      timing,
-      judgeScores,
-      confidence,
-      isNoise,
-      rationale
-    });
+    const insight: AiPostScrapeInsight = { id };
+    const trimmedIdea = idea && idea.length > 0 ? idea.slice(0, 90) : undefined;
+    if (trimmedIdea !== undefined) insight.idea = trimmedIdea;
+    if (pain !== undefined) insight.pain = pain;
+    if (timing !== undefined) insight.timing = timing;
+    if (judgeScores !== undefined) insight.judgeScores = judgeScores;
+    if (confidence !== undefined) insight.confidence = confidence;
+    if (isNoise !== undefined) insight.isNoise = isNoise;
+    if (rationale !== undefined) insight.rationale = rationale;
+
+    insights.set(id, insight);
   }
 
   return insights;
@@ -277,7 +283,8 @@ const analyzeChunk = async ({
             requested_signals: chunk.length,
             attempt,
             max_attempts: maxAttempts,
-            will_retry: willRetry
+            will_retry: willRetry,
+            raw_preview: result.text.slice(0, 200)
           });
           continue;
         }
@@ -346,7 +353,10 @@ export const analyzePostScrapeBatchWithAi = async ({
   let anySuccess = false;
 
   for (const chunk of chunks) {
-    const result = await analyzeChunk({ chunk, settings, logger, run });
+    const chunkOpts: Parameters<typeof analyzeChunk>[0] = { chunk, settings };
+    if (logger) chunkOpts.logger = logger;
+    if (run) chunkOpts.run = run;
+    const result = await analyzeChunk(chunkOpts);
     for (const [id, insight] of result.insights) {
       allInsights.set(id, insight);
     }
@@ -366,11 +376,12 @@ export const analyzePostScrapeBatchWithAi = async ({
     batches: chunks.length
   });
 
-  return {
+  const batchResult: AiPostScrapeResult = {
     insights: allInsights,
     fromAi: anySuccess,
-    provider: lastProvider,
     attempted: true,
     attempts: allAttempts
   };
+  if (lastProvider) batchResult.provider = lastProvider;
+  return batchResult;
 };

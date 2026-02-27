@@ -83,4 +83,13 @@ tail`;
     expect(disabled.attempted).toBe(false);
     expect(disabled.insights.size).toBe(0);
   });
+
+  it('parses codex response wrapped in markdown fences', () => {
+    const raw = '```json\n{"signals":[{"id":"hn:42","idea":"AI code review bot","pain":70,"timing":65,"judge_scores":[55,60,58],"confidence":0.8,"is_noise":false,"rationale":"Rising demand for automated code review."}]}\n```';
+
+    const parsed = parseAiPostScrapeInsights(raw);
+    expect(parsed.size).toBe(1);
+    expect(parsed.get('hn:42')?.idea).toBe('AI code review bot');
+    expect(parsed.get('hn:42')?.pain).toBe(70);
+  });
 });

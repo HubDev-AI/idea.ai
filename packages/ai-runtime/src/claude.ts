@@ -1,4 +1,4 @@
-import type { CommandRunner, RunPromptInput, RunPromptResult } from './types';
+import type { CommandRunner, CommandSpec, RunPromptInput, RunPromptResult } from './types';
 import { spawnCommand } from './types';
 
 const extractClaudeText = (raw: string): string => {
@@ -35,11 +35,14 @@ export const runClaudePrompt = async (
 ): Promise<RunPromptResult> => {
   const runCommand = deps.runCommand ?? spawnCommand;
 
-  const result = await runCommand({
+  const spec: CommandSpec = {
     cmd: 'claude',
-    args: ['-p', input.prompt],
-    timeoutMs: input.timeoutMs
-  });
+    args: ['-p', input.prompt]
+  };
+  if (input.timeoutMs !== undefined) {
+    spec.timeoutMs = input.timeoutMs;
+  }
+  const result = await runCommand(spec);
 
   if (result.timedOut) {
     const timeoutError = new Error('claude timed out');

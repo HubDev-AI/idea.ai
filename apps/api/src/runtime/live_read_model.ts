@@ -330,7 +330,7 @@ const toConnectorStatus = (
 };
 
 const toErrorFirstSnapshot = (env: RuntimeEnv, refreshedAtIso: string): ConnectorStatusRecord[] => [
-  ...OPEN_CONNECTORS.map((connector) => {
+  ...OPEN_CONNECTORS.map((connector): ConnectorStatusRecord => {
     if (!isConnectorSelected(connector, env) || !isConnectorConfigured(connector, env)) {
       return {
         name: connector,
@@ -347,12 +347,12 @@ const toErrorFirstSnapshot = (env: RuntimeEnv, refreshedAtIso: string): Connecto
   }),
   {
     name: 'exa_byo',
-    status: env.exaApiKey && env.exaDailyBudgetUsd > 0 ? 'error' : 'disabled',
+    status: (env.exaApiKey && env.exaDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
     last_run: env.exaApiKey && env.exaDailyBudgetUsd > 0 ? refreshedAtIso : null
   },
   {
     name: 'perigon_byo',
-    status: env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? 'error' : 'disabled',
+    status: (env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
     last_run: env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? refreshedAtIso : null
   }
 ];
@@ -585,7 +585,6 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
       aiJudgeSettings,
       aiPostScrapeSettings
     });
-    aiHealth = runAiHealth;
 
     await hydrateSnapshotFromDisk(process.env, logger);
 
@@ -752,17 +751,18 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
             aiHealth = runAiHealth;
           }
 
-          const score = await scoreSignalWithRetriever({
+          const scoreArgs: Parameters<typeof scoreSignalWithRetriever>[0] = {
             text: event.text,
             judgeScores,
             topic,
             source: event.source,
             canonicalText,
             memoryRetriever: retriever,
-            topK: 8,
-            basePain: aiInsight?.pain,
-            baseTiming: aiInsight?.timing
-          });
+            topK: 8
+          };
+          if (aiInsight?.pain !== undefined) scoreArgs.basePain = aiInsight.pain;
+          if (aiInsight?.timing !== undefined) scoreArgs.baseTiming = aiInsight.timing;
+          const score = await scoreSignalWithRetriever(scoreArgs);
           const blended = applySourceQualityPenalty({
             source: event.source,
             idea,
@@ -952,12 +952,13 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
     },
     listLogs: async (query: ListLogsQuery): Promise<ExecutionLogRecord[]> =>
       (await (async () => {
-        const rows = await readExecutionLogs({
+        const logArgs: Parameters<typeof readExecutionLogs>[0] = {
           env: process.env,
-          limit: query.scope === 'all' ? query.limit : 1000,
-          level: query.level,
-          runId: query.run_id
-        });
+          limit: query.scope === 'all' ? query.limit : 1000
+        };
+        if (query.level !== undefined) logArgs.level = query.level;
+        if (query.run_id !== undefined) logArgs.runId = query.run_id;
+        const rows = await readExecutionLogs(logArgs);
 
         if (query.scope === 'all' || query.run_id) {
           return rows.slice(0, query.limit);

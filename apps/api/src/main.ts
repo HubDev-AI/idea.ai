@@ -26,16 +26,17 @@ const memoryStore = databaseUrl
   ? createPostgresMemoryStore({ databaseUrl })
   : null;
 
-const app = await buildServer({
+const serverDeps: Parameters<typeof buildServer>[0] = {
   listSignals: readModel.listSignals,
   listConnectors: readModel.listConnectors,
   listLogs: readModel.listLogs,
   getAiHealth: readModel.getAiHealth,
   thesisStore,
   memoryStore,
-  corsOrigins,
-  apiKey
-});
+  corsOrigins
+};
+if (apiKey !== undefined) serverDeps.apiKey = apiKey;
+const app = await buildServer(serverDeps);
 
 const shutdown = async () => {
   await readModel.close();
@@ -59,6 +60,9 @@ process.on('SIGTERM', () => {
 
 app
   .listen({ host, port })
+  .then((address) => {
+    console.log(`API ready on ${address}`);
+  })
   .catch((error) => {
     console.error(error);
     process.exit(1);

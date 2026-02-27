@@ -23,17 +23,17 @@ const parseLine = (line: string): ExecutionLogRecord | null => {
       return null;
     }
 
-    return {
+    const record: ExecutionLogRecord = {
       ts: parsed.ts,
       level: parsed.level,
       run_id: parsed.run_id,
       component: parsed.component,
-      message: parsed.message,
-      context:
-        parsed.context && typeof parsed.context === 'object' && !Array.isArray(parsed.context)
-          ? (parsed.context as Record<string, unknown>)
-          : undefined
+      message: parsed.message
     };
+    if (parsed.context && typeof parsed.context === 'object' && !Array.isArray(parsed.context)) {
+      record.context = parsed.context as Record<string, unknown>;
+    }
+    return record;
   } catch {
     return null;
   }

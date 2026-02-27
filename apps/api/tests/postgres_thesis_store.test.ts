@@ -18,16 +18,16 @@ describe('PostgresThesisStore', () => {
     const store = createPostgresThesisStore({ pool: mockPool });
     const result = await store.list();
     expect(result).toHaveLength(1);
-    expect(result[0].canonicalKey).toBe('k1');
-    expect(result[0].confidence).toBe(80);
+    expect(result[0]!.canonicalKey).toBe('k1');
+    expect(result[0]!.confidence).toBe(80);
   });
 
   it('list with status filter adds WHERE clause', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     const store = createPostgresThesisStore({ pool: mockPool });
     await store.list({ status: 'promoted' });
-    expect(mockQuery.mock.calls[0][1]).toEqual(['promoted']);
-    expect(mockQuery.mock.calls[0][0]).toContain('WHERE');
+    expect(mockQuery.mock.calls[0]![1]).toEqual(['promoted']);
+    expect(mockQuery.mock.calls[0]![0]).toContain('WHERE');
   });
 
   it('getByKey returns null when not found', async () => {
@@ -65,7 +65,7 @@ describe('PostgresThesisStore', () => {
       avgBuildability: 50, latestObservedAt: '2026-01-01T00:00:00Z', evidence: []
     });
     expect(mockQuery).toHaveBeenCalledTimes(1);
-    expect(mockQuery.mock.calls[0][0]).toContain('ON CONFLICT');
+    expect(mockQuery.mock.calls[0]![0]).toContain('ON CONFLICT');
   });
 
   it('rowToDraft maps numeric strings correctly via toNumber', async () => {
@@ -78,6 +78,6 @@ describe('PostgresThesisStore', () => {
     });
     const store = createPostgresThesisStore({ pool: mockPool });
     const result = await store.list();
-    expect(result[0].confidence).toBe(0);
+    expect(result[0]!.confidence).toBe(0);
   });
 });

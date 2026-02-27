@@ -105,7 +105,8 @@ describe('signal quality', () => {
           top_source: 'github_issues',
           snippet: 'Teams repeatedly fail audits due to manual evidence collection',
           next_action: 'validate_demand',
-          updated_at: '2026-02-25T00:00:00.000Z'
+          updated_at: '2026-02-25T00:00:00.000Z',
+          source_url: null
         },
         {
           idea: 'Account Executive, Enterprise',
@@ -113,7 +114,8 @@ describe('signal quality', () => {
           top_source: 'greenhouse',
           snippet: 'Job post',
           next_action: 'validate_demand',
-          updated_at: '2026-02-25T00:00:00.000Z'
+          updated_at: '2026-02-25T00:00:00.000Z',
+          source_url: null
         }
       ],
       5

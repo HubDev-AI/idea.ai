@@ -39,7 +39,11 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   lever: () => fetchLeverJobEvents(),
   yc_companies: () => fetchYcCompanyEvents(),
   reddit: () => fetchReddit({}),
-  producthunt: () => fetchProductHunt({ token: process.env.PH_API_TOKEN })
+  producthunt: () => {
+    const phOpts: Parameters<typeof fetchProductHunt>[0] = {};
+    if (process.env.PH_API_TOKEN !== undefined) phOpts.token = process.env.PH_API_TOKEN;
+    return fetchProductHunt(phOpts);
+  }
 };
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');

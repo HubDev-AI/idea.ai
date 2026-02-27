@@ -66,8 +66,8 @@ describe('agent runner', () => {
     expect(result.newCandidates).toBe(1);
     const all = await store.list();
     expect(all).toHaveLength(1);
-    expect(all[0].title).toBe('AI Billing Copilot');
-    expect(all[0].status).toBe('candidate');
+    expect(all[0]!.title).toBe('AI Billing Copilot');
+    expect(all[0]!.status).toBe('candidate');
   });
 
   it('returns empty result when both providers fail', async () => {

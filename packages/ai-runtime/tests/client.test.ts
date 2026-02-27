@@ -16,7 +16,8 @@ describe('ai runtime client', () => {
           return {
             exitCode: 0,
             stdout: '{"content":[{"type":"text","text":"hello from claude"}]}',
-            stderr: ''
+            stderr: '',
+            timedOut: false
           };
         }
       }
@@ -44,7 +45,7 @@ describe('ai runtime client', () => {
     expect(result.text).toBe('from codex fallback');
   });
 
-  it('uses codex exec --json -o and parses final payload', async () => {
+  it('uses codex exec --json and parses JSONL from stdout', async () => {
     const seen: Array<{ cmd: string; args: string[] }> = [];
 
     const result = await runCodexPrompt(
@@ -55,34 +56,31 @@ describe('ai runtime client', () => {
 
           return {
             exitCode: 0,
-            stdout: '',
-            stderr: ''
+            stdout: '{"type":"event","text":"ignore"}\n{"type":"final","text":"codex final text"}\n',
+            stderr: '',
+            timedOut: false
           };
-        },
-        readFile: async () =>
-          '{"type":"event","text":"ignore"}\n{"type":"final","text":"codex final text"}\n',
-        tempOutputPath: '/tmp/codex-output.jsonl'
+        }
       }
     );
 
     expect(seen[0]?.cmd).toBe('codex');
     expect(seen[0]?.args).toContain('exec');
     expect(seen[0]?.args).toContain('--json');
-    expect(seen[0]?.args).toContain('-o');
+    expect(seen[0]?.args).not.toContain('-o');
     expect(result.text).toBe('codex final text');
   });
 
-  it('parses plain-text codex output file when jsonl events are not present', async () => {
+  it('parses plain-text codex stdout when jsonl events are not present', async () => {
     const result = await runCodexPrompt(
       { prompt: 'hello', timeoutMs: 1000 },
       {
         runCommand: async () => ({
           exitCode: 0,
-          stdout: '',
-          stderr: ''
-        }),
-        readFile: async () => '84,71,79',
-        tempOutputPath: '/tmp/codex-output.jsonl'
+          stdout: '84,71,79',
+          stderr: '',
+          timedOut: false
+        })
       }
     );
 

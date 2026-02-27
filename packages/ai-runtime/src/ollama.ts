@@ -1,5 +1,5 @@
 export type OllamaEmbedResponse = {
-  embedding: number[];
+  embeddings: number[][];
 };
 
 export type EmbedOptions = {
@@ -18,10 +18,10 @@ export const embedText = async (
   const fetchImpl = options.fetchImpl ?? fetch;
 
   try {
-    const response = await fetchImpl(`${baseUrl}/api/embeddings`, {
+    const response = await fetchImpl(`${baseUrl}/api/embed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt: text })
+      body: JSON.stringify({ model, input: text })
     });
 
     if (!response.ok) {
@@ -29,7 +29,7 @@ export const embedText = async (
     }
 
     const data = (await response.json()) as OllamaEmbedResponse;
-    return data.embedding;
+    return data.embeddings[0] ?? null;
   } catch (error) {
     if (options.fallbackToNull) {
       return null;

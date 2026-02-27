@@ -1,8 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import type { CommandRunner, RunPromptInput, RunPromptResult } from './types';
+import type { CommandRunner, CommandSpec, RunPromptInput, RunPromptResult } from './types';
 import { spawnCommand } from './types';
 
 const parseCodexText = (jsonl: string): string => {
@@ -58,19 +54,18 @@ export const runCodexPrompt = async (
   input: RunPromptInput,
   deps: {
     runCommand?: CommandRunner;
-    readFile?: (path: string) => Promise<string>;
-    tempOutputPath?: string;
   } = {}
 ): Promise<RunPromptResult> => {
   const runCommand = deps.runCommand ?? spawnCommand;
-  const readOutput = deps.readFile ?? ((path: string) => readFile(path, 'utf8'));
-  const outputPath = deps.tempOutputPath ?? join(tmpdir(), `codex-output-${randomUUID()}.jsonl`);
 
-  const result = await runCommand({
+  const spec: CommandSpec = {
     cmd: 'codex',
-    args: ['exec', '--json', '-o', outputPath, input.prompt],
-    timeoutMs: input.timeoutMs
-  });
+    args: ['exec', '--json', input.prompt]
+  };
+  if (input.timeoutMs !== undefined) {
+    spec.timeoutMs = input.timeoutMs;
+  }
+  const result = await runCommand(spec);
 
   if (result.timedOut) {
     const timeoutError = new Error('codex timed out');
@@ -84,14 +79,11 @@ export const runCodexPrompt = async (
     throw nonZeroError;
   }
 
-  const output = await readOutput(outputPath);
-
   return {
-    text: parseCodexText(output),
+    text: parseCodexText(result.stdout),
     provider: 'codex',
     meta: {
-      exitCode: result.exitCode,
-      outputPath
+      exitCode: result.exitCode
     }
   };
 };

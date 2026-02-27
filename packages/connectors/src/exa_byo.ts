@@ -38,8 +38,8 @@ export const runExaByoConnector = async (
 ): Promise<ByoConnectorResult> => {
   const guard = evaluateByoGuard({
     connector: 'exa_byo',
-    apiKey: env.EXA_API_KEY,
-    budgetValue: env.EXA_DAILY_BUDGET_USD,
+    ...(env.EXA_API_KEY !== undefined && { apiKey: env.EXA_API_KEY }),
+    ...(env.EXA_DAILY_BUDGET_USD !== undefined && { budgetValue: env.EXA_DAILY_BUDGET_USD }),
     fallbackBudget: 5
   });
 

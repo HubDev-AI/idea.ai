@@ -59,7 +59,6 @@ const App = () => {
   const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
   const [logsRealtime, setLogsRealtime] = useState(false);
-  const [logsCollapsed, setLogsCollapsed] = useState(true);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -92,8 +91,8 @@ const App = () => {
         fetchSignals({
           page: requestedPage,
           pageSize: PAGE_SIZE,
-          source: sourceFilter === 'all' ? undefined : sourceFilter,
-          thesisKey: thesisFilter ?? undefined,
+          ...(sourceFilter !== 'all' ? { source: sourceFilter } : {}),
+          ...(thesisFilter !== null ? { thesisKey: thesisFilter } : {}),
         }),
         fetchConnectors(),
         fetchAiHealth(),
@@ -246,6 +245,7 @@ const App = () => {
     };
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: renderedLogs triggers scroll-to-bottom on new entries
   useEffect(() => {
     const list = logListRef.current;
     if (!list) {
@@ -253,7 +253,7 @@ const App = () => {
     }
 
     list.scrollTop = list.scrollHeight;
-  }, []);
+  }, [renderedLogs]);
 
   const displayTheses = theses.slice(0, 3);
 
@@ -339,85 +339,83 @@ const App = () => {
         </div>
       )}
 
-      {/* Opportunity Signals — full width */}
-      <section className="signal-card">
-        <div className="signal-header">
-          <h2>Opportunity Signals</h2>
-          <div className="signal-controls">
-            <select
-              className="source-filter"
-              value={sourceFilter}
-              onChange={(e) => { setSourceFilter(e.target.value); setRequestedPage(1); }}
-            >
-              <option value="all">All Sources</option>
-              {connectors.map((c) => (
-                <option key={c.name} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-            <div className="signal-pagination">
-              <span>
-                Page {pageInfo.page} / {pageInfo.totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setRequestedPage((value) => Math.max(1, value - 1))}
-                disabled={!pageInfo.hasPrev || isLoading}
+      {/* Main workspace: signals + logs side by side */}
+      <div className="main-workspace">
+        {/* Opportunity Signals — left half */}
+        <section className="signal-card workspace-panel">
+          <div className="signal-header">
+            <h2>Opportunity Signals</h2>
+            <div className="signal-controls">
+              <select
+                className="source-filter"
+                value={sourceFilter}
+                onChange={(e) => { setSourceFilter(e.target.value); setRequestedPage(1); }}
               >
-                Prev
-              </button>
-              <button
-                type="button"
-                onClick={() => setRequestedPage((value) => value + 1)}
-                disabled={!pageInfo.hasNext || isLoading}
-              >
-                Next
-              </button>
+                <option value="all">All Sources</option>
+                {connectors.map((c) => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+              <div className="signal-pagination">
+                <span>
+                  Page {pageInfo.page} / {pageInfo.totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRequestedPage((value) => Math.max(1, value - 1))}
+                  disabled={!pageInfo.hasPrev || isLoading}
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRequestedPage((value) => value + 1)}
+                  disabled={!pageInfo.hasNext || isLoading}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <ul className="signal-list">
-          {signals.map((signal) => (
-            <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
-          ))}
-          {signals.length === 0 && (
-            <li className="signal-empty">No signals found for the current filters.</li>
-          )}
-        </ul>
-      </section>
+          <ul className="signal-list">
+            {signals.map((signal) => (
+              <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
+            ))}
+            {signals.length === 0 && (
+              <li className="signal-empty">No signals found for the current filters.</li>
+            )}
+          </ul>
+        </section>
 
-      {/* LOGS: collapsed drawer at bottom */}
-      <section className={`log-drawer ${logsCollapsed ? 'collapsed' : ''}`}>
-        <button
-          type="button"
-          className="log-drawer-toggle"
-          onClick={() => setLogsCollapsed((prev) => !prev)}
-        >
-          <span>
-            Runtime Logs
-            <span className={`log-hint ${logsRealtime ? 'online' : 'offline'}`}>
-              {' '}<span className={`status-dot ${logsRealtime ? 'active' : 'disabled'}`} aria-hidden="true" />
-              {' '}{logsRealtime ? 'LIVE' : 'POLLING'} &middot; {logs.length} entries
+        {/* LOGS: scrolling console — right half */}
+        <section className="log-console workspace-panel">
+          <div className="log-console-header">
+            <span>
+              Runtime Logs
+              <span className={`log-hint ${logsRealtime ? 'online' : 'offline'}`}>
+                {' '}<span className={`status-dot ${logsRealtime ? 'active' : 'disabled'}`} aria-hidden="true" />
+                {' '}{logsRealtime ? 'LIVE' : 'POLLING'} &middot; {logs.length} entries
+              </span>
             </span>
-          </span>
-          <span className="log-drawer-chevron">{logsCollapsed ? '\u25BC' : '\u25B2'}</span>
-        </button>
-        <ul ref={logListRef} className="log-list terminal-list">
-          {renderedLogs.map((entry, index) => (
-            <li
-              key={`${entry.ts}-${entry.run_id}-${entry.component}-${entry.message}-${index}`}
-              className={`log-row terminal-row ${entry.level}`}
-            >
-              <code className="terminal-line">
-                <span className={`terminal-icon ${entry.level}`} aria-hidden="true">
-                  {logLevelIcons[entry.level]}
-                </span>
-                {formatTerminalLine(entry)}
-              </code>
-            </li>
-          ))}
-          {logs.length === 0 ? <li className="log-empty">No execution logs yet.</li> : null}
-        </ul>
-      </section>
+          </div>
+          <ul ref={logListRef} className="log-list terminal-list">
+            {renderedLogs.map((entry, index) => (
+              <li
+                key={`${entry.ts}-${entry.run_id}-${entry.component}-${entry.message}-${index}`}
+                className={`log-row terminal-row ${entry.level}`}
+              >
+                <code className="terminal-line">
+                  <span className={`terminal-icon ${entry.level}`} aria-hidden="true">
+                    {logLevelIcons[entry.level]}
+                  </span>
+                  {formatTerminalLine(entry)}
+                </code>
+              </li>
+            ))}
+            {logs.length === 0 ? <li className="log-empty">No execution logs yet.</li> : null}
+          </ul>
+        </section>
+      </div>
     </main>
   );
 };

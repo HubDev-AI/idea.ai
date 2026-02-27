@@ -26,7 +26,7 @@ describe('thesis store', () => {
     await store.upsert(draft);
     const all = await store.list();
     expect(all).toHaveLength(1);
-    expect(all[0].canonicalKey).toBe('compliance:compliance:audit');
+    expect(all[0]!.canonicalKey).toBe('compliance:compliance:audit');
   });
 
   it('updates existing thesis on second upsert', async () => {
@@ -45,8 +45,8 @@ describe('thesis store', () => {
 
     const all = await store.list();
     expect(all).toHaveLength(1);
-    expect(all[0].confidence).toBe(75);
-    expect(all[0].status).toBe('watching');
+    expect(all[0]!.confidence).toBe(75);
+    expect(all[0]!.status).toBe('watching');
   });
 
   it('filters by status', async () => {
@@ -66,6 +66,6 @@ describe('thesis store', () => {
 
     const promoted = await store.list({ status: 'promoted' });
     expect(promoted).toHaveLength(1);
-    expect(promoted[0].canonicalKey).toBe('a');
+    expect(promoted[0]!.canonicalKey).toBe('a');
   });
 });

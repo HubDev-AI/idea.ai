@@ -54,7 +54,9 @@ export const runByoConnectorIngestion = async (
     logger?: ExecutionLogger;
   } = {}
 ) => {
-  const logger = deps.logger ?? createExecutionLogger({ env, runId: env.RUN_ID });
+  const loggerOpts: Parameters<typeof createExecutionLogger>[0] = { env };
+  if (env.RUN_ID !== undefined) loggerOpts.runId = env.RUN_ID;
+  const logger = deps.logger ?? createExecutionLogger(loggerOpts);
   const runExa = deps.runExa ?? runExaByoConnector;
   const runPerigon = deps.runPerigon ?? runPerigonByoConnector;
   const [exa, perigon] = await Promise.all([

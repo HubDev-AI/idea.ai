@@ -6,7 +6,7 @@ describe('ollama embedding client', () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
-        embedding: Array.from({ length: 768 }, (_, i) => i * 0.001)
+        embeddings: [Array.from({ length: 768 }, (_, i) => i * 0.001)]
       } satisfies OllamaEmbedResponse)
     });
 
@@ -14,7 +14,7 @@ describe('ollama embedding client', () => {
 
     expect(result).toHaveLength(768);
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:11434/api/embeddings',
+      'http://localhost:11434/api/embed',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('nomic-embed-text')

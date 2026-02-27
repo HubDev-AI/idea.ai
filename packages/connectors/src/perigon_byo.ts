@@ -33,8 +33,8 @@ export const runPerigonByoConnector = async (
 ): Promise<ByoConnectorResult> => {
   const guard = evaluateByoGuard({
     connector: 'perigon_byo',
-    apiKey: env.PERIGON_API_KEY,
-    budgetValue: env.PERIGON_DAILY_BUDGET_USD,
+    ...(env.PERIGON_API_KEY !== undefined && { apiKey: env.PERIGON_API_KEY }),
+    ...(env.PERIGON_DAILY_BUDGET_USD !== undefined && { budgetValue: env.PERIGON_DAILY_BUDGET_USD }),
     fallbackBudget: 5
   });
 

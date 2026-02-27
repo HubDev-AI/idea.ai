@@ -37,7 +37,8 @@ describe('ai judges', () => {
         maxSignals: 8,
         timeoutMs: 1000,
         allowFallback: false,
-        mode: 'single'
+        mode: 'single',
+        retries: 0
       },
       logger,
       run: async () => {
@@ -60,7 +61,8 @@ describe('ai judges', () => {
         maxSignals: 8,
         timeoutMs: 1000,
         allowFallback: false,
-        mode: 'single'
+        mode: 'single',
+        retries: 0
       },
       run: async () => ({
         text: '{"judge_scores":[72,65,61]}',
@@ -120,7 +122,8 @@ describe('ai judges', () => {
         maxSignals: 8,
         timeoutMs: 1000,
         allowFallback: false,
-        mode: 'ensemble'
+        mode: 'ensemble',
+        retries: 0
       },
       run: async (input) =>
         input.preferredProvider === 'claude'

@@ -45,8 +45,8 @@ describe('noise gate', () => {
       const result = await classifyBatch(signals, { runPrompt: mockRunPrompt });
 
       expect(result).toHaveLength(2);
-      expect(result[0].classification).toBe('strong');
-      expect(result[1].classification).toBe('noise');
+      expect(result[0]!.classification).toBe('strong');
+      expect(result[1]!.classification).toBe('noise');
       expect(mockRunPrompt).toHaveBeenCalledOnce();
     });
   });

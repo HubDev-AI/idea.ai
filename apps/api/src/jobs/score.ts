@@ -1,3 +1,4 @@
+import type { RunPromptResult } from '@idea/ai-runtime/src/types';
 import {
   applyPainMemory,
   applyTimingMemory,
@@ -81,20 +82,14 @@ export const scoreSignalWithRetriever = async ({
   basePain?: number;
   baseTiming?: number;
 }) => {
-  const memoryContext = await loadMemoryContext(memoryRetriever, {
-    topic,
-    source,
-    canonicalText,
-    topK
-  });
+  const memoryQuery: Parameters<typeof loadMemoryContext>[1] = { topic, source, canonicalText };
+  if (topK !== undefined) memoryQuery.topK = topK;
+  const memoryContext = await loadMemoryContext(memoryRetriever, memoryQuery);
 
-  return scoreSignal({
-    text,
-    judgeScores,
-    memoryContext,
-    basePain,
-    baseTiming
-  });
+  const scoreInput: ScoreSignalInput = { text, judgeScores, memoryContext };
+  if (basePain !== undefined) scoreInput.basePain = basePain;
+  if (baseTiming !== undefined) scoreInput.baseTiming = baseTiming;
+  return scoreSignal(scoreInput);
 };
 
 export const scoreSignalWithAiFallback = async ({
@@ -114,29 +109,31 @@ export const scoreSignalWithAiFallback = async ({
   canonicalText: string;
   memoryRetriever?: MemoryRetriever;
   topK?: number;
-  runPrompt?: (input: { prompt: string; timeoutMs?: number }) => Promise<{ text: string }>;
+  runPrompt?: (input: { prompt: string; timeoutMs?: number }) => Promise<RunPromptResult>;
 }): Promise<ReturnType<typeof scoreSignal> & { aiScored: boolean; reasoning?: string }> => {
   let aiResult: AiScoreResult | null = null;
   if (runPrompt) {
     aiResult = await aiScoreSignal({ text, source, topic }, { runPrompt });
   }
 
-  const result = await scoreSignalWithRetriever({
+  const retrieverArgs: Parameters<typeof scoreSignalWithRetriever>[0] = {
     text,
     judgeScores,
     topic,
     source,
-    canonicalText,
-    memoryRetriever,
-    topK,
-    basePain: aiResult?.pain,
-    baseTiming: aiResult?.timing
-  });
+    canonicalText
+  };
+  if (memoryRetriever !== undefined) retrieverArgs.memoryRetriever = memoryRetriever;
+  if (topK !== undefined) retrieverArgs.topK = topK;
+  if (aiResult?.pain !== undefined) retrieverArgs.basePain = aiResult.pain;
+  if (aiResult?.timing !== undefined) retrieverArgs.baseTiming = aiResult.timing;
+  const result = await scoreSignalWithRetriever(retrieverArgs);
 
-  return {
+  const returnVal: ReturnType<typeof scoreSignal> & { aiScored: boolean; reasoning?: string } = {
     ...result,
     buildability: aiResult?.buildability ?? result.buildability,
-    aiScored: aiResult !== null,
-    reasoning: aiResult?.reasoning
+    aiScored: aiResult !== null
   };
+  if (aiResult?.reasoning !== undefined) returnVal.reasoning = aiResult.reasoning;
+  return returnVal;
 };

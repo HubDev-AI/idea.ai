@@ -89,7 +89,7 @@ describe('PostgresMemoryStore', () => {
       blended: 72
     });
     // Verify query used the limit parameter
-    expect(mockQuery.mock.calls[0][1]).toEqual([10]);
+    expect(mockQuery.mock.calls[0]![1]).toEqual([10]);
   });
 
   it('listAllSignals defaults limit to 500', async () => {
@@ -97,7 +97,7 @@ describe('PostgresMemoryStore', () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
     await store.listAllSignals();
-    expect(mockQuery.mock.calls[0][1]).toEqual([500]);
+    expect(mockQuery.mock.calls[0]![1]).toEqual([500]);
   });
 
   it('listAllSignals coerces NaN/null values to 0', async () => {
@@ -119,10 +119,10 @@ describe('PostgresMemoryStore', () => {
     });
     const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
     const signals = await store.listAllSignals();
-    expect(signals[0].pain).toBe(0);
-    expect(signals[0].timing).toBe(0);
-    expect(signals[0].buildability).toBe(0);
-    expect(signals[0].blended).toBe(0);
+    expect(signals[0]!.pain).toBe(0);
+    expect(signals[0]!.timing).toBe(0);
+    expect(signals[0]!.buildability).toBe(0);
+    expect(signals[0]!.blended).toBe(0);
   });
 
   /* ---- save ---- */
@@ -157,9 +157,9 @@ describe('PostgresMemoryStore', () => {
 
     expect(mockConnect).toHaveBeenCalledTimes(1);
     // First call: BEGIN
-    expect(mockQuery.mock.calls[0][0]).toBe('BEGIN');
+    expect(mockQuery.mock.calls[0]![0]).toBe('BEGIN');
     // Last call: COMMIT
-    expect(mockQuery.mock.calls[mockQuery.mock.calls.length - 1][0]).toBe('COMMIT');
+    expect(mockQuery.mock.calls[mockQuery.mock.calls.length - 1]![0]).toBe('COMMIT');
     // client.release called in finally block
     expect(mockRelease).toHaveBeenCalledTimes(1);
   });
@@ -282,7 +282,7 @@ describe('PostgresMemoryStore', () => {
       observed_at: '2026-03-01T00:00:00.000Z'
     });
     // Verify query params include embedding vector, topic, source, limit
-    const params = mockQuery.mock.calls[0][1];
+    const params = mockQuery.mock.calls[0]![1];
     expect(params[1]).toBe('ai');   // topic
     expect(params[2]).toBe('gh');   // source
     expect(params[3]).toBe(8);     // default topK
@@ -298,7 +298,7 @@ describe('PostgresMemoryStore', () => {
       source: 's',
       topK: 3
     });
-    const params = mockQuery.mock.calls[0][1];
+    const params = mockQuery.mock.calls[0]![1];
     expect(params[3]).toBe(3);
   });
 
@@ -329,8 +329,8 @@ describe('PostgresMemoryStore', () => {
       avg_pain: 72.5,
       avg_timing: 68
     });
-    expect(windows[1].window).toBe('30d');
-    expect(windows[2].window).toBe('90d');
+    expect(windows[1]!.window).toBe('30d');
+    expect(windows[2]!.window).toBe('90d');
   });
 
   it('getTrendWindows fills missing windows with zeroes', async () => {
@@ -350,7 +350,7 @@ describe('PostgresMemoryStore', () => {
 
     expect(windows).toHaveLength(3);
     // 7d found
-    expect(windows[0].count_signals).toBe(2);
+    expect(windows[0]!.count_signals).toBe(2);
     // 30d fallback
     expect(windows[1]).toEqual({
       topic: 'ai',
@@ -361,8 +361,8 @@ describe('PostgresMemoryStore', () => {
       avg_timing: 0
     });
     // 90d fallback
-    expect(windows[2].window).toBe('90d');
-    expect(windows[2].count_signals).toBe(0);
+    expect(windows[2]!.window).toBe('90d');
+    expect(windows[2]!.count_signals).toBe(0);
   });
 
   /* ---- querySignals ---- */
@@ -407,7 +407,7 @@ describe('PostgresMemoryStore', () => {
       const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20, source: 'hn' });
       expect(result.items).toHaveLength(1);
       // Verify SQL contains source filter
-      const countCall = mockQuery.mock.calls[0];
+      const countCall = mockQuery.mock.calls[0]!;
       expect(countCall[0]).toContain('source');
       expect(countCall[1]).toContain('hn');
     });
@@ -425,7 +425,7 @@ describe('PostgresMemoryStore', () => {
       const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
       const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20, thesisKey: 'remote-dev-tools' });
       expect(result.items).toHaveLength(1);
-      const sql = mockQuery.mock.calls[0][0];
+      const sql = mockQuery.mock.calls[0]![0];
       expect(sql).toContain('thesis_evidence');
       expect(sql).toContain('thesis_candidates');
     });

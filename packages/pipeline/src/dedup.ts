@@ -13,9 +13,9 @@ const cosineSimilarity = (a: number[], b: number[]): number => {
   if (a.length !== b.length) return 0;
   let dot = 0, magA = 0, magB = 0;
   for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
+    dot += a[i]! * b[i]!;
+    magA += a[i]! * a[i]!;
+    magB += b[i]! * b[i]!;
   }
   const denom = Math.sqrt(magA) * Math.sqrt(magB);
   return denom === 0 ? 0 : dot / denom;
@@ -30,19 +30,19 @@ export const findDuplicates = (
   const seen = new Set<string>();
 
   for (let i = 0; i < signals.length; i++) {
-    if (seen.has(signals[i].signal_id)) continue;
+    if (seen.has(signals[i]!.signal_id)) continue;
 
     for (let j = i + 1; j < signals.length; j++) {
-      if (seen.has(signals[j].signal_id)) continue;
-      if (signals[i].source === signals[j].source) continue;
+      if (seen.has(signals[j]!.signal_id)) continue;
+      if (signals[i]!.source === signals[j]!.source) continue;
 
-      const sim = cosineSimilarity(signals[i].embedding, signals[j].embedding);
+      const sim = cosineSimilarity(signals[i]!.embedding, signals[j]!.embedding);
       if (sim >= threshold) {
         clusters.push({
-          signals: [signals[i].signal_id, signals[j].signal_id],
+          signals: [signals[i]!.signal_id, signals[j]!.signal_id],
           similarity: Math.round(sim * 1000) / 1000
         });
-        seen.add(signals[j].signal_id);
+        seen.add(signals[j]!.signal_id);
       }
     }
   }

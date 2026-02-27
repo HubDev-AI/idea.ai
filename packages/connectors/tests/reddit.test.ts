@@ -30,10 +30,10 @@ describe('reddit connector', () => {
     });
 
     expect(results).toHaveLength(1);
-    expect(results[0].source).toBe('reddit');
-    expect(results[0].source_item_id).toBe('reddit:abc123');
-    expect(results[0].text).toContain('SOC2');
-    expect(results[0].url).toContain('reddit.com');
+    expect(results[0]!.source).toBe('reddit');
+    expect(results[0]!.source_item_id).toBe('reddit:abc123');
+    expect(results[0]!.text).toContain('SOC2');
+    expect(results[0]!.url).toContain('reddit.com');
   });
 
   it('has sensible default subreddits', () => {

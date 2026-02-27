@@ -6,7 +6,7 @@ export const medianOfThree = (scores: [number, number, number] | number[]): numb
   }
 
   const [a, b, c] = scores.map((score) => clamp(score)).sort((left, right) => left - right);
-  return b ?? a ?? c;
+  return b ?? a ?? c ?? 0;
 };
 
 export const scoreBuildability = (judgeScores: [number, number, number] | number[]): number =>

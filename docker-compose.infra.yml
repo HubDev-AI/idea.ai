@@ -11,6 +11,7 @@ services:
       - "5917:5432"
     volumes:
       - idea_ai_pg_data:/var/lib/postgresql/data
+      - ./apps/api/db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U idea_ai -d idea_ai"]
       interval: 5s

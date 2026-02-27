@@ -34,7 +34,7 @@ const sanitizeText = (value: string): string => {
       const nextCode = value.charCodeAt(index + 1);
       const nextIsLow = nextCode >= 0xdc00 && nextCode <= 0xdfff;
       if (nextIsLow) {
-        output += value[index] + value[index + 1];
+        output += value[index]! + value[index + 1]!;
         index += 1;
       } else {
         output += '\uFFFD';
@@ -120,18 +120,19 @@ export const registerFeedRoute = (
 
     // When memoryStore is available, use DB-backed pagination via querySignals
     if (deps.memoryStore) {
-      const windowDays = WINDOW_MAP[windowParam ?? '7d'];
+      const windowDays = WINDOW_MAP[windowParam ?? '7d'] ?? 7;
       const requestedPageSize = parsePositiveInt(request.query.page_size, 20);
       const pageSize = Math.min(MAX_PAGE_SIZE, requestedPageSize);
       const page = parsePositiveInt(request.query.page, 1);
 
-      const result = await deps.memoryStore.querySignals({
+      const queryParams: Parameters<typeof deps.memoryStore.querySignals>[0] = {
         windowDays,
         page,
-        pageSize,
-        source: sourceParam,
-        thesisKey: thesisKeyParam,
-      });
+        pageSize
+      };
+      if (sourceParam !== undefined) queryParams.source = sourceParam;
+      if (thesisKeyParam !== undefined) queryParams.thesisKey = thesisKeyParam;
+      const result = await deps.memoryStore.querySignals(queryParams);
 
       const items = result.items
         .map(signalToFeedRecord)

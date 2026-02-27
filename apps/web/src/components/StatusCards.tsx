@@ -7,9 +7,11 @@ type StatusCardsProps = {
   agentStatus: AgentStatusRecord | null;
 };
 
-const statusDot = (status: string): string => {
+const statusDot = (status: string, enabled?: boolean): string => {
   if (status === 'active' || status === 'healthy') return 'dot-ok';
-  if (status === 'degraded' || status === 'error') return 'dot-err';
+  if (status === 'degraded') return 'dot-warn';
+  if (status === 'error') return 'dot-err';
+  if (status === 'idle' && enabled) return 'dot-standby';
   return 'dot-idle';
 };
 
@@ -39,10 +41,10 @@ export const StatusCards: React.FC<StatusCardsProps> = ({ connectors, aiHealth, 
         <div className="status-card-body">
           {enabledProviders.map((p) => (
             <div key={p.provider} className="status-row">
-              <span className={`status-dot ${statusDot(p.status)}`} />
+              <span className={`status-dot ${statusDot(p.status, p.enabled)}`} />
               <span className="status-name">{p.provider}</span>
               <span className="status-detail">
-                {p.succeeded}ok {p.failed > 0 ? `${p.failed}err` : ''}
+                {p.status === 'idle' && p.attempted === 0 ? 'standby' : `${p.succeeded}ok${p.failed > 0 ? ` ${p.failed}err` : ''}`}
               </span>
             </div>
           ))}

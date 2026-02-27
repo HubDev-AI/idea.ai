@@ -42,12 +42,10 @@ export const registerLogsRoute = (
     const runId = query.run_id?.trim();
     const scope = parseScope(query.scope);
 
-    return {
-      limit,
-      level,
-      run_id: runId ? runId : undefined,
-      scope
-    };
+    const result: ListLogsQuery = { limit, scope };
+    if (level !== undefined) result.level = level;
+    if (runId) result.run_id = runId;
+    return result;
   };
 
   const logsQuerySchema = {

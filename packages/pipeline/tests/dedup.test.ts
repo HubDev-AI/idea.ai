@@ -15,8 +15,8 @@ describe('cross-source dedup', () => {
 
     const dupes = findDuplicates(signals, { threshold: 0.99 });
     expect(dupes).toHaveLength(1);
-    expect(dupes[0].signals).toContain('hn-1');
-    expect(dupes[0].signals).toContain('gh-1');
+    expect(dupes[0]!.signals).toContain('hn-1');
+    expect(dupes[0]!.signals).toContain('gh-1');
   });
 
   it('ignores same-source pairs', () => {

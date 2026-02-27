@@ -64,9 +64,9 @@ export const createExecutionLogger = ({
       level,
       run_id: safeRunId,
       component,
-      message,
-      context
+      message
     };
+    if (context !== undefined) entry.context = context;
 
     try {
       await ensureDir;

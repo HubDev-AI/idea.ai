@@ -29,7 +29,7 @@ describe('producthunt connector', () => {
     const results = await fetchProductHunt({ fetchImpl: mockFetch, token: 'test-token' });
 
     expect(results).toHaveLength(1);
-    expect(results[0].source).toBe('producthunt');
-    expect(results[0].text).toContain('ComplianceBot');
+    expect(results[0]!.source).toBe('producthunt');
+    expect(results[0]!.text).toContain('ComplianceBot');
   });
 });
