@@ -11,7 +11,7 @@ describe('pipeline wiring', () => {
       canonicalText: 'soc2 compliance is painful'
     });
 
-    expect(result.pain).toBeGreaterThan(0);
+    expect(result.demand).toBeGreaterThan(0);
     expect(result.timing).toBeGreaterThan(0);
     expect(result.aiScored).toBe(false);
   });

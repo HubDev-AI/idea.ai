@@ -13,14 +13,14 @@ describe('worker routing', () => {
 
   it('fans out memory indexed jobs into all scoring queues', () => {
     expect(routeNextQueues('memory:index:signal-1')).toEqual([
-      QUEUE_NAMES.scorePain,
+      QUEUE_NAMES.scoreDemand,
       QUEUE_NAMES.scoreTiming,
       QUEUE_NAMES.scoreBuildability
     ]);
   });
 
   it('routes scored judge jobs to aggregate queue', () => {
-    expect(routeNextQueue('score:pain:signal-1')).toBe(QUEUE_NAMES.scoreAggregate);
+    expect(routeNextQueue('score:demand:signal-1')).toBe(QUEUE_NAMES.scoreAggregate);
     expect(routeNextQueue('score:timing:signal-1')).toBe(QUEUE_NAMES.scoreAggregate);
     expect(routeNextQueue('score:buildability:signal-1')).toBe(QUEUE_NAMES.scoreAggregate);
   });

@@ -1,9 +1,10 @@
 export type SignalWithBlend = {
   id: string;
   blended: number;
-  pain: number;
+  demand: number;
   timing: number;
   buildability: number;
+  virality: number;
 };
 
 export const rankSignals = <T extends SignalWithBlend>(signals: T[]): T[] =>

@@ -10,11 +10,11 @@ export const routeNextQueues = (jobName: string): QueueName[] => {
   }
 
   if (jobName.startsWith('memory:index')) {
-    return [QUEUE_NAMES.scorePain, QUEUE_NAMES.scoreTiming, QUEUE_NAMES.scoreBuildability];
+    return [QUEUE_NAMES.scoreDemand, QUEUE_NAMES.scoreTiming, QUEUE_NAMES.scoreBuildability];
   }
 
   if (
-    jobName.startsWith('score:pain') ||
+    jobName.startsWith('score:demand') ||
     jobName.startsWith('score:timing') ||
     jobName.startsWith('score:buildability')
   ) {

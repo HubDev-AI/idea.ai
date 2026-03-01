@@ -26,25 +26,28 @@ describe('SignalRow', () => {
     expect(screen.getByText(/Compliance blockers/i)).toBeTruthy();
   });
 
-  it('renders breakdown chips when pain/timing/buildability are present', () => {
+  it('renders breakdown chips when demand/timing/buildability/virality are present', () => {
     render(
-      <SignalRow signal={{ ...baseSignal, pain: 72, timing: 61, buildability: 55 }} />
+      <SignalRow signal={{ ...baseSignal, demand: 72, timing: 61, buildability: 55, virality: 40 }} />
     );
 
     expect(screen.getByText('72')).toBeTruthy();
     expect(screen.getByText('61')).toBeTruthy();
     expect(screen.getByText('55')).toBeTruthy();
-    expect(screen.getByText('Pain')).toBeTruthy();
+    expect(screen.getByText('40')).toBeTruthy();
+    expect(screen.getByText('Demand')).toBeTruthy();
     expect(screen.getByText('Timing')).toBeTruthy();
     expect(screen.getByText('Build')).toBeTruthy();
+    expect(screen.getByText('Viral')).toBeTruthy();
   });
 
   it('hides breakdown chips when scores are absent', () => {
     render(<SignalRow signal={baseSignal} />);
 
-    expect(screen.queryByText('Pain')).toBeNull();
+    expect(screen.queryByText('Demand')).toBeNull();
     expect(screen.queryByText('Timing')).toBeNull();
     expect(screen.queryByText('Build')).toBeNull();
+    expect(screen.queryByText('Viral')).toBeNull();
   });
 
   it('toggles reasoning on click', () => {

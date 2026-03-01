@@ -16,7 +16,7 @@ describe('agent runner', () => {
       canonicalKey: 'compliance:soc2', title: 'SOC2 copilot', topic: 'compliance',
       status: 'watching', confidence: 72, scoreTotal: 72,
       problemStatement: 'p', targetBuyer: 'b', proposedSolution: 's',
-      evidenceCount: 5, avgPain: 70, avgTiming: 60, avgBuildability: 65,
+      evidenceCount: 5, avgDemand: 70, avgTiming: 60, avgBuildability: 65, avgVirality: 30,
       latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
     });
 
@@ -58,7 +58,7 @@ describe('agent runner', () => {
       canonicalKey: 'billing:copilot', title: 'Billing Copilot', topic: 'billing',
       status: 'watching', confidence: 60, scoreTotal: 60,
       problemStatement: 'p', targetBuyer: 'b', proposedSolution: 's',
-      evidenceCount: 3, avgPain: 65, avgTiming: 55, avgBuildability: 60,
+      evidenceCount: 3, avgDemand: 65, avgTiming: 55, avgBuildability: 60, avgVirality: 25,
       latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
     });
 
@@ -158,7 +158,7 @@ describe('agent runner', () => {
       canonicalKey: 'test:thesis', title: 'Test', topic: 'test',
       status: 'watching', confidence: 50, scoreTotal: 50,
       problemStatement: 'p', targetBuyer: 'b', proposedSolution: 's',
-      evidenceCount: 3, avgPain: 50, avgTiming: 50, avgBuildability: 50,
+      evidenceCount: 3, avgDemand: 50, avgTiming: 50, avgBuildability: 50, avgVirality: 0,
       latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
     });
 

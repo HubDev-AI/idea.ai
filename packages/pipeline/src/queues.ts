@@ -6,7 +6,7 @@ export const QUEUE_NAMES = {
   normalize: 'normalize',
   memoryIndex: 'memory.index',
   memoryWindow: 'memory.window',
-  scorePain: 'score.pain',
+  scoreDemand: 'score.demand',
   scoreTiming: 'score.timing',
   scoreBuildability: 'score.buildability',
   scoreAggregate: 'score.aggregate',

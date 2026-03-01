@@ -17,9 +17,10 @@ type ThesisRow = {
   last_seen_at: Date;
   evidence_count: number;
   source_count: number;
-  avg_pain: number | string;
+  avg_demand: number | string;
   avg_timing: number | string;
   avg_buildability: number | string;
+  avg_virality: number | string;
 };
 
 const toNumber = (v: unknown): number => {
@@ -45,9 +46,10 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   proposedSolution: row.proposed_solution,
   evidenceCount: toNumber(row.evidence_count),
   sourceCount: toNumber(row.source_count),
-  avgPain: toNumber(row.avg_pain),
+  avgDemand: toNumber(row.avg_demand),
   avgTiming: toNumber(row.avg_timing),
   avgBuildability: toNumber(row.avg_buildability),
+  avgVirality: toNumber(row.avg_virality),
   latestObservedAt: new Date(row.last_seen_at).toISOString(),
   evidence: [],
   estimatedScope: toScope(row.estimated_scope)
@@ -65,9 +67,10 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const sql = `
       SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
              COUNT(DISTINCT sm.source)::int AS source_count,
-             ROUND(COALESCE(AVG(sm.pain), 0))::int AS avg_pain,
+             ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
-             ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability
+             ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
+             ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
@@ -83,9 +86,10 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const result = await pool.query<ThesisRow>(
       `SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
               COUNT(DISTINCT sm.source)::int AS source_count,
-              ROUND(COALESCE(AVG(sm.pain), 0))::int AS avg_pain,
+              ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
               ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
-              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability
+              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
+              ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
        FROM thesis_candidates tc
        LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
        LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
@@ -157,9 +161,10 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const sql = `
       SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
              COUNT(DISTINCT sm.source)::int AS source_count,
-             ROUND(COALESCE(AVG(sm.pain), 0))::int AS avg_pain,
+             ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
-             ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability
+             ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
+             ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id

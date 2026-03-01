@@ -9,7 +9,7 @@ export type ScoredSignalInput = {
   snippet: string;
   text: string;
   observedAt: string;
-  pain: number;
+  demand: number;
   timing: number;
   buildability: number;
   blended: number;
@@ -82,7 +82,7 @@ export const indexSignalMemory = async (
       source: input.source,
       canonical_text: canonicalText,
       observed_at: input.observedAt,
-      pain: input.pain,
+      demand: input.demand,
       timing: input.timing,
       buildability: input.buildability,
       blended: input.blended,

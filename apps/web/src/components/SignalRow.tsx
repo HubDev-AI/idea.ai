@@ -7,7 +7,7 @@ type SignalRowProps = {
 };
 
 const hasBreakdown = (signal: SignalRecord): boolean =>
-  signal.pain != null || signal.timing != null || signal.buildability != null;
+  signal.demand != null || signal.timing != null || signal.buildability != null || signal.virality != null;
 
 const relativeTime = (iso: string): string => {
   const diff = Date.now() - new Date(iso).getTime();
@@ -46,9 +46,10 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
           <span className="next-action">{signal.next_action}</span>
           {showBreakdown && (
             <>
-              {signal.pain != null && <span className="breakdown-chip">Pain <strong>{signal.pain}</strong></span>}
+              {signal.demand != null && <span className="breakdown-chip">Demand <strong>{signal.demand}</strong></span>}
               {signal.timing != null && <span className="breakdown-chip">Timing <strong>{signal.timing}</strong></span>}
               {signal.buildability != null && <span className="breakdown-chip">Build <strong>{signal.buildability}</strong></span>}
+              {signal.virality != null && <span className="breakdown-chip">Viral <strong>{signal.virality}</strong></span>}
             </>
           )}
           <span className="signal-time">{relativeTime(signal.updated_at)}</span>

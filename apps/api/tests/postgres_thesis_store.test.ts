@@ -61,8 +61,8 @@ describe('PostgresThesisStore', () => {
     await store.upsert({
       canonicalKey: 'k1', title: 'T1', topic: 'ai', status: 'candidate',
       confidence: 50, scoreTotal: 50, problemStatement: 'p', targetBuyer: 'b',
-      proposedSolution: 's', evidenceCount: 1, avgPain: 50, avgTiming: 50,
-      avgBuildability: 50, latestObservedAt: '2026-01-01T00:00:00Z', evidence: []
+      proposedSolution: 's', evidenceCount: 1, avgDemand: 50, avgTiming: 50,
+      avgBuildability: 50, avgVirality: 0, latestObservedAt: '2026-01-01T00:00:00Z', evidence: []
     });
     expect(mockQuery).toHaveBeenCalledTimes(1);
     expect(mockQuery.mock.calls[0]![0]).toContain('ON CONFLICT');

@@ -16,7 +16,7 @@ describe('memory-aware scoring', () => {
           {
             signal_id: 'h1',
             distance: 0.2,
-            pain: 85,
+            demand: 85,
             timing: 70,
             source: 'hn',
             observed_at: '2026-02-20T00:00:00.000Z'
@@ -28,7 +28,7 @@ describe('memory-aware scoring', () => {
             source: 'hn',
             window: '7d',
             count_signals: 12,
-            avg_pain: 75,
+            avg_demand: 75,
             avg_timing: 66
           },
           {
@@ -36,7 +36,7 @@ describe('memory-aware scoring', () => {
             source: 'hn',
             window: '30d',
             count_signals: 16,
-            avg_pain: 63,
+            avg_demand: 63,
             avg_timing: 58
           },
           {
@@ -44,14 +44,14 @@ describe('memory-aware scoring', () => {
             source: 'hn',
             window: '90d',
             count_signals: 28,
-            avg_pain: 55,
+            avg_demand: 55,
             avg_timing: 51
           }
         ]
       }
     });
 
-    expect(withMemory.pain).toBeGreaterThan(base.pain);
+    expect(withMemory.demand).toBeGreaterThan(base.demand);
     expect(withMemory.timing).toBeGreaterThan(base.timing);
     expect(withMemory.memory.novelty).toBeGreaterThanOrEqual(0);
     expect(withMemory.memory.persistence).toBeGreaterThan(0);

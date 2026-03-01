@@ -36,22 +36,22 @@ describe('V2 integration', () => {
   it('AI scoring produces structured scores', async () => {
     const mockRunPrompt = vi.fn().mockResolvedValue({
       text: JSON.stringify({
-        pain: 85,
+        demand: 85,
         timing: 72,
         buildability: 68,
-        reasoning: 'Strong compliance pain with clear timing signal'
+        reasoning: 'Strong compliance demand with clear timing signal'
       }),
       provider: 'claude',
       meta: {}
     });
 
     const result = await aiScoreSignal(
-      { text: 'SOC2 audit pain', source: 'hn', topic: 'compliance' },
+      { text: 'SOC2 audit demand', source: 'hn', topic: 'compliance' },
       { runPrompt: mockRunPrompt }
     );
 
     expect(result).not.toBeNull();
-    expect(result!.pain).toBe(85);
+    expect(result!.demand).toBe(85);
     expect(result!.timing).toBe(72);
     expect(result!.buildability).toBe(68);
     expect(result!.reasoning).toContain('compliance');
@@ -59,12 +59,12 @@ describe('V2 integration', () => {
 
   it('dual analyst reconciles aligned scores', () => {
     const result = reconcileScores(
-      { pain: 80, timing: 70, buildability: 65 },
-      { pain: 75, timing: 68, buildability: 70 }
+      { demand: 80, timing: 70, buildability: 65, virality: 50 },
+      { demand: 75, timing: 68, buildability: 70, virality: 55 }
     );
 
     expect(result.agreement).toBe('aligned');
-    expect(result.pain).toBe(78); // avg(80, 75) = 77.5, rounded to 78
+    expect(result.demand).toBe(78); // avg(80, 75) = 77.5, rounded to 78
     expect(result.timing).toBe(69); // avg(70, 68) = 69
     expect(result.buildability).toBe(68); // avg(65, 70) = 67.5, rounded to 68
     expect(result.contestedDimensions).toHaveLength(0);
@@ -72,22 +72,22 @@ describe('V2 integration', () => {
 
   it('dual analyst detects contested scores', () => {
     const result = reconcileScores(
-      { pain: 90, timing: 70, buildability: 65 },
-      { pain: 40, timing: 68, buildability: 70 }
+      { demand: 90, timing: 70, buildability: 65, virality: 50 },
+      { demand: 40, timing: 68, buildability: 70, virality: 55 }
     );
 
     expect(result.agreement).toBe('contested');
-    expect(result.contestedDimensions).toContain('pain');
+    expect(result.contestedDimensions).toContain('demand');
   });
 
   it('dual analyst returns single when only one provider responds', () => {
     const result = reconcileScores(
-      { pain: 80, timing: 70, buildability: 65 },
+      { demand: 80, timing: 70, buildability: 65, virality: 50 },
       null
     );
 
     expect(result.agreement).toBe('single');
-    expect(result.pain).toBe(80);
+    expect(result.demand).toBe(80);
   });
 
   it('dualAnalystRun calls both providers in parallel', async () => {
@@ -246,9 +246,10 @@ describe('V2 integration', () => {
       targetBuyer: 'engineers',
       proposedSolution: 'test solution',
       evidenceCount: 3,
-      avgPain: 60,
+      avgDemand: 60,
       avgTiming: 55,
       avgBuildability: 50,
+      avgVirality: 20,
       latestObservedAt: '2026-02-25T10:00:00Z',
       evidence: []
     });
@@ -271,9 +272,10 @@ describe('V2 integration', () => {
       targetBuyer: 'engineers',
       proposedSolution: 'updated solution',
       evidenceCount: 7,
-      avgPain: 75,
+      avgDemand: 75,
       avgTiming: 70,
       avgBuildability: 65,
+      avgVirality: 30,
       latestObservedAt: '2026-02-25T12:00:00Z',
       evidence: []
     });
@@ -290,15 +292,15 @@ describe('V2 integration', () => {
     await store.upsert({
       canonicalKey: 'a', title: 'A', topic: 't', status: 'watching',
       confidence: 60, scoreTotal: 60, problemStatement: 'p', targetBuyer: 'b',
-      proposedSolution: 's', evidenceCount: 2, avgPain: 50, avgTiming: 50,
-      avgBuildability: 50, latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
+      proposedSolution: 's', evidenceCount: 2, avgDemand: 50, avgTiming: 50,
+      avgBuildability: 50, avgVirality: 0, latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
     });
 
     await store.upsert({
       canonicalKey: 'b', title: 'B', topic: 't', status: 'promoted',
       confidence: 90, scoreTotal: 90, problemStatement: 'p', targetBuyer: 'b',
-      proposedSolution: 's', evidenceCount: 8, avgPain: 80, avgTiming: 75,
-      avgBuildability: 70, latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
+      proposedSolution: 's', evidenceCount: 8, avgDemand: 80, avgTiming: 75,
+      avgBuildability: 70, avgVirality: 35, latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
     });
 
     const promoted = await store.list({ status: 'promoted' });
@@ -319,9 +321,10 @@ describe('V2 integration', () => {
       targetBuyer: 'b',
       proposedSolution: 's',
       evidenceCount: 5,
-      avgPain: 70,
+      avgDemand: 70,
       avgTiming: 60,
       avgBuildability: 65,
+      avgVirality: 25,
       latestObservedAt: '2026-02-25T10:00:00Z',
       evidence: []
     });
@@ -408,9 +411,10 @@ describe('V2 integration', () => {
       targetBuyer: 'b',
       proposedSolution: 's',
       evidenceCount: 3,
-      avgPain: 60,
+      avgDemand: 60,
       avgTiming: 55,
       avgBuildability: 50,
+      avgVirality: 20,
       latestObservedAt: '2026-02-25T10:00:00Z',
       evidence: []
     });
@@ -437,9 +441,10 @@ describe('V2 integration', () => {
       targetBuyer: 'b',
       proposedSolution: 's',
       evidenceCount: 3,
-      avgPain: 60,
+      avgDemand: 60,
       avgTiming: 55,
       avgBuildability: 50,
+      avgVirality: 20,
       latestObservedAt: '2026-02-25T10:00:00Z',
       evidence: []
     });
