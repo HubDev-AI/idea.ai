@@ -39,7 +39,7 @@ export const persistenceScoreFromWindows = (windows: TrendWindowSnapshot[]): num
       return sum;
     }
 
-    return sum + part.snapshot.avg_pain * part.weight;
+    return sum + part.snapshot.avg_demand * part.weight;
   }, 0);
 
   return round2(clamp(weightedPain));
