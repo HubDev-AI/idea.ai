@@ -99,6 +99,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         source: s.source,
         demand: s.demand,
         timing: s.timing,
+        virality: s.virality,
         blended: s.blended,
         embedding: embeddingRows.get(s.signal_id)!
       }));
@@ -149,7 +150,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         text: s.canonical_text,
         source: s.source,
         demand: s.demand,
-        timing: s.timing
+        timing: s.timing,
+        virality: s.virality
       }))
     })),
     recentJournal: recentJournal.map((j) => ({
@@ -252,11 +254,12 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         text: s.canonical_text,
         source: s.source,
         demand: s.demand,
-        timing: s.timing
+        timing: s.timing,
+        virality: s.virality
       }));
 
     // Similarity search for historical signals
-    let historicalSignals: { signal_id: string; text: string; source: string; demand: number; timing: number }[] = [];
+    let historicalSignals: { signal_id: string; text: string; source: string; demand: number; timing: number; virality?: number }[] = [];
     if (deps.memoryStore && deps.embedText) {
       const topicEmbedding = await deps.embedText(dig.topic);
       if (topicEmbedding) {

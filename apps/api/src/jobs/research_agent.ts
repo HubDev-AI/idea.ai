@@ -14,6 +14,7 @@ export type AgentSignalSummary = {
   source: string;
   demand: number;
   timing: number;
+  virality?: number;
 };
 
 export type AgentTrendSummary = {
@@ -37,6 +38,7 @@ export type NewThesisProposal = {
   proposed_solution: string;
   supporting_signal_ids: string[];
   estimated_scope: 'small' | 'medium' | 'large';
+  virality_assessment?: string;
 };
 
 // === New types for phased execution ===
@@ -236,7 +238,7 @@ For estimated_scope use: "small" (solo dev, 1-2 months), "medium" (2-3 devs, 2-4
 Return ONLY valid JSON:
 {
   "thesis_updates": [{"canonicalKey": "...", "confidence_delta": <n>, "reasoning": "..."}],
-  "new_theses": [{"title": "...", "problem_statement": "...", "target_buyer": "...", "proposed_solution": "...", "supporting_signal_ids": ["..."], "estimated_scope": "small|medium|large"}],
+  "new_theses": [{"title": "...", "problem_statement": "...", "target_buyer": "...", "proposed_solution": "...", "supporting_signal_ids": ["..."], "estimated_scope": "small|medium|large", "virality_assessment": "1-2 sentence description of growth loop potential"}],
   "journal_entries": [{"entry_type": "trend_shift|emerging_pattern|thesis_evolution|market_signal", "topic": "...", "insight": "...", "narrative": "...", "confidence": <n>, "thesis_keys": ["..."], "signal_ids": ["..."]}]
 }`;
 };

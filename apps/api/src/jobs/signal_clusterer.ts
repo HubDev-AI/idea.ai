@@ -4,6 +4,7 @@ export type ClusterableSignal = {
   source: string;
   demand: number;
   timing: number;
+  virality?: number;
   blended: number;
   embedding: number[];
 };
