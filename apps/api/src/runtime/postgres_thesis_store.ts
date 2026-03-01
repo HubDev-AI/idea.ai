@@ -86,9 +86,10 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const result = await pool.query<ThesisRow>(
       `SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
               COUNT(DISTINCT sm.source)::int AS source_count,
-              ROUND(COALESCE(AVG(sm.pain), 0))::int AS avg_pain,
+              ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
               ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
-              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability
+              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
+              ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
        FROM thesis_candidates tc
        LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
        LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
