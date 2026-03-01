@@ -34,6 +34,7 @@ export type AgentRunnerDeps = {
   runClaude: (input: RunPromptInput) => Promise<RunPromptResult>;
   runCodex: (input: RunPromptInput) => Promise<RunPromptResult>;
   logger?: ExecutionLogger;
+  runId?: string;
 };
 
 const MAX_DEEP_DIVES = 2;
@@ -66,7 +67,7 @@ const noopLogger: Pick<ExecutionLogger, 'info' | 'warn' | 'debug' | 'error'> = {
 
 export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunResult> => {
   const log = deps.logger ?? noopLogger;
-  const runId = `agent-${Date.now()}`;
+  const runId = deps.runId ?? `agent-${Date.now()}`;
   let thesesUpdated = 0;
   let newCandidates = 0;
   const allAlerts: string[] = [];
@@ -274,7 +275,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         });
         historicalSignals = similar.map((s) => ({
           signal_id: s.signal_id,
-          text: s.signal_id, // findSimilar doesn't return text, use ID
+          text: s.canonical_text,
           source: s.source,
           pain: s.pain,
           timing: s.timing

@@ -84,7 +84,8 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         embedText: (text: string) => embedText(text, { fallbackToNull: true }),
         runClaude: runClaudePrompt,
         runCodex: runCodexPrompt,
-        logger
+        logger,
+        runId
       });
 
       await agentRunStore?.complete(runId, result);
@@ -156,8 +157,24 @@ const app = await buildServer(serverDeps);
 
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 
+const SHUTDOWN_TIMEOUT_MS = 15_000;
+
 const shutdown = async () => {
   clearInterval(agentTimer);
+
+  // Wait for in-flight agent run, mark as failed if still running
+  if (agentRunInFlight) {
+    try {
+      await Promise.race([
+        agentRunInFlight,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), SHUTDOWN_TIMEOUT_MS))
+      ]);
+    } catch {
+      // Run was interrupted or timed out — agentRunStore.fail() already called in executeAgentRun's catch block
+    }
+    agentRunInFlight = null;
+  }
+
   await readModel.close();
   if (memoryStore) {
     await memoryStore.close();

@@ -36,7 +36,14 @@ export const routeNextQueues = (jobName: string): QueueName[] => {
   return [];
 };
 
+/**
+ * @deprecated Use `routeNextQueues` (plural) to avoid dropping fan-out routes.
+ * This function only returns the first queue and silently drops the rest.
+ */
 export const routeNextQueue = (jobName: string): QueueName | null => {
   const next = routeNextQueues(jobName);
+  if (next.length > 1) {
+    console.warn(`routeNextQueue: dropping ${next.length - 1} fan-out queues for "${jobName}". Use routeNextQueues instead.`);
+  }
   return next[0] ?? null;
 };

@@ -43,7 +43,7 @@ import {
 
 const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
 const DEFAULT_SNAPSHOT_FILE = (): string => join(process.cwd(), 'logs', 'state', 'latest_snapshot.json');
-const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies'];
+const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt'];
 
 type Snapshot = {
   refreshedAt: number;
