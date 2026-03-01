@@ -1,4 +1,5 @@
 import type {
+  AgentRunResult,
   AgentStatusRecord,
   AiHealthRecord,
   AiProviderHealthRecord,
@@ -21,7 +22,8 @@ export type {
   ThesisListItem,
   ThesisPage,
   AgentStatusRecord,
-  InfraStatusRecord
+  InfraStatusRecord,
+  AgentRunResult
 };
 
 const resolveApiBaseUrl = (): string => {
@@ -114,30 +116,34 @@ export const fetchTheses = async ({
   page?: number;
   pageSize?: number;
   status?: string;
-} = {}): Promise<ThesisPage | ThesisListItem[]> => {
+} = {}): Promise<ThesisPage> => {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('page_size', String(pageSize));
   if (status) params.set('status', status);
   const response = await fetch(buildApiUrl(`/v1/theses?${params.toString()}`));
   if (!response.ok) throw new Error('Failed to load theses');
-  return response.json() as Promise<ThesisPage | ThesisListItem[]>;
+  const data = await response.json();
+
+  // Normalize legacy flat array response to ThesisPage
+  if (Array.isArray(data)) {
+    return {
+      items: data,
+      page: 1,
+      page_size: data.length,
+      total_items: data.length,
+      total_pages: 1,
+      has_next: false,
+      has_prev: false
+    };
+  }
+  return data as ThesisPage;
 };
 
 export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
   const response = await fetch(buildApiUrl('/v1/agent/status'));
   if (!response.ok) throw new Error('Failed to load agent status');
   return response.json() as Promise<AgentStatusRecord>;
-};
-
-export type AgentRunResult = {
-  thesesUpdated: number;
-  newCandidates: number;
-  alerts: string[];
-  investigateNext: string;
-  journalEntriesWritten: number;
-  clustersAnalyzed: number;
-  deepDivesPerformed: number;
 };
 
 export const triggerAgentRun = async (): Promise<AgentRunResult> => {

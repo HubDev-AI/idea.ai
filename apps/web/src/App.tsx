@@ -179,20 +179,15 @@ const App = () => {
 
       if (thesesResult.status === 'fulfilled') {
         const tp = thesesResult.value;
-        if (Array.isArray(tp)) {
-          // Legacy flat array response (server not yet updated)
-          setTheses(tp);
-        } else {
-          setTheses(tp.items);
-          setThesisPageInfo({
-            page: tp.page,
-            pageSize: tp.page_size,
-            totalItems: tp.total_items,
-            totalPages: tp.total_pages,
-            hasNext: tp.has_next,
-            hasPrev: tp.has_prev
-          });
-        }
+        setTheses(tp.items);
+        setThesisPageInfo({
+          page: tp.page,
+          pageSize: tp.page_size,
+          totalItems: tp.total_items,
+          totalPages: tp.total_pages,
+          hasNext: tp.has_next,
+          hasPrev: tp.has_prev
+        });
       }
 
       if (agentResult.status === 'fulfilled') {
@@ -231,7 +226,33 @@ const App = () => {
     return () => {
       clearInterval(timer);
     };
-  }, [requestedPage, requestedThesisPage, sourceFilter, thesisFilter]);
+  }, [requestedPage, sourceFilter, thesisFilter]);
+
+  // Separate thesis-only fetch (avoids 7-endpoint refresh on page change)
+  useEffect(() => {
+    let isCancelled = false;
+    const loadTheses = async () => {
+      try {
+        const tp = await fetchTheses({
+          page: requestedThesisPage,
+          pageSize: 10,
+          ...(thesisFilter ? { status: thesisFilter } : {})
+        });
+        if (isCancelled) return;
+        setTheses(tp.items);
+        setThesisPageInfo({
+          page: tp.page,
+          pageSize: tp.page_size,
+          totalItems: tp.total_items,
+          totalPages: tp.total_pages,
+          hasNext: tp.has_next,
+          hasPrev: tp.has_prev
+        });
+      } catch { /* handled by bulk fetch warning */ }
+    };
+    void loadTheses();
+    return () => { isCancelled = true; };
+  }, [requestedThesisPage, thesisFilter]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -364,20 +385,16 @@ const App = () => {
       if (statusRes.status === 'fulfilled') setAgentStatus(statusRes.value);
       if (thesesRes.status === 'fulfilled') {
         const tp = thesesRes.value;
-        if (Array.isArray(tp)) {
-          setTheses(tp);
-        } else {
-          setTheses(tp.items);
-          setRequestedThesisPage(1);
-          setThesisPageInfo({
-            page: tp.page,
-            pageSize: tp.page_size,
-            totalItems: tp.total_items,
-            totalPages: tp.total_pages,
-            hasNext: tp.has_next,
-            hasPrev: tp.has_prev
-          });
-        }
+        setTheses(tp.items);
+        setRequestedThesisPage(1);
+        setThesisPageInfo({
+          page: tp.page,
+          pageSize: tp.page_size,
+          totalItems: tp.total_items,
+          totalPages: tp.total_pages,
+          hasNext: tp.has_next,
+          hasPrev: tp.has_prev
+        });
       }
       if (signalsRes.status === 'fulfilled') {
         setSignals(signalsRes.value.items);
@@ -441,7 +458,7 @@ const App = () => {
                     type="button"
                     className="page-btn"
                     onClick={() => setRequestedThesisPage((v) => Math.max(1, v - 1))}
-                    disabled={!thesisPageInfo.hasPrev}
+                    disabled={!thesisPageInfo.hasPrev || isLoading}
                   >
                     Prev
                   </button>
@@ -452,7 +469,7 @@ const App = () => {
                     type="button"
                     className="page-btn"
                     onClick={() => setRequestedThesisPage((v) => v + 1)}
-                    disabled={!thesisPageInfo.hasNext}
+                    disabled={!thesisPageInfo.hasNext || isLoading}
                   >
                     Next
                   </button>

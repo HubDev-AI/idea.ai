@@ -454,11 +454,11 @@ const parseSnapshotPayload = (raw: string): Snapshot | null => {
   }
 };
 
-export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS) => {
+export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { persistentStore?: PostgresMemoryStore }) => {
   const initialAiJudgeSettings = resolveAiJudgeSettings(process.env);
   const initialAiPostScrapeSettings = resolveAiPostScrapeSettings(process.env);
   const memoryEntries: IndexedMemoryEntry[] = [];
-  let postgresMemoryStore: PostgresMemoryStore | null | undefined;
+  let postgresMemoryStore: PostgresMemoryStore | null | undefined = opts?.persistentStore ?? undefined;
   let snapshotHydrated = false;
   let refreshInFlight: Promise<Snapshot> | null = null;
   const sessionRunIds = new Set<string>();
