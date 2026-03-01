@@ -876,7 +876,15 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       };
       aiHealth = {
         ...runAiHealth,
-        refreshed_at: refreshedAtIso
+        refreshed_at: refreshedAtIso,
+        providers: runAiHealth.providers.map((p) => ({
+          ...p,
+          status: p.enabled ? 'idle' as const : 'disabled' as const,
+          attempted: 0,
+          succeeded: 0,
+          failed: 0,
+          retries: 0
+        }))
       };
       await persistSnapshotToDisk(process.env, logger, snapshot);
 
