@@ -6,7 +6,6 @@ import {
   buildApiUrl,
   type ConnectorRecord,
   type ExecutionLogRecord,
-  type InfraStatusRecord,
   fetchAgentStatus,
   fetchAiHealth,
   fetchConnectors,
@@ -15,6 +14,7 @@ import {
   fetchSignalCounts,
   fetchSignals,
   fetchTheses,
+  type InfraStatusRecord,
   type SignalRecord,
   type ThesisListItem,
   triggerAgentRun
@@ -76,6 +76,15 @@ const App = () => {
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
   const [requestedPage, setRequestedPage] = useState(1);
+  const [requestedThesisPage, setRequestedThesisPage] = useState(1);
+  const [thesisPageInfo, setThesisPageInfo] = useState({
+    page: 1,
+    pageSize: 10,
+    totalItems: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrev: false
+  });
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [splitPct, setSplitPct] = useState(50);
@@ -132,7 +141,7 @@ const App = () => {
         }),
         fetchConnectors(),
         fetchAiHealth(),
-        fetchTheses(),
+        fetchTheses({ page: requestedThesisPage, pageSize: 10 }),
         fetchAgentStatus(),
         fetchSignalCounts(),
         fetchInfraStatus()
@@ -169,7 +178,16 @@ const App = () => {
       }
 
       if (thesesResult.status === 'fulfilled') {
-        setTheses(thesesResult.value);
+        const tp = thesesResult.value;
+        setTheses(tp.items);
+        setThesisPageInfo({
+          page: tp.page,
+          pageSize: tp.page_size,
+          totalItems: tp.total_items,
+          totalPages: tp.total_pages,
+          hasNext: tp.has_next,
+          hasPrev: tp.has_prev
+        });
       }
 
       if (agentResult.status === 'fulfilled') {
@@ -209,6 +227,32 @@ const App = () => {
       clearInterval(timer);
     };
   }, [requestedPage, sourceFilter, thesisFilter]);
+
+  // Separate thesis-only fetch (avoids 7-endpoint refresh on page change)
+  useEffect(() => {
+    let isCancelled = false;
+    const loadTheses = async () => {
+      try {
+        const tp = await fetchTheses({
+          page: requestedThesisPage,
+          pageSize: 10,
+          ...(thesisFilter ? { status: thesisFilter } : {})
+        });
+        if (isCancelled) return;
+        setTheses(tp.items);
+        setThesisPageInfo({
+          page: tp.page,
+          pageSize: tp.page_size,
+          totalItems: tp.total_items,
+          totalPages: tp.total_pages,
+          hasNext: tp.has_next,
+          hasPrev: tp.has_prev
+        });
+      } catch { /* handled by bulk fetch warning */ }
+    };
+    void loadTheses();
+    return () => { isCancelled = true; };
+  }, [requestedThesisPage, thesisFilter]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -334,12 +378,24 @@ const App = () => {
       // Refresh all data since the agent creates/updates theses
       const [statusRes, thesesRes, signalsRes, countsRes] = await Promise.allSettled([
         fetchAgentStatus(),
-        fetchTheses(),
+        fetchTheses({ page: 1, pageSize: 10 }),
         fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
         fetchSignalCounts()
       ]);
       if (statusRes.status === 'fulfilled') setAgentStatus(statusRes.value);
-      if (thesesRes.status === 'fulfilled') setTheses(thesesRes.value);
+      if (thesesRes.status === 'fulfilled') {
+        const tp = thesesRes.value;
+        setTheses(tp.items);
+        setRequestedThesisPage(1);
+        setThesisPageInfo({
+          page: tp.page,
+          pageSize: tp.page_size,
+          totalItems: tp.total_items,
+          totalPages: tp.total_pages,
+          hasNext: tp.has_next,
+          hasPrev: tp.has_prev
+        });
+      }
       if (signalsRes.status === 'fulfilled') {
         setSignals(signalsRes.value.items);
         setPageInfo({
@@ -395,7 +451,30 @@ const App = () => {
           <section className="pane pane-left" style={{ width: `${splitPct}%` }}>
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
-              <span className="pane-count">{theses.length}</span>
+              <span className="pane-count">{thesisPageInfo.totalItems}</span>
+              {thesisPageInfo.totalPages > 1 && (
+                <div className="pane-header-right">
+                  <button
+                    type="button"
+                    className="page-btn"
+                    onClick={() => setRequestedThesisPage((v) => Math.max(1, v - 1))}
+                    disabled={!thesisPageInfo.hasPrev || isLoading}
+                  >
+                    Prev
+                  </button>
+                  <span className="page-info">
+                    {thesisPageInfo.page} / {thesisPageInfo.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    className="page-btn"
+                    onClick={() => setRequestedThesisPage((v) => v + 1)}
+                    disabled={!thesisPageInfo.hasNext || isLoading}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
             <div className="pane-scroll">
               {theses.map((t) => (

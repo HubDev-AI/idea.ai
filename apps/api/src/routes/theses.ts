@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { buildThesisCandidates } from '../jobs/thesis_synthesizer';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
+import type { PaginatedThesisStore } from '../runtime/postgres_thesis_store';
 import type { ThesisStore } from '../runtime/thesis_store';
 
 export type ThesesRouteDeps = {
@@ -15,8 +16,22 @@ export const registerThesesRoute = (
   const deps: ThesesRouteDeps =
     'store' in storeOrDeps ? storeOrDeps : { store: storeOrDeps };
 
-  app.get('/v1/theses', async () => {
-    return deps.store.list();
+  app.get('/v1/theses', async (request) => {
+    const query = request.query as { page?: string; page_size?: string; status?: string };
+
+    // If the store supports pagination, use it
+    if ('listPaginated' in deps.store) {
+      const page = Math.max(1, Number(query.page) || 1);
+      const pageSize = Math.min(50, Math.max(1, Number(query.page_size) || 10));
+      return (deps.store as PaginatedThesisStore).listPaginated({
+        page,
+        pageSize,
+        ...(query.status ? { status: query.status } : {})
+      });
+    }
+
+    // Fallback: return flat list for InMemoryThesisStore
+    return deps.store.list(query.status ? { status: query.status as 'watching' } : undefined);
   });
 
   app.get('/v1/theses/:key', {

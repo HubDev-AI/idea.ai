@@ -153,7 +153,15 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       if (overrides?.failTheses) {
         return Promise.resolve(new Response('not found', { status: 404 }));
       }
-      return Promise.resolve(new Response(JSON.stringify(mockTheses), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({
+        items: mockTheses,
+        page: 1,
+        page_size: 10,
+        total_items: mockTheses.length,
+        total_pages: 1,
+        has_next: false,
+        has_prev: false
+      }), { status: 200 }));
     }
 
     if (url.includes('/v1/agent/status')) {
@@ -257,5 +265,42 @@ describe('web app', () => {
     expect(await screen.findByText(/Connectors/i)).toBeTruthy();
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
+  });
+
+  it('triggers agent run and shows running state', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    const mockFetch = buildMockFetch();
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(<App />);
+
+    // Wait for initial data load
+    await screen.findByText('SOC2 prep copilot');
+
+    // Find and click the Run button
+    const runButton = screen.getByRole('button', { name: /^Run$/i });
+    expect(runButton).toBeDefined();
+    fireEvent.click(runButton);
+
+    // Verify "Running..." state appears
+    expect(await screen.findByText(/Running/i)).toBeDefined();
+  });
+
+  it('opens log drawer and shows log entries', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    vi.stubGlobal('fetch', buildMockFetch());
+
+    render(<App />);
+
+    // Wait for app to load
+    await screen.findByText('SOC2 prep copilot');
+
+    // Find the Logs button and click it
+    const logsButton = screen.getByText(/Logs/i);
+    expect(logsButton).toBeDefined();
+    fireEvent.click(logsButton);
+
+    // Verify log entries are visible
+    expect(await screen.findByText(/ai judge call failed/i)).toBeTruthy();
   });
 });

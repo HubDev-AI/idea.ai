@@ -72,6 +72,7 @@ type SimilarRow = {
   timing: number | string;
   source: string;
   observed_at: string | Date;
+  canonical_text: string;
 };
 
 const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry): Promise<void> => {
@@ -190,7 +191,8 @@ SELECT
   signal_memory.pain,
   signal_memory.timing,
   signal_memory.source,
-  signal_memory.observed_at
+  signal_memory.observed_at,
+  signal_memory.canonical_text
 FROM signal_embeddings
 JOIN signal_memory
   ON signal_memory.signal_id = signal_embeddings.signal_id
@@ -250,10 +252,12 @@ export type PostgresMemoryStore = {
 
 export const createPostgresMemoryStore = ({
   databaseUrl,
-  logger
+  logger,
+  embedText
 }: {
   databaseUrl: string;
   logger?: ExecutionLogger;
+  embedText?: (text: string) => Promise<number[] | null>;
 }): PostgresMemoryStore => {
   const pool: Pool = new PgPool({
     connectionString: databaseUrl,
@@ -288,7 +292,9 @@ export const createPostgresMemoryStore = ({
   const retriever: MemoryRetriever = {
     findSimilar: async (query: MemoryQuery): Promise<SimilarSignalMatch[]> => {
       const limit = query.topK ?? 8;
-      const queryEmbedding = buildLocalEmbedding(query.canonicalText);
+      const queryEmbedding = embedText
+        ? (await embedText(query.canonicalText)) ?? buildLocalEmbedding(query.canonicalText)
+        : buildLocalEmbedding(query.canonicalText);
       const result = await pool.query<SimilarRow>(similarSql, [
         toVectorLiteral(queryEmbedding),
         query.topic,
@@ -302,7 +308,8 @@ export const createPostgresMemoryStore = ({
         pain: toNumber(row.pain),
         timing: toNumber(row.timing),
         source: row.source,
-        observed_at: toIsoString(row.observed_at)
+        observed_at: toIsoString(row.observed_at),
+        canonical_text: row.canonical_text
       }));
     },
     getTrendWindows: async (query: MemoryQuery): Promise<TrendWindowSnapshot[]> => {

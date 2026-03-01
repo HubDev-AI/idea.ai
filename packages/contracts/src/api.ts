@@ -104,6 +104,26 @@ export type ThesisListItem = {
   estimatedScope: 'small' | 'medium' | 'large' | null;
 };
 
+export type ThesisPage = {
+  items: ThesisListItem[];
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+};
+
+export type AgentRunResult = {
+  thesesUpdated: number;
+  newCandidates: number;
+  alerts: string[];
+  investigateNext: string;
+  journalEntriesWritten: number;
+  clustersAnalyzed: number;
+  deepDivesPerformed: number;
+};
+
 export type AgentStatusRecord = {
   lastRun: {
     timestamp: string;

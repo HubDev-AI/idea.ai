@@ -144,6 +144,16 @@ describe('ai judges', () => {
     expect(result.providers).toEqual(['claude', 'codex']);
   });
 
+  it('production default maxSignals is 50 when AI_JUDGE_MAX_SIGNALS is unset', () => {
+    const settings = resolveAiJudgeSettings({ NODE_ENV: 'production' });
+    expect(settings.maxSignals).toBe(50);
+  });
+
+  it('test default maxSignals is 0 when NODE_ENV=test', () => {
+    const settings = resolveAiJudgeSettings({ NODE_ENV: 'test', VITEST: 'true' });
+    expect(settings.maxSignals).toBe(0);
+  });
+
   it('only marks opportunity-like text as AI-eligible', () => {
     expect(isAiJudgeEligible('Founders struggle with manual billing error handling')).toBe(true);
     expect(isAiJudgeEligible('Account Executive role description and responsibilities')).toBe(false);
