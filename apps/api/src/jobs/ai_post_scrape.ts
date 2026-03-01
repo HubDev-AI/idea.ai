@@ -23,8 +23,9 @@ export type AiPostScrapeInput = {
 export type AiPostScrapeInsight = {
   id: string;
   idea?: string;
-  pain?: number;
+  demand?: number;
   timing?: number;
+  virality?: number;
   judgeScores?: [number, number, number];
   confidence?: number;
   isNoise?: boolean;
@@ -125,8 +126,10 @@ export const parseAiPostScrapeInsights = (text: string): Map<string, AiPostScrap
     }
 
     const idea = typeof row.idea === 'string' ? row.idea.trim() : undefined;
-    const pain = Number.isFinite(Number(row.pain)) ? clampScore(Number(row.pain)) : undefined;
+    const demandRaw = row.demand ?? row.pain; // backward compat: accept legacy pain field
+    const demand = Number.isFinite(Number(demandRaw)) ? clampScore(Number(demandRaw)) : undefined;
     const timing = Number.isFinite(Number(row.timing)) ? clampScore(Number(row.timing)) : undefined;
+    const virality = Number.isFinite(Number(row.virality)) ? clampScore(Number(row.virality)) : undefined;
     const judgeScores = parseJudgeScores(row.judge_scores);
     const confidence = Number.isFinite(Number(row.confidence))
       ? clampConfidence(Number(row.confidence))
@@ -137,8 +140,9 @@ export const parseAiPostScrapeInsights = (text: string): Map<string, AiPostScrap
     const insight: AiPostScrapeInsight = { id };
     const trimmedIdea = idea && idea.length > 0 ? idea.slice(0, 90) : undefined;
     if (trimmedIdea !== undefined) insight.idea = trimmedIdea;
-    if (pain !== undefined) insight.pain = pain;
+    if (demand !== undefined) insight.demand = demand;
     if (timing !== undefined) insight.timing = timing;
+    if (virality !== undefined) insight.virality = virality;
     if (judgeScores !== undefined) insight.judgeScores = judgeScores;
     if (confidence !== undefined) insight.confidence = confidence;
     if (isNoise !== undefined) insight.isNoise = isNoise;
@@ -160,14 +164,16 @@ const buildPrompt = (items: AiPostScrapeInput[]): string => {
   }));
 
   return [
-    'You are a strict SaaS opportunity analyst.',
+    'You are a product opportunity analyst specializing in viral and high-growth products.',
     'Analyze each scraped signal and return only valid JSON.',
+    'Consider consumer apps, social platforms, viral tools, and SaaS products.',
     'Output format:',
-    '{"signals":[{"id":"...","idea":"...","pain":0-100,"timing":0-100,"judge_scores":[0-100,0-100,0-100],"confidence":0-1,"is_noise":false,"rationale":"short"}]}',
+    '{"signals":[{"id":"...","idea":"...","demand":0-100,"timing":0-100,"virality":0-100,"judge_scores":[0-100,0-100,0-100],"confidence":0-1,"is_noise":false,"rationale":"short"}]}',
     'Rules:',
     '- Keep id exactly as provided.',
-    '- idea must be a market-facing SaaS opportunity title, max 90 chars.',
-    '- pain and timing are integers from 0 to 100.',
+    '- idea must be a market-facing product opportunity title, max 90 chars.',
+    '- demand and timing are integers from 0 to 100.',
+    '- virality (0-100): How likely is this product to spread organically through network effects, sharing, or word of mouth?',
     '- judge_scores must contain exactly 3 integers in [0,100] for buildability consensus.',
     '- is_noise=true for repo-local chores or low-opportunity implementation detail items.',
     '- rationale must be short (1 sentence).',

@@ -17,7 +17,8 @@ export const rankAndPreparePublish = (signals: RankedPublishSignal[]) =>
     source_url: signal.source_url,
     next_action: recommendNextAction(signal),
     updated_at: new Date().toISOString(),
-    pain: signal.pain,
+    demand: signal.demand,
     timing: signal.timing,
-    buildability: signal.buildability
+    buildability: signal.buildability,
+    virality: signal.virality
   }));

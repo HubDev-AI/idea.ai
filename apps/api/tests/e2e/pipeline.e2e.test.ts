@@ -35,7 +35,7 @@ describe('pipeline e2e', () => {
             {
               signal_id: 'history-1',
               distance: 0.24,
-              pain: 74,
+              demand: 74,
               timing: 68,
               source: 'hn',
               observed_at: '2026-02-20T00:00:00.000Z'
@@ -47,7 +47,7 @@ describe('pipeline e2e', () => {
               source: 'hn',
               window: '7d',
               count_signals: 10,
-              avg_pain: 72,
+              avg_demand: 72,
               avg_timing: 65
             },
             {
@@ -55,7 +55,7 @@ describe('pipeline e2e', () => {
               source: 'hn',
               window: '30d',
               count_signals: 14,
-              avg_pain: 63,
+              avg_demand: 63,
               avg_timing: 57
             },
             {
@@ -63,7 +63,7 @@ describe('pipeline e2e', () => {
               source: 'hn',
               window: '90d',
               count_signals: 24,
-              avg_pain: 54,
+              avg_demand: 54,
               avg_timing: 49
             }
           ]
@@ -76,9 +76,10 @@ describe('pipeline e2e', () => {
         top_source: signal.top_source,
         snippet: signal.snippet,
         source_url: signal.source_url,
-        pain: score.pain,
+        demand: score.demand,
         timing: score.timing,
         buildability: score.buildability,
+        virality: 0,
         blended: score.blended
       };
     });
@@ -97,7 +98,7 @@ describe('pipeline e2e', () => {
     const payload = response.json();
     expect(payload.items).toHaveLength(1);
     expect(payload.items[0].idea).toBe('SOC2 workflow copilot');
-    expect(scored[0]?.pain).toBeGreaterThan(25);
+    expect(scored[0]?.demand).toBeGreaterThan(25);
     expect(scored[0]?.timing).toBeGreaterThan(25);
 
     const baselineMetricsPath = join(process.cwd(), 'docs/metrics/v1-baseline.md');

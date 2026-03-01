@@ -9,7 +9,7 @@ describe('ai post-scrape analysis', () => {
   it('parses valid AI payload into normalized insights', () => {
     const raw = `noise
 {"signals":[
-  {"id":"github_issues:1","idea":"Agentic support inbox","pain":84.6,"timing":77.2,"judge_scores":[61.1,64.5,68.9],"confidence":1.7,"is_noise":false,"rationale":"Teams repeatedly report support backlog and manual triage."},
+  {"id":"github_issues:1","idea":"Agentic support inbox","demand":84.6,"timing":77.2,"virality":60,"judge_scores":[61.1,64.5,68.9],"confidence":1.7,"is_noise":false,"rationale":"Teams repeatedly report support backlog and manual triage."},
   {"id":"github_issues:2","is_noise":true}
 ]}
 tail`;
@@ -19,8 +19,9 @@ tail`;
     expect(parsed.get('github_issues:1')).toEqual({
       id: 'github_issues:1',
       idea: 'Agentic support inbox',
-      pain: 85,
+      demand: 85,
       timing: 77,
+      virality: 60,
       judgeScores: [61, 65, 69],
       confidence: 1,
       isNoise: false,
@@ -29,8 +30,9 @@ tail`;
     expect(parsed.get('github_issues:2')).toEqual({
       id: 'github_issues:2',
       idea: undefined,
-      pain: undefined,
+      demand: undefined,
       timing: undefined,
+      virality: undefined,
       judgeScores: undefined,
       confidence: undefined,
       isNoise: true,
@@ -58,7 +60,7 @@ tail`;
       ],
       run: async () => ({
         provider: 'codex',
-        text: '{"signals":[{"id":"github_issues:1","idea":"Support triage autopilot","pain":80,"timing":72,"judge_scores":[58,62,67]}]}',
+        text: '{"signals":[{"id":"github_issues:1","idea":"Support triage autopilot","demand":80,"timing":72,"virality":45,"judge_scores":[58,62,67]}]}',
         meta: {}
       })
     });
@@ -85,11 +87,11 @@ tail`;
   });
 
   it('parses codex response wrapped in markdown fences', () => {
-    const raw = '```json\n{"signals":[{"id":"hn:42","idea":"AI code review bot","pain":70,"timing":65,"judge_scores":[55,60,58],"confidence":0.8,"is_noise":false,"rationale":"Rising demand for automated code review."}]}\n```';
+    const raw = '```json\n{"signals":[{"id":"hn:42","idea":"AI code review bot","demand":70,"timing":65,"virality":55,"judge_scores":[55,60,58],"confidence":0.8,"is_noise":false,"rationale":"Rising demand for automated code review."}]}\n```';
 
     const parsed = parseAiPostScrapeInsights(raw);
     expect(parsed.size).toBe(1);
     expect(parsed.get('hn:42')?.idea).toBe('AI code review bot');
-    expect(parsed.get('hn:42')?.pain).toBe(70);
+    expect(parsed.get('hn:42')?.demand).toBe(70);
   });
 });
