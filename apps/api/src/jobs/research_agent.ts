@@ -180,11 +180,11 @@ Return ONLY valid JSON:
 
 export const buildDeepDivePrompt = (ctx: DeepDiveContext): string => {
   const currentBlock = ctx.currentSignals.map((s) =>
-    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing})`
+    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing}${s.virality != null ? `, virality: ${s.virality}` : ''})`
   ).join('\n') || '(none)';
 
   const historicalBlock = ctx.historicalSignals.map((s) =>
-    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing})`
+    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing}${s.virality != null ? `, virality: ${s.virality}` : ''})`
   ).join('\n') || '(no historical data)';
 
   const journalBlock = ctx.journalHistory.map((j) =>
@@ -213,20 +213,23 @@ RELATED THESES:
 ${thesesBlock}
 
 IMPORTANT GUIDELINES FOR NEW THESES:
-- Each thesis must be a CONCRETE SaaS product idea that a solo developer or small team could build in 1-3 months
+- Each thesis must be a CONCRETE product idea, not an abstract market observation
 - BAD: "Vertical SaaS Consolidation in Regulated Industries" (too abstract, enterprise-scale)
 - BAD: "Proxy-signal instrumentation platform" (meaningless buzzwords, no clear product)
-- GOOD: "SOC2 Compliance Checklist App" (specific product, clear buyer, buildable)
+- GOOD: "Community Recipe Sharing App with AI Meal Planning" (viral sharing, clear product)
 - GOOD: "AI-Powered Contract Clause Highlighter for Freelancers" (clear pain, specific user)
 - The problem_statement should describe a real pain point a specific person has
 - The target_buyer should be a specific persona (e.g., "freelance designers who invoice 5+ clients/month")
 - The proposed_solution should describe a concrete software tool, not a strategy or framework
+- Assess virality and network effects — how would users discover and share this product?
+- Consider growth loops: does the product create shareable artifacts? Does value increase with users?
+- Products with inherent distribution (social, community, UGC) are higher signal
 
 DEEP ANALYSIS:
-1. What concrete product ideas emerge from these signals? Look for specific pain points with software solutions.
-2. How has this area evolved over time? Compare current vs historical signals.
-3. Should any existing thesis be updated? Should a new thesis be created?
-4. Write detailed observations for your future self — what product angles did you explore?
+1. What product ideas emerge from these signals? Prioritize ideas with viral distribution mechanics.
+2. How has this area evolved? Compare current vs historical signals for momentum.
+3. Assess growth loop potential for each idea — organic distribution, network effects, community flywheel.
+4. Write detailed observations for your future self — what viral angles did you explore?
 
 For estimated_scope use: "small" (solo dev, 1-2 months), "medium" (2-3 devs, 2-4 months), "large" (team of 4+, 4+ months).
 
