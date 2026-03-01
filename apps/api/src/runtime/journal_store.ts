@@ -26,6 +26,7 @@ export interface JournalStore {
   byThesisKey(key: string, limit: number): Promise<JournalEntry[]>;
   findSimilar(embedding: number[], topK: number): Promise<JournalEntry[]>;
   count(): Promise<number>;
+  close(): Promise<void>;
 }
 
 const toNumber = (value: unknown): number => {
@@ -142,6 +143,10 @@ export const createPostgresJournalStore = ({
         'SELECT COUNT(*)::int AS count FROM agent_journal'
       );
       return result.rows[0]?.count ?? 0;
+    },
+
+    async close(): Promise<void> {
+      await pool.end();
     }
   };
 };

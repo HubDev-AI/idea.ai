@@ -1,5 +1,6 @@
 import { dualAnalystRun } from '@idea/ai-runtime/src/dual_analyst';
 import type { RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
+import type { AgentRunResult } from '@idea/contracts/src/api';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { JournalEntry, JournalStore } from '../runtime/journal_store';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
@@ -16,15 +17,7 @@ import {
 import { type ClusterableSignal, clusterSignals } from './signal_clusterer';
 import type { ThesisEvidenceDraft } from './thesis_synthesizer';
 
-export type AgentRunResult = {
-  thesesUpdated: number;
-  newCandidates: number;
-  alerts: string[];
-  investigateNext: string;
-  journalEntriesWritten: number;
-  clustersAnalyzed: number;
-  deepDivesPerformed: number;
-};
+export type { AgentRunResult };
 
 export type AgentRunnerDeps = {
   thesisStore: ThesisStore;
