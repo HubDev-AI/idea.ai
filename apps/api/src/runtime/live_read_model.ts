@@ -415,9 +415,10 @@ const parseSnapshotPayload = (raw: string): Snapshot | null => {
           source_url: entry.source_url,
           next_action: entry.next_action,
           updated_at: entry.updated_at,
-          ...(typeof entry.pain === 'number' ? { pain: entry.pain } : {}),
+          ...(typeof entry.demand === 'number' ? { demand: entry.demand } : {}),
           ...(typeof entry.timing === 'number' ? { timing: entry.timing } : {}),
-          ...(typeof entry.buildability === 'number' ? { buildability: entry.buildability } : {})
+          ...(typeof entry.buildability === 'number' ? { buildability: entry.buildability } : {}),
+          ...(typeof entry.virality === 'number' ? { virality: entry.virality } : {})
         } satisfies FeedRecord;
       })
       .filter((entry): entry is FeedRecord => entry !== null);
@@ -654,9 +655,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
         top_source: string;
         snippet: string;
         source_url: string | null;
-        pain: number;
+        demand: number;
         timing: number;
         buildability: number;
+        virality: number;
         blended: number;
       }> = [];
       let aiJudgeAttempts = 0;
@@ -760,7 +762,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             memoryRetriever: retriever,
             topK: 8
           };
-          if (aiInsight?.pain !== undefined) scoreArgs.basePain = aiInsight.pain;
+          if (aiInsight?.demand !== undefined) scoreArgs.baseDemand = aiInsight.demand;
           if (aiInsight?.timing !== undefined) scoreArgs.baseTiming = aiInsight.timing;
           const score = await scoreSignalWithRetriever(scoreArgs);
           const blended = applySourceQualityPenalty({
@@ -778,7 +780,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             snippet: event.text.slice(0, 160),
             text: event.text,
             observedAt: event.source_timestamp,
-            pain: score.pain,
+            demand: score.demand,
             timing: score.timing,
             buildability: score.buildability,
             blended,
@@ -804,9 +806,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             top_source: event.source,
             snippet: aiInsight?.rationale && aiInsight.rationale.length > 0 ? aiInsight.rationale : event.text.slice(0, 160),
             source_url: event.url,
-            pain: score.pain,
+            demand: score.demand,
             timing: score.timing,
             buildability: score.buildability,
+            virality: 0,
             blended
           });
         } catch (error) {
