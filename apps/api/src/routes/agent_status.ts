@@ -27,6 +27,6 @@ export const registerAgentStatusRoute = (
   });
 
   app.post('/v1/agent/run', {
-    config: { rateLimit: { max: 2, timeWindow: '1 minute' } }
+    config: { rateLimit: { max: 100, timeWindow: '1 minute' } }
   }, async () => deps.triggerRun());
 };

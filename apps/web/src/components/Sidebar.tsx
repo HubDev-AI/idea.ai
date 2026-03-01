@@ -32,6 +32,13 @@ const connectorDisplayName: Record<string, string> = {
   greenhouse: 'Greenhouse',
   lever: 'Lever',
   yc_companies: 'YC Companies',
+  reddit: 'Reddit',
+  producthunt: 'Product Hunt',
+  appstore_trending: 'App Store',
+  indiehackers: 'IndieHackers',
+  exa_byo: 'Exa',
+  perigon_byo: 'Perigon',
+  twitter_byo: 'Twitter/X',
   exa_byo: 'Exa',
   perigon_byo: 'Perigon',
 };

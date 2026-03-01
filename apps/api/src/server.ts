@@ -106,7 +106,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     });
   }
 
-  const rateLimitMax = resolvedDeps.rateLimitMax ?? 100;
+  const rateLimitMax = resolvedDeps.rateLimitMax ?? 10_000;
   await app.register(rateLimit, {
     max: rateLimitMax,
     timeWindow: '1 minute'
