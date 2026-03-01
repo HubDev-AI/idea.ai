@@ -23,7 +23,6 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? '')
   .map((s) => s.trim())
   .filter(Boolean);
 const apiKey = process.env.API_KEY || undefined;
-const readModel = createLiveReadModel();
 const databaseUrl = process.env.DATABASE_URL;
 
 const pool = databaseUrl ? new pg.Pool({ connectionString: databaseUrl, max: 4 }) : null;
@@ -32,9 +31,13 @@ const thesisStore = pool
   ? createPostgresThesisStore({ pool })
   : new InMemoryThesisStore();
 
+const embedTextFn = (text: string) => embedText(text, { fallbackToNull: true });
+
 const memoryStore = databaseUrl
-  ? createPostgresMemoryStore({ databaseUrl })
+  ? createPostgresMemoryStore({ databaseUrl, embedText: embedTextFn })
   : null;
+
+const readModel = createLiveReadModel(undefined, memoryStore ? { persistentStore: memoryStore } : undefined);
 
 const journalStore = databaseUrl
   ? createPostgresJournalStore({ databaseUrl })
@@ -156,11 +159,28 @@ if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
 let agentTimer: ReturnType<typeof setInterval> | undefined;
+let cleanupTimer: ReturnType<typeof setInterval> | undefined;
+
+const RETENTION_DAYS = 90;
+const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+const runRetentionCleanup = async () => {
+  if (!pool) return;
+  try {
+    await pool.query(`DELETE FROM signal_memory WHERE observed_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
+    await pool.query(`DELETE FROM signal_embeddings WHERE signal_id NOT IN (SELECT signal_id FROM signal_memory)`);
+    await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
+    await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
+  } catch (err) {
+    console.error('retention cleanup failed:', err);
+  }
+};
 
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 
 const shutdown = async () => {
   clearInterval(agentTimer);
+  clearInterval(cleanupTimer);
 
   // Wait for in-flight agent run, mark as failed if still running
   if (agentRunInFlight) {
@@ -181,6 +201,9 @@ const shutdown = async () => {
   }
   if ('close' in thesisStore) {
     await (thesisStore as { close: () => Promise<void> }).close();
+  }
+  if (journalStore) {
+    await journalStore.close();
   }
   if (pool) {
     await pool.end();
@@ -207,6 +230,8 @@ app
         console.error('research agent cron failed:', err);
       });
     }, AGENT_INTERVAL_MS);
+    cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
+    void runRetentionCleanup();
   })
   .catch((error) => {
     console.error(error);

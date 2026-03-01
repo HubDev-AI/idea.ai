@@ -252,10 +252,12 @@ export type PostgresMemoryStore = {
 
 export const createPostgresMemoryStore = ({
   databaseUrl,
-  logger
+  logger,
+  embedText
 }: {
   databaseUrl: string;
   logger?: ExecutionLogger;
+  embedText?: (text: string) => Promise<number[] | null>;
 }): PostgresMemoryStore => {
   const pool: Pool = new PgPool({
     connectionString: databaseUrl,
@@ -290,7 +292,9 @@ export const createPostgresMemoryStore = ({
   const retriever: MemoryRetriever = {
     findSimilar: async (query: MemoryQuery): Promise<SimilarSignalMatch[]> => {
       const limit = query.topK ?? 8;
-      const queryEmbedding = buildLocalEmbedding(query.canonicalText);
+      const queryEmbedding = embedText
+        ? (await embedText(query.canonicalText)) ?? buildLocalEmbedding(query.canonicalText)
+        : buildLocalEmbedding(query.canonicalText);
       const result = await pool.query<SimilarRow>(similarSql, [
         toVectorLiteral(queryEmbedding),
         query.topic,

@@ -114,6 +114,16 @@ export type ThesisPage = {
   has_prev: boolean;
 };
 
+export type AgentRunResult = {
+  thesesUpdated: number;
+  newCandidates: number;
+  alerts: string[];
+  investigateNext: string;
+  journalEntriesWritten: number;
+  clustersAnalyzed: number;
+  deepDivesPerformed: number;
+};
+
 export type AgentStatusRecord = {
   lastRun: {
     timestamp: string;

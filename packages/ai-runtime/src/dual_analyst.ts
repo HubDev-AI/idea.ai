@@ -80,14 +80,25 @@ export const dualAnalystRun = async <T>(
     await log?.warn('dual_analyst', 'codex failed', { error: codexResult.reason?.message ?? 'unknown' });
   }
 
-  // Retry with Claude if both providers failed
+  // Retry if both providers failed
   if (claude === null && codex === null) {
+    // Try Claude first
     await log?.info('dual_analyst', 'both failed, retrying claude');
     try {
       const retry = await deps.runClaude(input);
       try { claude = deps.parseResponse(retry.text); } catch { /* skip */ }
       await log?.info('dual_analyst', 'claude retry result', { parsed: claude !== null });
-    } catch { /* both attempts exhausted */ }
+    } catch { /* exhausted */ }
+
+    // If Claude retry also failed, try Codex
+    if (claude === null) {
+      await log?.info('dual_analyst', 'claude retry failed, trying codex');
+      try {
+        const retry = await deps.runCodex(input);
+        try { codex = deps.parseResponse(retry.text); } catch { /* skip */ }
+        await log?.info('dual_analyst', 'codex retry result', { parsed: codex !== null });
+      } catch { /* both retries exhausted */ }
+    }
   }
 
   return { claude, codex };
