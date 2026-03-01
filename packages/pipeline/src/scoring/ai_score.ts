@@ -1,7 +1,7 @@
 import type { RunPromptResult } from '@idea/ai-runtime/src/types';
 
 export type AiScoreResult = {
-  pain: number;
+  demand: number;
   timing: number;
   buildability: number;
   reasoning: string;
@@ -9,15 +9,15 @@ export type AiScoreResult = {
 
 const clamp = (v: number) => Math.min(100, Math.max(0, v));
 
-const SCORE_PROMPT = `You are a SaaS opportunity analyst. Score this signal on three dimensions (0-100 each):
+const SCORE_PROMPT = `You are a product opportunity analyst. Score this signal on three dimensions (0-100 each):
 
-- **pain** (0-100): How severe and recurring is the problem described? 0 = no real pain, 100 = urgent unresolved pain affecting many people.
+- **demand** (0-100): How severe and recurring is the problem described? 0 = no real demand, 100 = urgent unresolved demand affecting many people.
 - **timing** (0-100): How timely is this opportunity? 0 = stale/already solved, 100 = emerging right now with regulatory or market tailwinds.
-- **buildability** (0-100): How feasible is it to build a SaaS product addressing this? 0 = requires deep domain expertise or massive capital, 100 = straightforward to build and sell.
+- **buildability** (0-100): How feasible is it to build a product addressing this? 0 = requires deep domain expertise or massive capital, 100 = straightforward to build and sell.
 
 Also provide a one-sentence reasoning for your scores.
 
-Return ONLY valid JSON: {"pain": <n>, "timing": <n>, "buildability": <n>, "reasoning": "<text>"}
+Return ONLY valid JSON: {"demand": <n>, "timing": <n>, "buildability": <n>, "reasoning": "<text>"}
 
 SIGNAL:
 Source: {source}
@@ -28,15 +28,17 @@ Text: {text}
 export const parseAiScoreResponse = (raw: string): AiScoreResult | null => {
   try {
     const parsed = JSON.parse(raw);
+    // Support both legacy "pain" and new "demand" field names
+    const demandValue = parsed.demand ?? parsed.pain;
     if (
-      typeof parsed.pain !== 'number' ||
+      typeof demandValue !== 'number' ||
       typeof parsed.timing !== 'number' ||
       typeof parsed.buildability !== 'number'
     ) {
       return null;
     }
     return {
-      pain: clamp(Math.round(parsed.pain)),
+      demand: clamp(Math.round(demandValue)),
       timing: clamp(Math.round(parsed.timing)),
       buildability: clamp(Math.round(parsed.buildability)),
       reasoning: String(parsed.reasoning ?? '')

@@ -71,9 +71,10 @@ const signalToFeedRecord = (row: MemorySignalRow): FeedRecord => ({
   source_url: row.source_url ?? null,
   next_action: 'validate_demand',
   updated_at: row.observed_at,
-  pain: row.pain,
+  demand: row.demand,
   timing: row.timing,
   buildability: row.buildability,
+  virality: row.virality,
 });
 
 export type FeedDeps = {

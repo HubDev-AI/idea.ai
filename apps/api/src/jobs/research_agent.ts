@@ -12,15 +12,16 @@ export type AgentSignalSummary = {
   signal_id: string;
   text: string;
   source: string;
-  pain: number;
+  demand: number;
   timing: number;
+  virality?: number;
 };
 
 export type AgentTrendSummary = {
   topic: string;
   window: string;
   count: number;
-  avg_pain: number;
+  avg_demand: number;
   growth: string;
 };
 
@@ -37,6 +38,7 @@ export type NewThesisProposal = {
   proposed_solution: string;
   supporting_signal_ids: string[];
   estimated_scope: 'small' | 'medium' | 'large';
+  virality_assessment?: string;
 };
 
 // === New types for phased execution ===
@@ -45,7 +47,7 @@ export type ClusterSummary = {
   id: number;
   label: string;
   totalCount: number;
-  avgPain: number;
+  avgDemand: number;
   avgTiming: number;
   sources: string[];
   signals: AgentSignalSummary[];
@@ -120,9 +122,9 @@ export const buildBroadScanPrompt = (ctx: BroadScanContext): string => {
   const clustersBlock = ctx.clusters.length > 0
     ? ctx.clusters.map((c) => {
         const signals = c.signals.map((s) =>
-          `    - [${s.signal_id}] [${s.source}] ${s.text.slice(0, 200)} (pain: ${s.pain}, timing: ${s.timing})`
+          `    - [${s.signal_id}] [${s.source}] ${s.text.slice(0, 200)} (demand: ${s.demand}, timing: ${s.timing}${s.virality != null ? `, virality: ${s.virality}` : ''})`
         ).join('\n');
-        return `  CLUSTER ${c.id}: "${c.label}" (${c.totalCount} signals, avg pain: ${c.avgPain}, sources: ${c.sources.join(', ')})\n${signals}`;
+        return `  CLUSTER ${c.id}: "${c.label}" (${c.totalCount} signals, avg demand: ${c.avgDemand}, sources: ${c.sources.join(', ')})\n${signals}`;
       }).join('\n\n')
     : '(no new signals)';
 
@@ -134,21 +136,22 @@ export const buildBroadScanPrompt = (ctx: BroadScanContext): string => {
 
   const trendsBlock = ctx.trendSummary.length > 0
     ? ctx.trendSummary.map((t) =>
-        `- "${t.topic}" ${t.window}: ${t.count} signals, avg pain ${t.avg_pain}, growth ${t.growth}`
+        `- "${t.topic}" ${t.window}: ${t.count} signals, avg demand ${t.avg_demand}, growth ${t.growth}`
       ).join('\n')
     : '(no trend data)';
 
-  return `You are Sixth Sense, a SaaS product idea scout with persistent memory.
-You analyze market signals to find CONCRETE software product ideas that a solo developer or small team (1-3 people) could build in 1-3 months.
+  return `You are Sixth Sense, a product opportunity scout with persistent memory.
+You analyze market signals to find product ideas with viral growth potential — consumer social apps, prosumer tools with network effects, B2B products that spread bottom-up, and community-driven platforms.
 Your observations from previous runs are shown below — use them to build on your prior reasoning.
 
 IMPORTANT GUIDELINES:
-- Each thesis must be a CONCRETE SaaS product idea, not an abstract market observation.
-- BAD examples: "Vertical SaaS Consolidation in Regulated Industries", "Proxy-signal instrumentation for compliance monitoring", "Regulated-market momentum analysis"
-- GOOD examples: "SOC2 Compliance Checklist App for Startups", "AI Invoice Parser for Freelancers", "Slack Bot That Summarizes Long Threads"
+- Each thesis must be a CONCRETE product idea, not an abstract market observation.
+- BAD: "Vertical SaaS Consolidation in Regulated Industries", "Proxy-signal instrumentation"
+- GOOD: "Community Recipe Sharing App with AI Meal Planning", "TikTok-Style Short Video Editor for Realtors", "Slack Bot That Summarizes Long Threads"
 - Focus on specific pain points with clear software solutions
 - Target specific buyer personas (e.g., "DevOps engineers at seed-stage startups"), not abstract categories
-- The product must be buildable by a solo dev in 1-3 months — no enterprise platforms, no consulting frameworks, no marketplace plays
+- Focus on ideas with inherent viral/network-effect potential — products where users naturally bring other users
+- Assess growth loop mechanics: does usage create shareable content? Does the product get better with more users?
 
 YOUR RECENT OBSERVATIONS:
 ${journalBlock}
@@ -167,6 +170,7 @@ YOUR TASK:
 2. For each relevant thesis, provide a confidence_delta (-20 to +20) with reasoning.
 3. Identify 1-3 topics that deserve deeper investigation — areas where you see specific product opportunities that need more validation.
 4. Write 2-5 observations for your future self. Focus on concrete product angles and buyer pain points, not abstract market patterns.
+5. For each thesis update or new idea, assess virality potential — does it have inherent network effects, sharing mechanics, or community-driven growth loops?
 
 Return ONLY valid JSON:
 {
@@ -178,11 +182,11 @@ Return ONLY valid JSON:
 
 export const buildDeepDivePrompt = (ctx: DeepDiveContext): string => {
   const currentBlock = ctx.currentSignals.map((s) =>
-    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (pain: ${s.pain}, timing: ${s.timing})`
+    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing}${s.virality != null ? `, virality: ${s.virality}` : ''})`
   ).join('\n') || '(none)';
 
   const historicalBlock = ctx.historicalSignals.map((s) =>
-    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (pain: ${s.pain}, timing: ${s.timing})`
+    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing}${s.virality != null ? `, virality: ${s.virality}` : ''})`
   ).join('\n') || '(no historical data)';
 
   const journalBlock = ctx.journalHistory.map((j) =>
@@ -211,27 +215,30 @@ RELATED THESES:
 ${thesesBlock}
 
 IMPORTANT GUIDELINES FOR NEW THESES:
-- Each thesis must be a CONCRETE SaaS product idea that a solo developer or small team could build in 1-3 months
+- Each thesis must be a CONCRETE product idea, not an abstract market observation
 - BAD: "Vertical SaaS Consolidation in Regulated Industries" (too abstract, enterprise-scale)
 - BAD: "Proxy-signal instrumentation platform" (meaningless buzzwords, no clear product)
-- GOOD: "SOC2 Compliance Checklist App" (specific product, clear buyer, buildable)
+- GOOD: "Community Recipe Sharing App with AI Meal Planning" (viral sharing, clear product)
 - GOOD: "AI-Powered Contract Clause Highlighter for Freelancers" (clear pain, specific user)
 - The problem_statement should describe a real pain point a specific person has
 - The target_buyer should be a specific persona (e.g., "freelance designers who invoice 5+ clients/month")
 - The proposed_solution should describe a concrete software tool, not a strategy or framework
+- Assess virality and network effects — how would users discover and share this product?
+- Consider growth loops: does the product create shareable artifacts? Does value increase with users?
+- Products with inherent distribution (social, community, UGC) are higher signal
 
 DEEP ANALYSIS:
-1. What concrete product ideas emerge from these signals? Look for specific pain points with software solutions.
-2. How has this area evolved over time? Compare current vs historical signals.
-3. Should any existing thesis be updated? Should a new thesis be created?
-4. Write detailed observations for your future self — what product angles did you explore?
+1. What product ideas emerge from these signals? Prioritize ideas with viral distribution mechanics.
+2. How has this area evolved? Compare current vs historical signals for momentum.
+3. Assess growth loop potential for each idea — organic distribution, network effects, community flywheel.
+4. Write detailed observations for your future self — what viral angles did you explore?
 
 For estimated_scope use: "small" (solo dev, 1-2 months), "medium" (2-3 devs, 2-4 months), "large" (team of 4+, 4+ months).
 
 Return ONLY valid JSON:
 {
   "thesis_updates": [{"canonicalKey": "...", "confidence_delta": <n>, "reasoning": "..."}],
-  "new_theses": [{"title": "...", "problem_statement": "...", "target_buyer": "...", "proposed_solution": "...", "supporting_signal_ids": ["..."], "estimated_scope": "small|medium|large"}],
+  "new_theses": [{"title": "...", "problem_statement": "...", "target_buyer": "...", "proposed_solution": "...", "supporting_signal_ids": ["..."], "estimated_scope": "small|medium|large", "virality_assessment": "1-2 sentence description of growth loop potential"}],
   "journal_entries": [{"entry_type": "trend_shift|emerging_pattern|thesis_evolution|market_signal", "topic": "...", "insight": "...", "narrative": "...", "confidence": <n>, "thesis_keys": ["..."], "signal_ids": ["..."]}]
 }`;
 };

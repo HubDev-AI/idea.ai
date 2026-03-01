@@ -21,9 +21,10 @@ const rawEventPayloadSchema = z
 const scoredSignalPayloadSchema = z
   .object({
     signal_id: z.string().min(1),
-    pain: scoreSchema,
+    demand: scoreSchema,
     timing: scoreSchema,
     buildability: scoreSchema,
+    virality: scoreSchema,
     blended: scoreSchema
   })
   .strict();

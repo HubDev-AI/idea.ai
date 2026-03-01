@@ -5,13 +5,13 @@ import { scorePain } from '../src/scoring/pain';
 import { scoreTiming } from '../src/scoring/timing';
 
 describe('scoring pipeline', () => {
-  it('keeps pain/timing/buildability in [0,100]', () => {
-    const pain = scorePain('urgent churn risk and costly manual process');
+  it('keeps demand/timing/buildability in [0,100]', () => {
+    const demand = scorePain('urgent churn risk and costly manual process');
     const timing = scoreTiming('new regulation deadline and market shift');
     const buildability = scoreBuildability([72, 68, 91]);
 
-    expect(pain).toBeGreaterThanOrEqual(0);
-    expect(pain).toBeLessThanOrEqual(100);
+    expect(demand).toBeGreaterThanOrEqual(0);
+    expect(demand).toBeLessThanOrEqual(100);
     expect(timing).toBeGreaterThanOrEqual(0);
     expect(timing).toBeLessThanOrEqual(100);
     expect(buildability).toBeGreaterThanOrEqual(0);
@@ -23,9 +23,10 @@ describe('scoring pipeline', () => {
     expect(scoreBuildability([20, 80, 50])).toBe(50);
   });
 
-  it('blends scores with 40/40/20 weights', () => {
-    const score = blendedScore({ pain: 80, timing: 70, buildability: 60 });
+  it('blends scores with 25/20/20/35 weights', () => {
+    const score = blendedScore({ demand: 80, timing: 70, buildability: 60, virality: 90 });
 
-    expect(score).toBe(72);
+    // 80*0.25 + 70*0.20 + 60*0.20 + 90*0.35 = 20 + 14 + 12 + 31.5 = 77.5
+    expect(score).toBe(77.5);
   });
 });

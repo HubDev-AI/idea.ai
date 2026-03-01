@@ -41,7 +41,7 @@ SELECT
   $2::text AS source,
   windows.window_name AS window,
   COUNT(signal_memory.signal_id)::int AS count_signals,
-  ROUND(COALESCE(AVG(signal_memory.pain), 0)::numeric, 2) AS avg_pain,
+  ROUND(COALESCE(AVG(signal_memory.demand), 0)::numeric, 2) AS avg_demand,
   ROUND(COALESCE(AVG(signal_memory.timing), 0)::numeric, 2) AS avg_timing
 FROM windows
 LEFT JOIN signal_memory
@@ -61,14 +61,14 @@ type TrendWindowRow = {
   source: string;
   window: TrendWindowSnapshot['window'];
   count_signals: number;
-  avg_pain: number | string;
+  avg_demand: number | string;
   avg_timing: number | string;
 };
 
 type SimilarRow = {
   signal_id: string;
   distance: number | string;
-  pain: number | string;
+  demand: number | string;
   timing: number | string;
   source: string;
   observed_at: string | Date;
@@ -84,21 +84,22 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
         source,
         canonical_text,
         observed_at,
-        pain,
+        demand,
         timing,
         buildability,
         blended,
+        virality,
         source_url,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
       ON CONFLICT (signal_id)
       DO UPDATE SET
         topic = EXCLUDED.topic,
         source = EXCLUDED.source,
         canonical_text = EXCLUDED.canonical_text,
         observed_at = EXCLUDED.observed_at,
-        pain = EXCLUDED.pain,
+        demand = EXCLUDED.demand,
         timing = EXCLUDED.timing,
         buildability = EXCLUDED.buildability,
         blended = EXCLUDED.blended,
@@ -111,10 +112,11 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
       entry.memoryRecord.source,
       entry.memoryRecord.canonical_text,
       entry.memoryRecord.observed_at,
-      entry.memoryRecord.pain,
+      entry.memoryRecord.demand,
       entry.memoryRecord.timing,
       entry.memoryRecord.buildability,
       entry.memoryRecord.blended,
+      (entry.memoryRecord as Record<string, unknown>).virality ?? null,
       entry.memoryRecord.source_url ?? null
     ]
   );
@@ -156,7 +158,7 @@ const upsertTrendWindows = async (client: PoolClient, topic: string, source: str
           source,
           "window",
           count_signals,
-          avg_pain,
+          avg_demand,
           avg_timing,
           updated_at
         )
@@ -165,7 +167,7 @@ const upsertTrendWindows = async (client: PoolClient, topic: string, source: str
           $2::text,
           $3::text,
           COUNT(signal_id)::int,
-          ROUND(COALESCE(AVG(pain), 0)::numeric, 2),
+          ROUND(COALESCE(AVG(demand), 0)::numeric, 2),
           ROUND(COALESCE(AVG(timing), 0)::numeric, 2),
           NOW()
         FROM signal_memory
@@ -175,7 +177,7 @@ const upsertTrendWindows = async (client: PoolClient, topic: string, source: str
         ON CONFLICT (topic, source, "window")
         DO UPDATE SET
           count_signals = EXCLUDED.count_signals,
-          avg_pain = EXCLUDED.avg_pain,
+          avg_demand = EXCLUDED.avg_demand,
           avg_timing = EXCLUDED.avg_timing,
           updated_at = NOW()
       `,
@@ -188,7 +190,7 @@ const similarSql = `
 SELECT
   signal_memory.signal_id,
   LEAST(GREATEST((signal_embeddings.embedding <=> $1::vector)::double precision, 0), 1) AS distance,
-  signal_memory.pain,
+  signal_memory.demand,
   signal_memory.timing,
   signal_memory.source,
   signal_memory.observed_at,
@@ -207,10 +209,11 @@ export type MemorySignalRow = {
   source: string;
   canonical_text: string;
   observed_at: string;
-  pain: number;
+  demand: number;
   timing: number;
   buildability: number;
   blended: number;
+  virality: number;
   source_url: string | null;
 };
 
@@ -305,7 +308,7 @@ export const createPostgresMemoryStore = ({
       return result.rows.map((row) => ({
         signal_id: row.signal_id,
         distance: Math.round(toNumber(row.distance) * 10000) / 10000,
-        pain: toNumber(row.pain),
+        demand: toNumber(row.demand),
         timing: toNumber(row.timing),
         source: row.source,
         observed_at: toIsoString(row.observed_at),
@@ -325,7 +328,7 @@ export const createPostgresMemoryStore = ({
             source: query.source,
             window,
             count_signals: 0,
-            avg_pain: 0,
+            avg_demand: 0,
             avg_timing: 0
           };
         }
@@ -335,7 +338,7 @@ export const createPostgresMemoryStore = ({
           source: row.source,
           window: row.window,
           count_signals: toNumber(row.count_signals),
-          avg_pain: toNumber(row.avg_pain),
+          avg_demand: toNumber(row.avg_demand),
           avg_timing: toNumber(row.avg_timing)
         };
       });
@@ -349,13 +352,14 @@ export const createPostgresMemoryStore = ({
       source: string;
       canonical_text: string;
       observed_at: Date;
-      pain: unknown;
+      demand: unknown;
       timing: unknown;
       buildability: unknown;
       blended: unknown;
+      virality: unknown;
       source_url: string | null;
     }>(
-      `SELECT signal_id, topic, source, canonical_text, observed_at, pain, timing, buildability, blended, source_url
+      `SELECT signal_id, topic, source, canonical_text, observed_at, demand, timing, buildability, blended, virality, source_url
        FROM signal_memory
        ORDER BY observed_at DESC
        LIMIT $1`,
@@ -368,10 +372,11 @@ export const createPostgresMemoryStore = ({
       source: row.source,
       canonical_text: row.canonical_text,
       observed_at: toIsoString(row.observed_at),
-      pain: toNumber(row.pain),
+      demand: toNumber(row.demand),
       timing: toNumber(row.timing),
       buildability: toNumber(row.buildability),
       blended: toNumber(row.blended),
+      virality: toNumber(row.virality),
       source_url: row.source_url ?? null
     }));
   };
@@ -407,7 +412,7 @@ export const createPostgresMemoryStore = ({
     const offset = (page - 1) * pageSize;
     const dataSql = `
       SELECT DISTINCT sm.signal_id, sm.topic, sm.source, sm.canonical_text,
-             sm.observed_at, sm.pain, sm.timing, sm.buildability, sm.blended, sm.source_url
+             sm.observed_at, sm.demand, sm.timing, sm.buildability, sm.blended, sm.virality, sm.source_url
       FROM signal_memory sm ${joinClause} ${whereClause}
       ORDER BY sm.blended DESC
       LIMIT ${pageSize} OFFSET ${offset}`;
@@ -420,10 +425,11 @@ export const createPostgresMemoryStore = ({
       source: String(row.source ?? ''),
       canonical_text: String(row.canonical_text ?? ''),
       observed_at: toIsoString(row.observed_at),
-      pain: toNumber(row.pain),
+      demand: toNumber(row.demand),
       timing: toNumber(row.timing),
       buildability: toNumber(row.buildability),
       blended: toNumber(row.blended),
+      virality: toNumber(row.virality),
       source_url: row.source_url ? String(row.source_url) : null,
     }));
 

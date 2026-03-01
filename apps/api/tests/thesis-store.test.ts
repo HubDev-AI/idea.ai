@@ -16,9 +16,10 @@ describe('thesis store', () => {
       targetBuyer: 'Engineering teams',
       proposedSolution: 'Automate evidence capture.',
       evidenceCount: 3,
-      avgPain: 70,
+      avgDemand: 70,
       avgTiming: 60,
       avgBuildability: 65,
+      avgVirality: 30,
       latestObservedAt: '2026-02-25T10:00:00Z',
       evidence: []
     };
@@ -36,7 +37,7 @@ describe('thesis store', () => {
       title: 'test', topic: 'test', status: 'candidate',
       confidence: 50, scoreTotal: 50,
       problemStatement: 'p', targetBuyer: 't', proposedSolution: 's',
-      evidenceCount: 2, avgPain: 50, avgTiming: 50, avgBuildability: 50,
+      evidenceCount: 2, avgDemand: 50, avgTiming: 50, avgBuildability: 50, avgVirality: 0,
       latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
     };
 
@@ -54,14 +55,14 @@ describe('thesis store', () => {
     await store.upsert({
       canonicalKey: 'a', title: 'a', topic: 't', status: 'promoted',
       confidence: 85, scoreTotal: 85, problemStatement: 'p', targetBuyer: 'b',
-      proposedSolution: 's', evidenceCount: 5, avgPain: 80, avgTiming: 70,
-      avgBuildability: 75, latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
+      proposedSolution: 's', evidenceCount: 5, avgDemand: 80, avgTiming: 70,
+      avgBuildability: 75, avgVirality: 40, latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
     });
     await store.upsert({
       canonicalKey: 'b', title: 'b', topic: 't', status: 'candidate',
       confidence: 40, scoreTotal: 40, problemStatement: 'p', targetBuyer: 'b',
-      proposedSolution: 's', evidenceCount: 2, avgPain: 40, avgTiming: 30,
-      avgBuildability: 50, latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
+      proposedSolution: 's', evidenceCount: 2, avgDemand: 40, avgTiming: 30,
+      avgBuildability: 50, avgVirality: 10, latestObservedAt: '2026-02-25T10:00:00Z', evidence: []
     });
 
     const promoted = await store.list({ status: 'promoted' });

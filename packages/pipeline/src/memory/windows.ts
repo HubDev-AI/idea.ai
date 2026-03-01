@@ -29,7 +29,7 @@ export const buildTrendWindows = (
     return Array.from(grouped.entries()).map(([key, records]) => {
       const [topic = '', source = ''] = key.split('::');
       const count = records.length;
-      const avgPain = count === 0 ? 0 : records.reduce((sum, entry) => sum + entry.pain, 0) / count;
+      const avgDemand = count === 0 ? 0 : records.reduce((sum, entry) => sum + entry.demand, 0) / count;
       const avgTiming =
         count === 0 ? 0 : records.reduce((sum, entry) => sum + entry.timing, 0) / count;
 
@@ -38,7 +38,7 @@ export const buildTrendWindows = (
         source,
         window: name,
         count_signals: count,
-        avg_pain: round2(avgPain),
+        avg_demand: round2(avgDemand),
         avg_timing: round2(avgTiming)
       };
     });

@@ -37,7 +37,7 @@ const cosineDistance = (left: number[], right: number[]): number => {
 const toSimilarMatch = (entry: IndexedMemoryEntry, distance: number): SimilarSignalMatch => ({
   signal_id: entry.memoryRecord.signal_id,
   distance: Math.round(distance * 10000) / 10000,
-  pain: entry.memoryRecord.pain,
+  demand: entry.memoryRecord.demand,
   timing: entry.memoryRecord.timing,
   source: entry.memoryRecord.source,
   observed_at: entry.memoryRecord.observed_at

@@ -51,6 +51,17 @@ describe('live read model resilience', () => {
               reason: 'missing_credentials',
               budget_usd: 5
             }
+          },
+          twitter: {
+            status: 'skipped',
+            reason: 'missing_credentials',
+            events: [],
+            telemetry: {
+              connector: 'twitter_byo',
+              skipped: true,
+              reason: 'missing_credentials',
+              budget_usd: 0
+            }
           }
         }
       }))
@@ -121,6 +132,17 @@ describe('live read model resilience', () => {
               skipped: true,
               reason: 'missing_credentials',
               budget_usd: 5
+            }
+          },
+          twitter: {
+            status: 'skipped',
+            reason: 'missing_credentials',
+            events: [],
+            telemetry: {
+              connector: 'twitter_byo',
+              skipped: true,
+              reason: 'missing_credentials',
+              budget_usd: 0
             }
           }
         }
@@ -200,6 +222,17 @@ describe('live read model resilience', () => {
               reason: 'missing_credentials',
               budget_usd: 5
             }
+          },
+          twitter: {
+            status: 'skipped',
+            reason: 'missing_credentials',
+            events: [],
+            telemetry: {
+              connector: 'twitter_byo',
+              skipped: true,
+              reason: 'missing_credentials',
+              budget_usd: 0
+            }
           }
         }
       }))
@@ -273,6 +306,17 @@ describe('live read model resilience', () => {
               skipped: true,
               reason: 'missing_credentials',
               budget_usd: 5
+            }
+          },
+          twitter: {
+            status: 'skipped',
+            reason: 'missing_credentials',
+            events: [],
+            telemetry: {
+              connector: 'twitter_byo',
+              skipped: true,
+              reason: 'missing_credentials',
+              budget_usd: 0
             }
           }
         }

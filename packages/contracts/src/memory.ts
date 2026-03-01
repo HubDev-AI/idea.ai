@@ -10,7 +10,7 @@ export const signalMemoryRecordSchema = z
     source: z.string().min(1),
     canonical_text: z.string().min(1),
     observed_at: z.string().datetime(),
-    pain: scoreSchema,
+    demand: scoreSchema,
     timing: scoreSchema,
     buildability: scoreSchema,
     blended: scoreSchema,
@@ -24,7 +24,7 @@ export const trendWindowSnapshotSchema = z
     source: z.string().min(1),
     window: memoryWindowSchema,
     count_signals: z.number().int().nonnegative(),
-    avg_pain: scoreSchema,
+    avg_demand: scoreSchema,
     avg_timing: scoreSchema
   })
   .strict();
@@ -33,7 +33,7 @@ export const similarSignalMatchSchema = z
   .object({
     signal_id: z.string().min(1),
     distance: z.number().min(0),
-    pain: scoreSchema,
+    demand: scoreSchema,
     timing: scoreSchema,
     source: z.string().min(1),
     observed_at: z.string().datetime(),

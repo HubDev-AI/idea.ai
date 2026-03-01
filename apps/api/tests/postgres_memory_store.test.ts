@@ -67,10 +67,11 @@ describe('PostgresMemoryStore', () => {
           source: 'hn',
           canonical_text: 'test signal',
           observed_at: new Date('2026-01-01T00:00:00Z'),
-          pain: '70',
+          demand: '70',
           timing: '80',
           buildability: '60',
-          blended: '72'
+          blended: '72',
+          virality: '40'
         }
       ]
     });
@@ -83,10 +84,11 @@ describe('PostgresMemoryStore', () => {
       source: 'hn',
       canonical_text: 'test signal',
       observed_at: '2026-01-01T00:00:00.000Z',
-      pain: 70,
+      demand: 70,
       timing: 80,
       buildability: 60,
       blended: 72,
+      virality: 40,
       source_url: null
     });
     // Verify query used the limit parameter
@@ -111,16 +113,17 @@ describe('PostgresMemoryStore', () => {
           source: 's',
           canonical_text: 'text',
           observed_at: new Date('2026-06-15T00:00:00Z'),
-          pain: 'NaN',
+          demand: 'NaN',
           timing: null,
           buildability: undefined,
-          blended: ''
+          blended: '',
+          virality: undefined
         }
       ]
     });
     const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
     const signals = await store.listAllSignals();
-    expect(signals[0]!.pain).toBe(0);
+    expect(signals[0]!.demand).toBe(0);
     expect(signals[0]!.timing).toBe(0);
     expect(signals[0]!.buildability).toBe(0);
     expect(signals[0]!.blended).toBe(0);
@@ -142,7 +145,7 @@ describe('PostgresMemoryStore', () => {
         source: 'hn',
         canonical_text: 'test',
         observed_at: '2026-01-01T00:00:00Z',
-        pain: 70,
+        demand: 70,
         timing: 80,
         buildability: 60,
         blended: 72
@@ -177,7 +180,7 @@ describe('PostgresMemoryStore', () => {
         source: 'hn',
         canonical_text: 'test',
         observed_at: '2026-01-01T00:00:00Z',
-        pain: 50,
+        demand: 50,
         timing: 50,
         buildability: 50,
         blended: 50
@@ -224,7 +227,7 @@ describe('PostgresMemoryStore', () => {
         source: 'hn',
         canonical_text: 'test',
         observed_at: '2026-01-01T00:00:00Z',
-        pain: 50,
+        demand: 50,
         timing: 50,
         buildability: 50,
         blended: 50
@@ -259,7 +262,7 @@ describe('PostgresMemoryStore', () => {
         {
           signal_id: 'sim1',
           distance: '0.1234',
-          pain: '60',
+          demand: '60',
           timing: '70',
           source: 'gh',
           observed_at: new Date('2026-03-01T00:00:00Z')
@@ -277,7 +280,7 @@ describe('PostgresMemoryStore', () => {
     expect(results[0]).toEqual({
       signal_id: 'sim1',
       distance: 0.1234,
-      pain: 60,
+      demand: 60,
       timing: 70,
       source: 'gh',
       observed_at: '2026-03-01T00:00:00.000Z'
@@ -309,9 +312,9 @@ describe('PostgresMemoryStore', () => {
     const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
     mockQuery.mockResolvedValueOnce({
       rows: [
-        { topic: 'ai', source: 'hn', window: '7d', count_signals: 5, avg_pain: '72.50', avg_timing: '68.00' },
-        { topic: 'ai', source: 'hn', window: '30d', count_signals: 20, avg_pain: '65.00', avg_timing: '60.00' },
-        { topic: 'ai', source: 'hn', window: '90d', count_signals: 50, avg_pain: '60.00', avg_timing: '55.00' }
+        { topic: 'ai', source: 'hn', window: '7d', count_signals: 5, avg_demand: '72.50', avg_timing: '68.00' },
+        { topic: 'ai', source: 'hn', window: '30d', count_signals: 20, avg_demand: '65.00', avg_timing: '60.00' },
+        { topic: 'ai', source: 'hn', window: '90d', count_signals: 50, avg_demand: '60.00', avg_timing: '55.00' }
       ]
     });
     const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
@@ -327,7 +330,7 @@ describe('PostgresMemoryStore', () => {
       source: 'hn',
       window: '7d',
       count_signals: 5,
-      avg_pain: 72.5,
+      avg_demand: 72.5,
       avg_timing: 68
     });
     expect(windows[1]!.window).toBe('30d');
@@ -339,7 +342,7 @@ describe('PostgresMemoryStore', () => {
     // Return only 7d; 30d and 90d are missing
     mockQuery.mockResolvedValueOnce({
       rows: [
-        { topic: 'ai', source: 'hn', window: '7d', count_signals: 2, avg_pain: '50', avg_timing: '50' }
+        { topic: 'ai', source: 'hn', window: '7d', count_signals: 2, avg_demand: '50', avg_timing: '50' }
       ]
     });
     const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
@@ -358,7 +361,7 @@ describe('PostgresMemoryStore', () => {
       source: 'hn',
       window: '30d',
       count_signals: 0,
-      avg_pain: 0,
+      avg_demand: 0,
       avg_timing: 0
     });
     // 90d fallback
@@ -377,12 +380,12 @@ describe('PostgresMemoryStore', () => {
           {
             signal_id: 's1', topic: 'ai', source: 'hn',
             canonical_text: 'AI tool', observed_at: new Date('2026-02-25'),
-            pain: '75', timing: '80', buildability: '60', blended: '73'
+            demand: '75', timing: '80', buildability: '60', blended: '73', virality: '30'
           },
           {
             signal_id: 's2', topic: 'hr', source: 'greenhouse',
             canonical_text: 'HR gap', observed_at: new Date('2026-02-24'),
-            pain: '60', timing: '50', buildability: '70', blended: '58'
+            demand: '60', timing: '50', buildability: '70', blended: '58', virality: '20'
           }
         ]
       });

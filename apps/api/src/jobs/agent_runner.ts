@@ -97,8 +97,9 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         signal_id: s.signal_id,
         canonical_text: s.canonical_text,
         source: s.source,
-        pain: s.pain,
+        demand: s.demand,
         timing: s.timing,
+        virality: s.virality,
         blended: s.blended,
         embedding: embeddingRows.get(s.signal_id)!
       }));
@@ -124,7 +125,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         topic: tw.topic,
         window: tw.window,
         count: tw.count_signals,
-        avg_pain: tw.avg_pain,
+        avg_demand: tw.avg_demand,
         growth: tw.count_signals > 0 ? 'active' : 'none'
       }))
     : [];
@@ -141,15 +142,16 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       id: c.id,
       label: c.label,
       totalCount: c.totalCount,
-      avgPain: c.avgPain,
+      avgDemand: c.avgDemand,
       avgTiming: c.avgTiming,
       sources: c.sources,
       signals: c.representatives.map((s) => ({
         signal_id: s.signal_id,
         text: s.canonical_text,
         source: s.source,
-        pain: s.pain,
-        timing: s.timing
+        demand: s.demand,
+        timing: s.timing,
+        virality: s.virality
       }))
     })),
     recentJournal: recentJournal.map((j) => ({
@@ -251,12 +253,13 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         signal_id: s.signal_id,
         text: s.canonical_text,
         source: s.source,
-        pain: s.pain,
-        timing: s.timing
+        demand: s.demand,
+        timing: s.timing,
+        virality: s.virality
       }));
 
     // Similarity search for historical signals
-    let historicalSignals: { signal_id: string; text: string; source: string; pain: number; timing: number }[] = [];
+    let historicalSignals: { signal_id: string; text: string; source: string; demand: number; timing: number; virality?: number }[] = [];
     if (deps.memoryStore && deps.embedText) {
       const topicEmbedding = await deps.embedText(dig.topic);
       if (topicEmbedding) {
@@ -270,7 +273,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           signal_id: s.signal_id,
           text: s.canonical_text,
           source: s.source,
-          pain: s.pain,
+          demand: s.demand,
           timing: s.timing
         }));
       }
@@ -382,9 +385,10 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           targetBuyer: proposal.target_buyer,
           proposedSolution: proposal.proposed_solution,
           evidenceCount: proposal.supporting_signal_ids.length,
-          avgPain: 50,
+          avgDemand: 50,
           avgTiming: 50,
           avgBuildability: 50,
+          avgVirality: 0,
           latestObservedAt: new Date().toISOString(),
           evidence,
           estimatedScope: proposal.estimated_scope ?? null

@@ -1,7 +1,19 @@
 import type { RawEventInput } from './common/http';
 import { fetchJsonWithRetry } from './common/http';
 
-export const DEFAULT_SUBREDDITS = ['SaaS', 'startups', 'smallbusiness', 'Entrepreneur'];
+export const DEFAULT_SUBREDDITS = [
+  'SaaS',
+  'startups',
+  'smallbusiness',
+  'Entrepreneur',
+  'apps',
+  'socialmedia',
+  'productivity',
+  'dating',
+  'sideproject',
+  'AppIdeas',
+  'InternetIsBeautiful'
+];
 
 type RedditPost = {
   data: {
