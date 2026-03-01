@@ -1,8 +1,8 @@
 import type { RunPromptInput, RunPromptResult } from './types';
 
-export type ScoreTriplet = { pain: number; timing: number; buildability: number };
+export type ScoreQuad = { demand: number; timing: number; buildability: number; virality: number };
 
-export type ReconciledScore = ScoreTriplet & {
+export type ReconciledScore = ScoreQuad & {
   agreement: 'aligned' | 'contested' | 'single' | 'unavailable';
   contestedDimensions: string[];
 };
@@ -17,11 +17,11 @@ const DISAGREEMENT_THRESHOLD = 25;
 const avg = (a: number, b: number) => Math.round((a + b) / 2);
 
 export const reconcileScores = (
-  claudeScores: ScoreTriplet | null,
-  codexScores: ScoreTriplet | null
+  claudeScores: ScoreQuad | null,
+  codexScores: ScoreQuad | null
 ): ReconciledScore => {
   if (!claudeScores && !codexScores) {
-    return { pain: 0, timing: 0, buildability: 0, agreement: 'unavailable', contestedDimensions: [] };
+    return { demand: 0, timing: 0, buildability: 0, virality: 0, agreement: 'unavailable', contestedDimensions: [] };
   }
 
   if (!claudeScores || !codexScores) {
@@ -30,16 +30,17 @@ export const reconcileScores = (
   }
 
   const contested: string[] = [];
-  for (const dim of ['pain', 'timing', 'buildability'] as const) {
+  for (const dim of ['demand', 'timing', 'buildability', 'virality'] as const) {
     if (Math.abs(claudeScores[dim] - codexScores[dim]) > DISAGREEMENT_THRESHOLD) {
       contested.push(dim);
     }
   }
 
   return {
-    pain: avg(claudeScores.pain, codexScores.pain),
+    demand: avg(claudeScores.demand, codexScores.demand),
     timing: avg(claudeScores.timing, codexScores.timing),
     buildability: avg(claudeScores.buildability, codexScores.buildability),
+    virality: avg(claudeScores.virality, codexScores.virality),
     agreement: contested.length > 0 ? 'contested' : 'aligned',
     contestedDimensions: contested
   };
