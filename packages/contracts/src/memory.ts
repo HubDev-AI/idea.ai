@@ -36,7 +36,8 @@ export const similarSignalMatchSchema = z
     pain: scoreSchema,
     timing: scoreSchema,
     source: z.string().min(1),
-    observed_at: z.string().datetime()
+    observed_at: z.string().datetime(),
+    canonical_text: z.string().min(1)
   })
   .strict();
 
