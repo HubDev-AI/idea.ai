@@ -1,13 +1,16 @@
 import type { ByoConnectorResult } from '@idea/connectors/src/byo_guard';
 import { runExaByoConnector } from '@idea/connectors/src/exa_byo';
 import { runPerigonByoConnector } from '@idea/connectors/src/perigon_byo';
+import { runTwitterByoConnector } from '@idea/connectors/src/twitter_byo';
 import { createExecutionLogger, type ExecutionLogger } from '../runtime/execution_logger';
+
+type ByoConnectorName = 'exa_byo' | 'perigon_byo' | 'twitter_byo';
 
 type ConnectorExecutor = (env: NodeJS.ProcessEnv) => Promise<ByoConnectorResult>;
 
 const errorMessage = (value: unknown): string => (value instanceof Error ? value.message : 'Unknown error');
 
-const toErroredResult = (connector: 'exa_byo' | 'perigon_byo', error: unknown): ByoConnectorResult => ({
+const toErroredResult = (connector: ByoConnectorName, error: unknown): ByoConnectorResult => ({
   status: 'error',
   error: errorMessage(error),
   events: [],
@@ -19,7 +22,7 @@ const toErroredResult = (connector: 'exa_byo' | 'perigon_byo', error: unknown): 
 });
 
 const runSafely = async (
-  connector: 'exa_byo' | 'perigon_byo',
+  connector: ByoConnectorName,
   env: NodeJS.ProcessEnv,
   execute: ConnectorExecutor,
   logger: ExecutionLogger
@@ -51,6 +54,7 @@ export const runByoConnectorIngestion = async (
   deps: {
     runExa?: ConnectorExecutor;
     runPerigon?: ConnectorExecutor;
+    runTwitter?: ConnectorExecutor;
     logger?: ExecutionLogger;
   } = {}
 ) => {
@@ -59,15 +63,18 @@ export const runByoConnectorIngestion = async (
   const logger = deps.logger ?? createExecutionLogger(loggerOpts);
   const runExa = deps.runExa ?? runExaByoConnector;
   const runPerigon = deps.runPerigon ?? runPerigonByoConnector;
-  const [exa, perigon] = await Promise.all([
+  const runTwitter = deps.runTwitter ?? runTwitterByoConnector;
+  const [exa, perigon, twitter] = await Promise.all([
     runSafely('exa_byo', env, runExa, logger),
-    runSafely('perigon_byo', env, runPerigon, logger)
+    runSafely('perigon_byo', env, runPerigon, logger),
+    runSafely('twitter_byo', env, runTwitter, logger)
   ]);
 
   await logger.info('ingest_byo', 'ingestion complete', {
     connectors: {
       exa: exa.status,
-      perigon: perigon.status
+      perigon: perigon.status,
+      twitter: twitter.status
     }
   });
 
@@ -75,7 +82,8 @@ export const runByoConnectorIngestion = async (
     run_id: logger.runId,
     connectors: {
       exa,
-      perigon
+      perigon,
+      twitter
     }
   };
 };

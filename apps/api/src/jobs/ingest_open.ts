@@ -1,14 +1,16 @@
 import { type Cadence, OPEN_CONNECTOR_CADENCE, type RawEventInput } from '@idea/connectors/src/common/http';
+import { fetchAppStoreTrending } from '@idea/connectors/src/appstore';
 import { fetchGithubIssueEvents } from '@idea/connectors/src/github_issues';
 import { fetchGreenhouseJobEvents } from '@idea/connectors/src/greenhouse';
 import { fetchHnEvents } from '@idea/connectors/src/hn';
+import { fetchIndieHackersEvents } from '@idea/connectors/src/indiehackers';
 import { fetchLeverJobEvents } from '@idea/connectors/src/lever';
 import { fetchProductHunt } from '@idea/connectors/src/producthunt';
 import { fetchReddit } from '@idea/connectors/src/reddit';
 import { fetchYcCompanyEvents } from '@idea/connectors/src/yc_companies';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 
-export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt';
+export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers';
 
 export type OpenConnectorStatus = {
   name: OpenConnectorName;
@@ -30,7 +32,7 @@ type OpenIngestionDeps = {
   loaders?: Partial<Record<OpenConnectorName, OpenConnectorLoader>>;
 };
 
-const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt'];
+const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers'];
 
 const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   hn: () => fetchHnEvents(),
@@ -49,7 +51,9 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
     const phOpts: Parameters<typeof fetchProductHunt>[0] = {};
     if (process.env.PH_API_TOKEN !== undefined) phOpts.token = process.env.PH_API_TOKEN;
     return fetchProductHunt(phOpts);
-  }
+  },
+  appstore_trending: () => fetchAppStoreTrending(),
+  indiehackers: () => fetchIndieHackersEvents()
 };
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');

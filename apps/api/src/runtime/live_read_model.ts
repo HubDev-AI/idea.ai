@@ -43,7 +43,7 @@ import {
 
 const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
 const DEFAULT_SNAPSHOT_FILE = (): string => join(process.cwd(), 'logs', 'state', 'latest_snapshot.json');
-const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt'];
+const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers'];
 
 type Snapshot = {
   refreshedAt: number;
@@ -244,11 +244,11 @@ const isConnectorSelected = (connector: OpenConnectorName, env: RuntimeEnv): boo
 
 const isConnectorConfigured = (connector: OpenConnectorName, env: RuntimeEnv): boolean => {
   if (connector === 'greenhouse') {
-    return Boolean(env.greenhouseBoardToken);
+    return env.enableJobConnectors && Boolean(env.greenhouseBoardToken);
   }
 
   if (connector === 'lever') {
-    return Boolean(env.leverSite);
+    return env.enableJobConnectors && Boolean(env.leverSite);
   }
 
   return true;
@@ -321,11 +321,13 @@ const toConnectorStatus = (
 
   const exa = mapByoStatus(byo.connectors.exa.status, refreshedAtIso);
   const perigon = mapByoStatus(byo.connectors.perigon.status, refreshedAtIso);
+  const twitter = mapByoStatus(byo.connectors.twitter.status, refreshedAtIso);
 
   return [
     ...openRecords,
     { name: 'exa_byo', status: exa.status, last_run: exa.last_run },
-    { name: 'perigon_byo', status: perigon.status, last_run: perigon.last_run }
+    { name: 'perigon_byo', status: perigon.status, last_run: perigon.last_run },
+    { name: 'twitter_byo', status: twitter.status, last_run: twitter.last_run }
   ];
 };
 
@@ -354,6 +356,11 @@ const toErrorFirstSnapshot = (env: RuntimeEnv, refreshedAtIso: string): Connecto
     name: 'perigon_byo',
     status: (env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
     last_run: env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? refreshedAtIso : null
+  },
+  {
+    name: 'twitter_byo',
+    status: (env.xBearerToken && env.xDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
+    last_run: env.xBearerToken && env.xDailyBudgetUsd > 0 ? refreshedAtIso : null
   }
 ];
 
@@ -609,7 +616,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
         })
       ]);
 
-      const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events]);
+      const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events, ...byo.connectors.twitter.events]);
       const highSignalEvents = events.filter((event) => !isLowValueRecruitingEvent(event));
       const selectedEvents = selectEventsForScoring(highSignalEvents);
 
