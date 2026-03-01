@@ -1,8 +1,9 @@
 export type Scores = {
-  pain: number;
+  demand: number;
   timing: number;
   buildability: number;
+  virality: number;
 };
 
-export const blendedScore = ({ pain, timing, buildability }: Scores): number =>
-  Math.round((0.4 * pain + 0.4 * timing + 0.2 * buildability) * 100) / 100;
+export const blendedScore = ({ demand, timing, buildability, virality }: Scores): number =>
+  Math.round((0.25 * demand + 0.20 * timing + 0.20 * buildability + 0.35 * virality) * 100) / 100;

@@ -30,9 +30,10 @@ describe('event schemas', () => {
       occurred_at: '2026-02-24T00:00:00.000Z',
       payload: {
         signal_id: 'sig_1',
-        pain: 80,
+        demand: 80,
         timing: 75,
         buildability: 60,
+        virality: 40,
         blended: 74
       }
     });
@@ -81,9 +82,10 @@ describe('event schemas', () => {
         occurred_at: '2026-02-24T00:00:00.000Z',
         payload: {
           signal_id: 'sig_2',
-          pain: 101,
+          demand: 101,
           timing: 50,
           buildability: 50,
+          virality: 30,
           blended: 70
         }
       })

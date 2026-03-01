@@ -43,7 +43,7 @@ import {
 
 const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
 const DEFAULT_SNAPSHOT_FILE = (): string => join(process.cwd(), 'logs', 'state', 'latest_snapshot.json');
-const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt'];
+const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers'];
 
 type Snapshot = {
   refreshedAt: number;
@@ -244,11 +244,11 @@ const isConnectorSelected = (connector: OpenConnectorName, env: RuntimeEnv): boo
 
 const isConnectorConfigured = (connector: OpenConnectorName, env: RuntimeEnv): boolean => {
   if (connector === 'greenhouse') {
-    return Boolean(env.greenhouseBoardToken);
+    return env.enableJobConnectors && Boolean(env.greenhouseBoardToken);
   }
 
   if (connector === 'lever') {
-    return Boolean(env.leverSite);
+    return env.enableJobConnectors && Boolean(env.leverSite);
   }
 
   return true;
@@ -321,11 +321,13 @@ const toConnectorStatus = (
 
   const exa = mapByoStatus(byo.connectors.exa.status, refreshedAtIso);
   const perigon = mapByoStatus(byo.connectors.perigon.status, refreshedAtIso);
+  const twitter = mapByoStatus(byo.connectors.twitter.status, refreshedAtIso);
 
   return [
     ...openRecords,
     { name: 'exa_byo', status: exa.status, last_run: exa.last_run },
-    { name: 'perigon_byo', status: perigon.status, last_run: perigon.last_run }
+    { name: 'perigon_byo', status: perigon.status, last_run: perigon.last_run },
+    { name: 'twitter_byo', status: twitter.status, last_run: twitter.last_run }
   ];
 };
 
@@ -354,6 +356,11 @@ const toErrorFirstSnapshot = (env: RuntimeEnv, refreshedAtIso: string): Connecto
     name: 'perigon_byo',
     status: (env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
     last_run: env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? refreshedAtIso : null
+  },
+  {
+    name: 'twitter_byo',
+    status: (env.xBearerToken && env.xDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
+    last_run: env.xBearerToken && env.xDailyBudgetUsd > 0 ? refreshedAtIso : null
   }
 ];
 
@@ -415,9 +422,10 @@ const parseSnapshotPayload = (raw: string): Snapshot | null => {
           source_url: entry.source_url,
           next_action: entry.next_action,
           updated_at: entry.updated_at,
-          ...(typeof entry.pain === 'number' ? { pain: entry.pain } : {}),
+          ...(typeof entry.demand === 'number' ? { demand: entry.demand } : {}),
           ...(typeof entry.timing === 'number' ? { timing: entry.timing } : {}),
-          ...(typeof entry.buildability === 'number' ? { buildability: entry.buildability } : {})
+          ...(typeof entry.buildability === 'number' ? { buildability: entry.buildability } : {}),
+          ...(typeof entry.virality === 'number' ? { virality: entry.virality } : {})
         } satisfies FeedRecord;
       })
       .filter((entry): entry is FeedRecord => entry !== null);
@@ -608,7 +616,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
         })
       ]);
 
-      const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events]);
+      const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events, ...byo.connectors.twitter.events]);
       const highSignalEvents = events.filter((event) => !isLowValueRecruitingEvent(event));
       const selectedEvents = selectEventsForScoring(highSignalEvents);
 
@@ -654,9 +662,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
         top_source: string;
         snippet: string;
         source_url: string | null;
-        pain: number;
+        demand: number;
         timing: number;
         buildability: number;
+        virality: number;
         blended: number;
       }> = [];
       let aiJudgeAttempts = 0;
@@ -760,7 +769,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             memoryRetriever: retriever,
             topK: 8
           };
-          if (aiInsight?.pain !== undefined) scoreArgs.basePain = aiInsight.pain;
+          if (aiInsight?.demand !== undefined) scoreArgs.baseDemand = aiInsight.demand;
           if (aiInsight?.timing !== undefined) scoreArgs.baseTiming = aiInsight.timing;
           const score = await scoreSignalWithRetriever(scoreArgs);
           const blended = applySourceQualityPenalty({
@@ -778,7 +787,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             snippet: event.text.slice(0, 160),
             text: event.text,
             observedAt: event.source_timestamp,
-            pain: score.pain,
+            demand: score.demand,
             timing: score.timing,
             buildability: score.buildability,
             blended,
@@ -804,9 +813,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             top_source: event.source,
             snippet: aiInsight?.rationale && aiInsight.rationale.length > 0 ? aiInsight.rationale : event.text.slice(0, 160),
             source_url: event.url,
-            pain: score.pain,
+            demand: score.demand,
             timing: score.timing,
             buildability: score.buildability,
+            virality: 0,
             blended
           });
         } catch (error) {

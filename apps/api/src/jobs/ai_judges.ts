@@ -86,7 +86,7 @@ const buildJudgePrompt = ({
   source: string;
 }): string =>
   [
-    'You are evaluating a possible SaaS product for a solo founder.',
+    'You are evaluating a possible product opportunity.',
     'Score BUILDABILITY using three independent judges.',
     'Each judge must output an integer between 0 and 100.',
     'Return ONLY this exact format with no extra text: n1,n2,n3',

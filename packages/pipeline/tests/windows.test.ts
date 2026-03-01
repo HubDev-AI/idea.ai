@@ -9,9 +9,9 @@ describe('trend windows', () => {
           signal_id: 's1',
           topic: 'compliance',
           source: 'hn',
-          canonical_text: 'soc2 pain',
+          canonical_text: 'soc2 demand',
           observed_at: '2026-02-23T00:00:00.000Z',
-          pain: 80,
+          demand: 80,
           timing: 60,
           buildability: 50,
           blended: 66
@@ -20,9 +20,9 @@ describe('trend windows', () => {
           signal_id: 's2',
           topic: 'compliance',
           source: 'hn',
-          canonical_text: 'audit pain',
+          canonical_text: 'audit demand',
           observed_at: '2026-02-10T00:00:00.000Z',
-          pain: 70,
+          demand: 70,
           timing: 55,
           buildability: 60,
           blended: 62
