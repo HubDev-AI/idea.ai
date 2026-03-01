@@ -1,12 +1,14 @@
-import pg from 'pg';
-import type { AgentStatusRecord } from '@idea/contracts/src/api';
 import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
 import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import { embedText } from '@idea/ai-runtime/src/ollama';
-import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
+import type { AgentStatusRecord } from '@idea/contracts/src/api';
+import pg from 'pg';
 import { loadEnvFile } from './config/dotenv';
-import { createLiveReadModel } from './runtime/live_read_model';
+import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
+import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
+import { createExecutionLogger } from './runtime/execution_logger';
 import { createPostgresJournalStore } from './runtime/journal_store';
+import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
 import { createPostgresThesisStore } from './runtime/postgres_thesis_store';
 import { InMemoryThesisStore } from './runtime/thesis_store';
@@ -21,51 +23,107 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? '')
   .map((s) => s.trim())
   .filter(Boolean);
 const apiKey = process.env.API_KEY || undefined;
-const readModel = createLiveReadModel();
 const databaseUrl = process.env.DATABASE_URL;
 
-const thesisStore = databaseUrl
-  ? createPostgresThesisStore({ pool: new pg.Pool({ connectionString: databaseUrl, max: 4 }) })
+const pool = databaseUrl ? new pg.Pool({ connectionString: databaseUrl, max: 4 }) : null;
+
+const thesisStore = pool
+  ? createPostgresThesisStore({ pool })
   : new InMemoryThesisStore();
 
+const embedTextFn = (text: string) => embedText(text, { fallbackToNull: true });
+
 const memoryStore = databaseUrl
-  ? createPostgresMemoryStore({ databaseUrl })
+  ? createPostgresMemoryStore({ databaseUrl, embedText: embedTextFn })
   : null;
+
+const readModel = createLiveReadModel(undefined, memoryStore ? { persistentStore: memoryStore } : undefined);
 
 const journalStore = databaseUrl
   ? createPostgresJournalStore({ databaseUrl })
   : null;
 
+const agentRunStore: AgentRunStore | null = pool
+  ? createAgentRunStore({ pool })
+  : null;
+
 let agentStatus: AgentStatusRecord = { lastRun: null, investigateNext: null };
 let agentRunInFlight: Promise<AgentRunResult> | null = null;
+
+// Load last run status from DB on startup (survives restarts)
+if (agentRunStore) {
+  agentRunStore.latest().then((row) => {
+    if (row && row.status === 'completed') {
+      agentStatus = {
+        lastRun: {
+          timestamp: row.started_at,
+          thesesUpdated: row.theses_updated,
+          newCandidates: row.new_candidates,
+          clustersAnalyzed: row.clusters_analyzed,
+          deepDivesPerformed: row.deep_dives_performed,
+          journalEntriesWritten: row.journal_entries_written
+        },
+        investigateNext: row.investigate_next
+      };
+    }
+  }).catch(() => { /* DB may not have the table yet */ });
+}
 
 const executeAgentRun = async (): Promise<AgentRunResult> => {
   if (agentRunInFlight) return agentRunInFlight;
 
-  agentRunInFlight = runResearchAgent({
-    thesisStore,
-    memoryStore,
-    journalStore,
-    embedText: (text: string) => embedText(text, { fallbackToNull: true }),
-    runClaude: runClaudePrompt,
-    runCodex: runCodexPrompt
-  }).finally(() => {
+  const runId = `agent-${Date.now()}`;
+  const logger = createExecutionLogger({ runId });
+
+  agentRunInFlight = (async () => {
+    await agentRunStore?.create(runId);
+    await logger.info('agent_runner', 'run started', { run_id: runId });
+
+    try {
+      const result = await runResearchAgent({
+        thesisStore,
+        memoryStore,
+        journalStore,
+        embedText: (text: string) => embedText(text, { fallbackToNull: true }),
+        runClaude: runClaudePrompt,
+        runCodex: runCodexPrompt,
+        logger,
+        runId
+      });
+
+      await agentRunStore?.complete(runId, result);
+      await logger.info('agent_runner', 'run complete', {
+        theses_updated: result.thesesUpdated,
+        new_candidates: result.newCandidates,
+        clusters_analyzed: result.clustersAnalyzed,
+        deep_dives: result.deepDivesPerformed,
+        journal_entries: result.journalEntriesWritten
+      });
+
+      agentStatus = {
+        lastRun: {
+          timestamp: new Date().toISOString(),
+          thesesUpdated: result.thesesUpdated,
+          newCandidates: result.newCandidates,
+          clustersAnalyzed: result.clustersAnalyzed,
+          deepDivesPerformed: result.deepDivesPerformed,
+          journalEntriesWritten: result.journalEntriesWritten
+        },
+        investigateNext: result.investigateNext || null
+      };
+      return result;
+    } catch (err) {
+      await agentRunStore?.fail(runId, err);
+      await logger.error('agent_runner', 'run failed', {
+        error: err instanceof Error ? err.message : String(err)
+      });
+      throw err;
+    }
+  })().finally(() => {
     agentRunInFlight = null;
   });
 
-  const result = await agentRunInFlight;
-  agentStatus = {
-    lastRun: {
-      timestamp: new Date().toISOString(),
-      thesesUpdated: result.thesesUpdated,
-      newCandidates: result.newCandidates,
-      clustersAnalyzed: result.clustersAnalyzed,
-      deepDivesPerformed: result.deepDivesPerformed,
-      journalEntriesWritten: result.journalEntriesWritten
-    },
-    investigateNext: result.investigateNext || null
-  };
-  return result;
+  return agentRunInFlight;
 };
 
 const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
@@ -79,6 +137,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   memoryStore,
   getAgentStatus: () => agentStatus,
   triggerAgentRun: executeAgentRun,
+  agentRunStore,
   corsOrigins,
   infraStatusDeps: {
     checkPostgres: async () => {
@@ -100,15 +159,54 @@ if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
 let agentTimer: ReturnType<typeof setInterval> | undefined;
+let cleanupTimer: ReturnType<typeof setInterval> | undefined;
+
+const RETENTION_DAYS = 90;
+const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+const runRetentionCleanup = async () => {
+  if (!pool) return;
+  try {
+    await pool.query(`DELETE FROM signal_memory WHERE observed_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
+    await pool.query(`DELETE FROM signal_embeddings WHERE signal_id NOT IN (SELECT signal_id FROM signal_memory)`);
+    await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
+    await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
+  } catch (err) {
+    console.error('retention cleanup failed:', err);
+  }
+};
+
+const SHUTDOWN_TIMEOUT_MS = 15_000;
 
 const shutdown = async () => {
   clearInterval(agentTimer);
+  clearInterval(cleanupTimer);
+
+  // Wait for in-flight agent run, mark as failed if still running
+  if (agentRunInFlight) {
+    try {
+      await Promise.race([
+        agentRunInFlight,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), SHUTDOWN_TIMEOUT_MS))
+      ]);
+    } catch {
+      // Run was interrupted or timed out — agentRunStore.fail() already called in executeAgentRun's catch block
+    }
+    agentRunInFlight = null;
+  }
+
   await readModel.close();
   if (memoryStore) {
     await memoryStore.close();
   }
   if ('close' in thesisStore) {
     await (thesisStore as { close: () => Promise<void> }).close();
+  }
+  if (journalStore) {
+    await journalStore.close();
+  }
+  if (pool) {
+    await pool.end();
   }
   await app.close();
   process.exit(0);
@@ -132,6 +230,8 @@ app
         console.error('research agent cron failed:', err);
       });
     }, AGENT_INTERVAL_MS);
+    cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
+    void runRetentionCleanup();
   })
   .catch((error) => {
     console.error(error);

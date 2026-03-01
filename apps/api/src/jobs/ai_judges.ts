@@ -135,7 +135,7 @@ export const resolveAiJudgeSettings = (env: NodeJS.ProcessEnv = process.env): Ai
         ? 'codex'
         : 'claude';
   const isTest = env.NODE_ENV === 'test' || env.VITEST === 'true';
-  const defaultMaxSignals = isTest ? 0 : 0;
+  const defaultMaxSignals = isTest ? 0 : 50;
 
   return {
     preferredProvider,

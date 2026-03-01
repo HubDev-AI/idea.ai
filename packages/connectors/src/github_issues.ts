@@ -12,14 +12,17 @@ type GithubIssue = {
 type GithubIssueLoader = (limit: number) => Promise<GithubIssue[]>;
 
 const defaultGithubIssueLoader: GithubIssueLoader = async (limit) => {
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json'
+  };
+  const token = process.env.GITHUB_TOKEN;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
   const response = await fetchJsonWithRetry<{ items?: GithubIssue[] }>(
     `https://api.github.com/search/issues?q=type:issue+state:open+label:feature+sort:updated&per_page=${limit}`,
     {
-      init: {
-        headers: {
-          Accept: 'application/vnd.github+json'
-        }
-      }
+      init: { headers }
     }
   );
 

@@ -1,3 +1,4 @@
+import type { ThesisPage } from '@idea/contracts/src/api';
 import type { Pool } from 'pg';
 import type { ThesisDraft } from '../jobs/thesis_synthesizer';
 import type { ThesisStore, ThesisStoreFilter } from './thesis_store';
@@ -16,6 +17,9 @@ type ThesisRow = {
   last_seen_at: Date;
   evidence_count: number;
   source_count: number;
+  avg_pain: number | string;
+  avg_timing: number | string;
+  avg_buildability: number | string;
 };
 
 const toNumber = (v: unknown): number => {
@@ -41,21 +45,29 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   proposedSolution: row.proposed_solution,
   evidenceCount: toNumber(row.evidence_count),
   sourceCount: toNumber(row.source_count),
-  avgPain: 0,
-  avgTiming: 0,
-  avgBuildability: 0,
+  avgPain: toNumber(row.avg_pain),
+  avgTiming: toNumber(row.avg_timing),
+  avgBuildability: toNumber(row.avg_buildability),
   latestObservedAt: new Date(row.last_seen_at).toISOString(),
   evidence: [],
   estimatedScope: toScope(row.estimated_scope)
 });
 
-export const createPostgresThesisStore = ({ pool }: { pool: Pool }): ThesisStore & { close: () => Promise<void> } => ({
+export type PaginatedThesisStore = ThesisStore & {
+  listPaginated(params: { page?: number; pageSize?: number; status?: string }): Promise<ThesisPage>;
+  close: () => Promise<void>;
+};
+
+export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedThesisStore => ({
   async list(filter?: ThesisStoreFilter): Promise<ThesisDraft[]> {
     const where = filter?.status ? 'WHERE status = $1' : '';
     const params = filter?.status ? [filter.status] : [];
     const sql = `
       SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
-             COUNT(DISTINCT sm.source)::int AS source_count
+             COUNT(DISTINCT sm.source)::int AS source_count,
+             ROUND(COALESCE(AVG(sm.pain), 0))::int AS avg_pain,
+             ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
+             ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
@@ -70,7 +82,10 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): ThesisStore
   async getByKey(canonicalKey: string): Promise<ThesisDraft | null> {
     const result = await pool.query<ThesisRow>(
       `SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
-              COUNT(DISTINCT sm.source)::int AS source_count
+              COUNT(DISTINCT sm.source)::int AS source_count,
+              ROUND(COALESCE(AVG(sm.pain), 0))::int AS avg_pain,
+              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
+              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability
        FROM thesis_candidates tc
        LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
        LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
@@ -121,6 +136,59 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): ThesisStore
         );
       }
     }
+  },
+
+  async listPaginated({ page = 1, pageSize = 10, status }: { page?: number; pageSize?: number; status?: string } = {}): Promise<ThesisPage> {
+    const where = status ? 'WHERE status = $1' : '';
+    const countParams = status ? [status] : [];
+    const countResult = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM thesis_candidates ${where}`,
+      countParams
+    );
+    const totalItems = Number(countResult.rows[0]?.count ?? 0);
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const safePage = Math.min(Math.max(1, page), totalPages);
+    const offset = (safePage - 1) * pageSize;
+
+    const params: (string | number)[] = status ? [status] : [];
+    const limitIdx = params.length + 1;
+    const offsetIdx = params.length + 2;
+
+    const sql = `
+      SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
+             COUNT(DISTINCT sm.source)::int AS source_count,
+             ROUND(COALESCE(AVG(sm.pain), 0))::int AS avg_pain,
+             ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
+             ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability
+      FROM thesis_candidates tc
+      LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
+      LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+      ${where}
+      GROUP BY tc.id
+      ORDER BY tc.confidence DESC
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
+    `;
+    const result = await pool.query<ThesisRow>(sql, [...params, pageSize, offset]);
+    const items = result.rows.map(rowToDraft);
+
+    return {
+      items: items.map((d) => ({
+        canonicalKey: d.canonicalKey,
+        title: d.title,
+        confidence: d.confidence,
+        status: d.status,
+        evidenceCount: d.evidenceCount,
+        problemStatement: d.problemStatement,
+        sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
+        estimatedScope: d.estimatedScope ?? null
+      })),
+      page: safePage,
+      page_size: pageSize,
+      total_items: totalItems,
+      total_pages: totalPages,
+      has_next: safePage < totalPages,
+      has_prev: safePage > 1
+    };
   },
 
   async close(): Promise<void> {}

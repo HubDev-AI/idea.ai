@@ -45,14 +45,19 @@ export const reconcileScores = (
   };
 };
 
+type LogFn = (component: string, message: string, context?: Record<string, unknown>) => Promise<void>;
+
 export const dualAnalystRun = async <T>(
   input: RunPromptInput,
   deps: {
     runClaude: (input: RunPromptInput) => Promise<RunPromptResult>;
     runCodex: (input: RunPromptInput) => Promise<RunPromptResult>;
     parseResponse: (text: string) => T;
+    logger?: { info: LogFn; warn: LogFn };
   }
 ): Promise<DualResult<T>> => {
+  const log = deps.logger;
+
   const [claudeResult, codexResult] = await Promise.allSettled([
     deps.runClaude(input),
     deps.runCodex(input)
@@ -63,10 +68,37 @@ export const dualAnalystRun = async <T>(
 
   if (claudeResult.status === 'fulfilled') {
     try { claude = deps.parseResponse(claudeResult.value.text); } catch { /* skip */ }
+    await log?.info('dual_analyst', 'claude succeeded', { parsed: claude !== null });
+  } else {
+    await log?.warn('dual_analyst', 'claude failed', { error: claudeResult.reason?.message ?? 'unknown' });
   }
 
   if (codexResult.status === 'fulfilled') {
     try { codex = deps.parseResponse(codexResult.value.text); } catch { /* skip */ }
+    await log?.info('dual_analyst', 'codex succeeded', { parsed: codex !== null });
+  } else {
+    await log?.warn('dual_analyst', 'codex failed', { error: codexResult.reason?.message ?? 'unknown' });
+  }
+
+  // Retry if both providers failed
+  if (claude === null && codex === null) {
+    // Try Claude first
+    await log?.info('dual_analyst', 'both failed, retrying claude');
+    try {
+      const retry = await deps.runClaude(input);
+      try { claude = deps.parseResponse(retry.text); } catch { /* skip */ }
+      await log?.info('dual_analyst', 'claude retry result', { parsed: claude !== null });
+    } catch { /* exhausted */ }
+
+    // If Claude retry also failed, try Codex
+    if (claude === null) {
+      await log?.info('dual_analyst', 'claude retry failed, trying codex');
+      try {
+        const retry = await deps.runCodex(input);
+        try { codex = deps.parseResponse(retry.text); } catch { /* skip */ }
+        await log?.info('dual_analyst', 'codex retry result', { parsed: codex !== null });
+      } catch { /* both retries exhausted */ }
+    }
   }
 
   // Retry with Claude if both providers failed
