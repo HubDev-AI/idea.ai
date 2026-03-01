@@ -4,7 +4,7 @@
 
 **Goal:** Broaden the Sixth Sense engine from enterprise SaaS to viral/social app opportunity detection with new connectors, 4-dimension scoring, and updated AI prompts.
 
-**Architecture:** Three sequential PRs — (1) scoring overhaul (types, DB, blend formula, AI prompts, UI), (2) new connectors (Twitter, TikTok, App Store, IndieHackers, expanded Reddit), (3) agent intelligence (research agent prompts, virality in theses).
+**Architecture:** Three sequential PRs — (1) scoring overhaul (types, DB, blend formula, AI prompts, UI), (2) new connectors (App Store, expanded Reddit, Twitter BYO, optional IndieHackers), (3) agent intelligence (research agent prompts, virality in theses).
 
 **Tech Stack:** TypeScript, Fastify 5, PostgreSQL, React 18, Vitest, pnpm monorepo
 
@@ -892,7 +892,7 @@ git commit -m "feat: add App Store trending connector (iTunes RSS)"
 
 ---
 
-### Task 17: Create IndieHackers connector
+### Task 17: Create IndieHackers connector (OPTIONAL — no official API, fragile RSS scraping)
 
 **Files:**
 - Create: `packages/connectors/src/indiehackers.ts`
@@ -1148,144 +1148,14 @@ git commit -m "feat: add Twitter/X BYO connector"
 
 ---
 
-### Task 19: Create TikTok BYO connector
-
-**Files:**
-- Create: `packages/connectors/src/tiktok_byo.ts`
-- Create: `packages/connectors/tests/tiktok-byo.test.ts`
-
-**Step 1: Create the connector**
-
-Same BYO pattern. TikTok Research API requires approval, so this is gated on `TIKTOK_API_KEY`:
-
-```typescript
-import { type ByoConnectorResult, evaluateByoGuard } from './byo_guard';
-import { fetchJsonWithRetry, type RawEventInput } from './common/http';
-
-type TikTokVideo = {
-  id: string;
-  desc: string;
-  createTime: number;
-  stats?: { diggCount: number; shareCount: number; commentCount: number };
-};
-
-type TikTokSearchResponse = {
-  data?: { videos?: TikTokVideo[] };
-};
-
-const defaultTikTokLoader = async (apiKey: string): Promise<RawEventInput[]> => {
-  try {
-    const response = await fetchJsonWithRetry<TikTokSearchResponse>(
-      'https://open.tiktokapis.com/v2/research/video/query/',
-      {
-        init: {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            query: { and: [{ field_name: 'keyword', field_values: ['app idea', 'startup', 'build an app'] }] },
-            max_count: 20,
-            start_date: new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10),
-            end_date: new Date().toISOString().slice(0, 10)
-          })
-        }
-      }
-    );
-
-    return (response.data?.videos ?? []).map((video) => ({
-      source: 'tiktok_trending',
-      source_item_id: `tiktok:${video.id}`,
-      source_timestamp: new Date(video.createTime * 1000).toISOString(),
-      text: video.desc.slice(0, 2000),
-      url: `https://www.tiktok.com/video/${video.id}`
-    }));
-  } catch {
-    return [];
-  }
-};
-
-export const runTikTokByoConnector = async (
-  env: NodeJS.ProcessEnv = process.env,
-  loadEvents: (apiKey: string) => Promise<RawEventInput[]> = defaultTikTokLoader
-): Promise<ByoConnectorResult> => {
-  const guard = evaluateByoGuard({
-    connector: 'tiktok_byo',
-    ...(env.TIKTOK_API_KEY !== undefined && { apiKey: env.TIKTOK_API_KEY }),
-    ...(env.TIKTOK_DAILY_BUDGET_USD !== undefined && { budgetValue: env.TIKTOK_DAILY_BUDGET_USD }),
-    fallbackBudget: 0
-  });
-
-  if (!guard.allowed) {
-    return { status: 'skipped', reason: guard.reason, events: [], telemetry: guard.telemetry };
-  }
-
-  const events = await loadEvents(env.TIKTOK_API_KEY as string);
-
-  return {
-    status: 'active',
-    events,
-    telemetry: { connector: 'tiktok_byo', skipped: false, budget_usd: guard.budgetUsd }
-  };
-};
-```
-
-**Step 2: Write test (same pattern as twitter)**
-
-```typescript
-import { describe, expect, it } from 'vitest';
-import { runTikTokByoConnector } from '../src/tiktok_byo';
-
-describe('tiktok BYO connector', () => {
-  it('skips when TIKTOK_API_KEY is missing', async () => {
-    const result = await runTikTokByoConnector({});
-    expect(result.status).toBe('skipped');
-    expect(result.reason).toBe('missing_credentials');
-  });
-
-  it('returns events when key is provided', async () => {
-    const mockLoader = async () => [{
-      source: 'tiktok_trending',
-      source_item_id: 'tiktok:456',
-      source_timestamp: '2026-03-01T00:00:00Z',
-      text: 'this app idea went viral',
-      url: 'https://www.tiktok.com/video/456'
-    }];
-
-    const result = await runTikTokByoConnector(
-      { TIKTOK_API_KEY: 'test-key', TIKTOK_DAILY_BUDGET_USD: '5' },
-      mockLoader
-    );
-
-    expect(result.status).toBe('active');
-    expect(result.events).toHaveLength(1);
-  });
-});
-```
-
-**Step 3: Run test**
-
-Run: `cd /Users/vladimirtrifonov/src/ai/idea.ai && CI=1 pnpm exec vitest run packages/connectors/tests/tiktok-byo.test.ts`
-Expected: All PASS
-
-**Step 4: Commit**
-
-```bash
-git add packages/connectors/src/tiktok_byo.ts packages/connectors/tests/tiktok-byo.test.ts
-git commit -m "feat: add TikTok BYO connector"
-```
-
----
-
-### Task 20: Register new connectors in the system
+### Task 19: Register new connectors in the system
 
 **Files:**
 - Modify: `packages/connectors/src/common/http.ts` — add limits/cadence for new open connectors
 - Modify: `apps/api/src/config/env.ts` — add new BYO env vars
 - Modify: `apps/api/src/runtime/live_read_model.ts` — add new connectors to OPEN_CONNECTORS, OpenConnectorName
 - Modify: `apps/api/src/jobs/ingest_open.ts` — register appstore and indiehackers loaders
-- Modify: `apps/api/src/jobs/ingest_byo.ts` — register twitter and tiktok BYO connectors
+- Modify: `apps/api/src/jobs/ingest_byo.ts` — register twitter BYO connector
 
 **Step 1: Update OPEN_CONNECTOR_LIMITS and CADENCE in http.ts**
 
@@ -1307,15 +1177,12 @@ Add new BYO env vars to `RuntimeEnv` type and `loadRuntimeEnv`:
 ```typescript
 xBearerToken?: string;
 xDailyBudgetUsd: number;
-tiktokApiKey?: string;
-tiktokDailyBudgetUsd: number;
 enableJobConnectors: boolean;
 ```
 
 With parsing:
 ```typescript
 xDailyBudgetUsd: parseNumber(env.X_DAILY_BUDGET_USD, 0),
-tiktokDailyBudgetUsd: parseNumber(env.TIKTOK_DAILY_BUDGET_USD, 0),
 enableJobConnectors: env.ENABLE_JOB_CONNECTORS === 'true',
 ```
 
@@ -1343,16 +1210,14 @@ appstore_trending: () => fetchAppStoreTrending(),
 indiehackers: () => fetchIndieHackersEvents(),
 ```
 
-**Step 5: Register BYO connectors in ingest_byo.ts**
+**Step 5: Register BYO connector in ingest_byo.ts**
 
-Add twitter and tiktok alongside exa and perigon:
+Add twitter alongside exa and perigon:
 ```typescript
 import { runTwitterByoConnector } from '@idea/connectors/src/twitter_byo';
-import { runTikTokByoConnector } from '@idea/connectors/src/tiktok_byo';
 
 // In the Promise.all:
 runSafely('twitter_byo', env, runTwitterByoConnector, logger),
-runSafely('tiktok_byo', env, runTikTokByoConnector, logger)
 ```
 
 **Step 6: Make job connectors opt-in**
@@ -1373,12 +1238,12 @@ Expected: All pass
 
 ```bash
 git add -A
-git commit -m "feat: register new connectors — appstore, indiehackers, twitter BYO, tiktok BYO"
+git commit -m "feat: register new connectors — appstore, indiehackers, twitter BYO"
 ```
 
 ---
 
-### Task 21: Push PR 2
+### Task 20: Push PR 2
 
 **Step 1: Create branch and push**
 
@@ -1395,9 +1260,8 @@ gh pr create --title "feat: add new signal connectors for viral/social discovery
 ## Summary
 - Expand Reddit to 11 subreddits (add apps, socialmedia, productivity, dating, sideproject, AppIdeas, InternetIsBeautiful)
 - Add App Store trending connector (iTunes RSS, daily cadence)
-- Add IndieHackers connector (RSS feed, daily cadence)
-- Add Twitter/X BYO connector (X API v2, gated on X_BEARER_TOKEN)
-- Add TikTok BYO connector (Research API, gated on TIKTOK_API_KEY)
+- Add IndieHackers connector (optional — RSS feed, daily cadence, fragile)
+- Add Twitter/X BYO connector (X API v2, gated on X_BEARER_TOKEN, $200/mo minimum)
 - Make job board connectors (greenhouse, lever) opt-in via ENABLE_JOB_CONNECTORS=true
 
 ## Test plan
@@ -1422,7 +1286,7 @@ git checkout dev && git pull
 
 ---
 
-### Task 22: Update research agent broad scan prompt
+### Task 21: Update research agent broad scan prompt
 
 **Files:**
 - Modify: `apps/api/src/jobs/research_agent.ts`
@@ -1472,7 +1336,7 @@ git commit -m "feat: update broad scan prompt for viral/social opportunity detec
 
 ---
 
-### Task 23: Update research agent deep dive prompt
+### Task 22: Update research agent deep dive prompt
 
 **Files:**
 - Modify: `apps/api/src/jobs/research_agent.ts`
@@ -1505,7 +1369,7 @@ git commit -m "feat: update deep dive prompt for virality and growth loop analys
 
 ---
 
-### Task 24: Update NewThesisProposal type — add virality_assessment
+### Task 23: Update NewThesisProposal type — add virality_assessment
 
 **Files:**
 - Modify: `apps/api/src/jobs/research_agent.ts`
@@ -1561,7 +1425,7 @@ git commit -m "feat: add virality_assessment to thesis proposals, update signal 
 
 ---
 
-### Task 25: Update thesis confidence formula to include virality
+### Task 24: Update thesis confidence formula to include virality
 
 **Files:**
 - Modify: `apps/api/src/jobs/thesis_synthesizer.ts`
@@ -1597,7 +1461,7 @@ git commit -m "feat: include virality in thesis confidence formula"
 
 ---
 
-### Task 26: Push PR 3
+### Task 25: Push PR 3
 
 **Step 1: Create branch and push**
 
@@ -1646,7 +1510,7 @@ After all 3 PRs are merged:
    - AI post-scrape output includes `demand` and `virality` scores (not `pain`)
    - Breakdown chips show "Demand" and "Viral" in UI
    - Reddit connector fetches from expanded subreddit list
-   - BYO connectors (twitter, tiktok) skip gracefully without API keys
+   - BYO connectors (twitter) skip gracefully without API keys
    - Job board connectors are disabled by default
    - Research agent prompt mentions viral/network effects (check logs)
 4. If `X_BEARER_TOKEN` is configured, verify Twitter signals appear

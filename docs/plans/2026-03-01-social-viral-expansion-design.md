@@ -15,25 +15,18 @@ Three changes: (1) add new signal sources, (2) rework the scoring model, (3) upd
 
 ## 1. New Connectors
 
-### 1.1 Twitter/X Trending (BYO)
+### 1.1 Twitter/X Trending (BYO — $200/mo minimum)
 
 - **Source key:** `twitter_trending`
 - **API:** X API v2 (`GET /2/tweets/search/recent`)
 - **Gate:** `X_BEARER_TOKEN` env var (BYO connector with budget guard)
+- **Cost:** Basic tier $200/mo minimum (free tier has no read access as of Feb 2026)
 - **Cadence:** hourly
 - **Captures:** Trending topics, viral threads with high engagement, complaint/wishlist threads
 - **Query strategy:** Search for product complaints, "someone should build", "wish there was an app", startup launches with high retweet velocity
 - **Limit:** 25 per fetch
 
-### 1.2 TikTok Trending
-
-- **Source key:** `tiktok_trending`
-- **API:** TikTok Research API (requires approval) or third-party trends API
-- **Gate:** `TIKTOK_API_KEY` env var (BYO)
-- **Cadence:** daily
-- **Captures:** Trending sounds/effects, creator pain points, viral content formats
-- **Fallback:** If no API key, scrape TikTok trending page via headless browser
-- **Limit:** 20 per fetch
+### ~~1.2 TikTok Trending~~ (DROPPED — Research API restricted to academic use only, no commercial access path)
 
 ### 1.3 App Store Trending
 
@@ -44,13 +37,14 @@ Three changes: (1) add new signal sources, (2) rework the scoring model, (3) upd
 - **Categories to watch:** Social, Productivity, Lifestyle, Entertainment, Communication
 - **Limit:** 30 per fetch (combined iOS + Android)
 
-### 1.4 IndieHackers
+### 1.4 IndieHackers (OPTIONAL — no official API, fragile unofficial RSS)
 
 - **Source key:** `indiehackers`
-- **API:** RSS feed / HTML scrape
+- **API:** Unofficial RSS feed / Algolia scrape (no official API exists)
 - **Cadence:** daily
 - **Captures:** Maker launches, revenue milestones, "building in public" threads, product ideas
 - **Limit:** 20 per fetch
+- **Risk:** No stable API — connector may break when IndieHackers changes frontend
 
 ### 1.5 Reddit Consumer Subreddits
 
@@ -169,10 +163,12 @@ ALTER TABLE signal_memory ADD COLUMN virality INTEGER;
 
 ## 6. Implementation Scope
 
-Estimated 3 PRs:
+Estimated 3 PRs (25 tasks):
 1. **PR1 — Scoring overhaul:** DB migration, type changes, blend formula, AI prompt updates, UI chip renames
-2. **PR2 — New connectors:** Twitter, TikTok, App Store, IndieHackers, expanded Reddit subs, job board opt-in
+2. **PR2 — New connectors:** App Store (free), expanded Reddit subs (free), Twitter BYO ($200/mo, opt-in), IndieHackers (optional/fragile), job board opt-in
 3. **PR3 — Agent intelligence:** Research agent prompt updates, virality assessment in theses, cross-platform correlation
+
+**Dropped:** TikTok (Research API restricted to academic use, no commercial path)
 
 ## 7. Non-Goals
 
