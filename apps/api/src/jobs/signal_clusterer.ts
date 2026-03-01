@@ -2,7 +2,7 @@ export type ClusterableSignal = {
   signal_id: string;
   canonical_text: string;
   source: string;
-  pain: number;
+  demand: number;
   timing: number;
   blended: number;
   embedding: number[];
@@ -13,7 +13,7 @@ export type SignalCluster = {
   label: string;
   totalCount: number;
   representatives: ClusterableSignal[];
-  avgPain: number;
+  avgDemand: number;
   avgTiming: number;
   sources: string[];
 };
@@ -77,7 +77,7 @@ export const clusterSignals = (
     // Pick top representatives by blended score (already sorted)
     const representatives = members.slice(0, maxRepresentatives);
     const sources = [...new Set(members.map((m) => m.source))];
-    const avgPain = members.reduce((sum, m) => sum + m.pain, 0) / members.length;
+    const avgDemand = members.reduce((sum, m) => sum + m.demand, 0) / members.length;
     const avgTiming = members.reduce((sum, m) => sum + m.timing, 0) / members.length;
 
     // Derive label from most common topic-like content
@@ -88,7 +88,7 @@ export const clusterSignals = (
       label,
       totalCount: members.length,
       representatives,
-      avgPain: Math.round(avgPain * 100) / 100,
+      avgDemand: Math.round(avgDemand * 100) / 100,
       avgTiming: Math.round(avgTiming * 100) / 100,
       sources
     });

@@ -12,7 +12,7 @@ export type AgentSignalSummary = {
   signal_id: string;
   text: string;
   source: string;
-  pain: number;
+  demand: number;
   timing: number;
 };
 
@@ -20,7 +20,7 @@ export type AgentTrendSummary = {
   topic: string;
   window: string;
   count: number;
-  avg_pain: number;
+  avg_demand: number;
   growth: string;
 };
 
@@ -45,7 +45,7 @@ export type ClusterSummary = {
   id: number;
   label: string;
   totalCount: number;
-  avgPain: number;
+  avgDemand: number;
   avgTiming: number;
   sources: string[];
   signals: AgentSignalSummary[];
@@ -120,9 +120,9 @@ export const buildBroadScanPrompt = (ctx: BroadScanContext): string => {
   const clustersBlock = ctx.clusters.length > 0
     ? ctx.clusters.map((c) => {
         const signals = c.signals.map((s) =>
-          `    - [${s.signal_id}] [${s.source}] ${s.text.slice(0, 200)} (pain: ${s.pain}, timing: ${s.timing})`
+          `    - [${s.signal_id}] [${s.source}] ${s.text.slice(0, 200)} (demand: ${s.demand}, timing: ${s.timing})`
         ).join('\n');
-        return `  CLUSTER ${c.id}: "${c.label}" (${c.totalCount} signals, avg pain: ${c.avgPain}, sources: ${c.sources.join(', ')})\n${signals}`;
+        return `  CLUSTER ${c.id}: "${c.label}" (${c.totalCount} signals, avg demand: ${c.avgDemand}, sources: ${c.sources.join(', ')})\n${signals}`;
       }).join('\n\n')
     : '(no new signals)';
 
@@ -134,7 +134,7 @@ export const buildBroadScanPrompt = (ctx: BroadScanContext): string => {
 
   const trendsBlock = ctx.trendSummary.length > 0
     ? ctx.trendSummary.map((t) =>
-        `- "${t.topic}" ${t.window}: ${t.count} signals, avg pain ${t.avg_pain}, growth ${t.growth}`
+        `- "${t.topic}" ${t.window}: ${t.count} signals, avg demand ${t.avg_demand}, growth ${t.growth}`
       ).join('\n')
     : '(no trend data)';
 
@@ -178,11 +178,11 @@ Return ONLY valid JSON:
 
 export const buildDeepDivePrompt = (ctx: DeepDiveContext): string => {
   const currentBlock = ctx.currentSignals.map((s) =>
-    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (pain: ${s.pain}, timing: ${s.timing})`
+    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing})`
   ).join('\n') || '(none)';
 
   const historicalBlock = ctx.historicalSignals.map((s) =>
-    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (pain: ${s.pain}, timing: ${s.timing})`
+    `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing})`
   ).join('\n') || '(no historical data)';
 
   const journalBlock = ctx.journalHistory.map((j) =>

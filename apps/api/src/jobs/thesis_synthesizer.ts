@@ -4,9 +4,10 @@ export type MemorySignalForSynthesis = {
   source: string;
   canonical_text: string;
   observed_at: string;
-  pain: number;
+  demand: number;
   timing: number;
   buildability: number;
+  virality: number;
   blended: number;
 };
 
@@ -31,9 +32,10 @@ export type ThesisDraft = {
   targetBuyer: string;
   proposedSolution: string;
   evidenceCount: number;
-  avgPain: number;
+  avgDemand: number;
   avgTiming: number;
   avgBuildability: number;
+  avgVirality: number;
   latestObservedAt: string;
   evidence: ThesisEvidenceDraft[];
   estimatedScope?: 'small' | 'medium' | 'large' | null;
@@ -213,21 +215,23 @@ const solutionFor = (category: string): string => {
 };
 
 const buildConfidence = ({
-  avgPain,
+  avgDemand,
   avgTiming,
   avgBuildability,
+  avgVirality,
   momentum,
   evidenceCount
 }: {
-  avgPain: number;
+  avgDemand: number;
   avgTiming: number;
   avgBuildability: number;
+  avgVirality: number;
   momentum: number;
   evidenceCount: number;
 }): number => {
   const evidenceSignal = clamp(evidenceCount * 12);
   return round2(
-    clamp(avgPain * 0.35 + avgTiming * 0.2 + avgBuildability * 0.1 + momentum * 0.2 + evidenceSignal * 0.15)
+    clamp(avgDemand * 0.25 + avgTiming * 0.15 + avgBuildability * 0.1 + avgVirality * 0.15 + momentum * 0.2 + evidenceSignal * 0.15)
   );
 };
 
@@ -310,14 +314,16 @@ export const buildThesisCandidates = (
     const [topic, category] = groupKey.split(':') as [string, string];
     const keyword = selectTopKeyword(bucket);
     const canonicalKey = `${topic}:${category}:${keyword}`;
-    const avgPain = round2(bucket.reduce((sum, signal) => sum + signal.pain, 0) / bucket.length);
+    const avgDemand = round2(bucket.reduce((sum, signal) => sum + signal.demand, 0) / bucket.length);
     const avgTiming = round2(bucket.reduce((sum, signal) => sum + signal.timing, 0) / bucket.length);
     const avgBuildability = round2(bucket.reduce((sum, signal) => sum + signal.buildability, 0) / bucket.length);
+    const avgVirality = round2(bucket.reduce((sum, signal) => sum + signal.virality, 0) / bucket.length);
     const momentum = momentumFor(bucket, now);
     const confidence = buildConfidence({
-      avgPain,
+      avgDemand,
       avgTiming,
       avgBuildability,
+      avgVirality,
       momentum,
       evidenceCount: bucket.length
     });
@@ -354,9 +360,10 @@ export const buildThesisCandidates = (
       targetBuyer: targetBuyerForSource(source),
       proposedSolution: solutionFor(category),
       evidenceCount: bucket.length,
-      avgPain,
+      avgDemand,
       avgTiming,
       avgBuildability,
+      avgVirality,
       latestObservedAt,
       evidence
     });

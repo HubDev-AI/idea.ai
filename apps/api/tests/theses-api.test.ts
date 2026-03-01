@@ -34,9 +34,10 @@ describe('GET /v1/theses', () => {
       targetBuyer: 'b',
       proposedSolution: 's',
       evidenceCount: 2,
-      avgPain: 40,
+      avgDemand: 40,
       avgTiming: 30,
       avgBuildability: 50,
+      avgVirality: 10,
       latestObservedAt: '2026-02-25T10:00:00Z',
       evidence: []
     });
@@ -51,9 +52,10 @@ describe('GET /v1/theses', () => {
       targetBuyer: 'b',
       proposedSolution: 's',
       evidenceCount: 5,
-      avgPain: 80,
+      avgDemand: 80,
       avgTiming: 70,
       avgBuildability: 75,
+      avgVirality: 40,
       latestObservedAt: '2026-02-25T10:00:00Z',
       evidence: []
     });
@@ -91,9 +93,10 @@ describe('GET /v1/theses', () => {
       targetBuyer: 'buyer',
       proposedSolution: 'solution',
       evidenceCount: 3,
-      avgPain: 55,
+      avgDemand: 55,
       avgTiming: 50,
       avgBuildability: 45,
+      avgVirality: 20,
       latestObservedAt: '2026-02-25T10:00:00Z',
       evidence: [
         {

@@ -5,7 +5,7 @@ const makeSignal = (id: string, embedding: number[], blended = 50): ClusterableS
   signal_id: id,
   canonical_text: `signal ${id}`,
   source: 'test',
-  pain: 50,
+  demand: 50,
   timing: 50,
   blended,
   embedding
