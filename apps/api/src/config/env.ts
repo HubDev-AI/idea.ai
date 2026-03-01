@@ -36,7 +36,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     perigonDailyBudgetUsd: parseNumber(env.PERIGON_DAILY_BUDGET_USD, 5),
     ollamaBaseUrl: env.OLLAMA_BASE_URL ?? 'http://localhost:11434',
     ollamaEmbedModel: env.OLLAMA_EMBED_MODEL ?? 'nomic-embed-text',
-    redditSubreddits: parseCsv(env.REDDIT_SUBREDDITS, ['SaaS', 'startups', 'smallbusiness', 'Entrepreneur']),
+    redditSubreddits: parseCsv(env.REDDIT_SUBREDDITS, ['SaaS', 'startups', 'smallbusiness', 'Entrepreneur', 'apps', 'socialmedia', 'productivity', 'dating', 'sideproject', 'AppIdeas', 'InternetIsBeautiful']),
     noiseGateBatchSize: parseNumber(env.NOISE_GATE_BATCH_SIZE, 20),
     agentScheduleCron: env.AGENT_SCHEDULE_CRON ?? '0 */4 * * *',
     agentDualAnalyst: env.AGENT_DUAL_ANALYST === 'true'

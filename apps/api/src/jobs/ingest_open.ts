@@ -38,7 +38,13 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   greenhouse: () => fetchGreenhouseJobEvents(),
   lever: () => fetchLeverJobEvents(),
   yc_companies: () => fetchYcCompanyEvents(),
-  reddit: () => fetchReddit({}),
+  reddit: () => {
+    const redditOpts: Parameters<typeof fetchReddit>[0] = {};
+    if (process.env.REDDIT_SUBREDDITS !== undefined) {
+      redditOpts.subreddits = process.env.REDDIT_SUBREDDITS.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return fetchReddit(redditOpts);
+  },
   producthunt: () => {
     const phOpts: Parameters<typeof fetchProductHunt>[0] = {};
     if (process.env.PH_API_TOKEN !== undefined) phOpts.token = process.env.PH_API_TOKEN;
