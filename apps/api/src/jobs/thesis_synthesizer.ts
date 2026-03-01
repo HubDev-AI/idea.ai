@@ -231,7 +231,7 @@ const buildConfidence = ({
 }): number => {
   const evidenceSignal = clamp(evidenceCount * 12);
   return round2(
-    clamp(avgDemand * 0.25 + avgTiming * 0.15 + avgBuildability * 0.1 + avgVirality * 0.15 + momentum * 0.2 + evidenceSignal * 0.15)
+    clamp(avgDemand * 0.20 + avgTiming * 0.15 + avgBuildability * 0.10 + avgVirality * 0.25 + momentum * 0.15 + evidenceSignal * 0.15)
   );
 };
 
