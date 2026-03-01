@@ -120,7 +120,7 @@ export const buildBroadScanPrompt = (ctx: BroadScanContext): string => {
   const clustersBlock = ctx.clusters.length > 0
     ? ctx.clusters.map((c) => {
         const signals = c.signals.map((s) =>
-          `    - [${s.signal_id}] [${s.source}] ${s.text.slice(0, 200)} (demand: ${s.demand}, timing: ${s.timing})`
+          `    - [${s.signal_id}] [${s.source}] ${s.text.slice(0, 200)} (demand: ${s.demand}, timing: ${s.timing}${s.virality != null ? `, virality: ${s.virality}` : ''})`
         ).join('\n');
         return `  CLUSTER ${c.id}: "${c.label}" (${c.totalCount} signals, avg demand: ${c.avgDemand}, sources: ${c.sources.join(', ')})\n${signals}`;
       }).join('\n\n')
@@ -138,17 +138,18 @@ export const buildBroadScanPrompt = (ctx: BroadScanContext): string => {
       ).join('\n')
     : '(no trend data)';
 
-  return `You are Sixth Sense, a SaaS product idea scout with persistent memory.
-You analyze market signals to find CONCRETE software product ideas that a solo developer or small team (1-3 people) could build in 1-3 months.
+  return `You are Sixth Sense, a product opportunity scout with persistent memory.
+You analyze market signals to find product ideas with viral growth potential — consumer social apps, prosumer tools with network effects, B2B products that spread bottom-up, and community-driven platforms.
 Your observations from previous runs are shown below — use them to build on your prior reasoning.
 
 IMPORTANT GUIDELINES:
-- Each thesis must be a CONCRETE SaaS product idea, not an abstract market observation.
-- BAD examples: "Vertical SaaS Consolidation in Regulated Industries", "Proxy-signal instrumentation for compliance monitoring", "Regulated-market momentum analysis"
-- GOOD examples: "SOC2 Compliance Checklist App for Startups", "AI Invoice Parser for Freelancers", "Slack Bot That Summarizes Long Threads"
+- Each thesis must be a CONCRETE product idea, not an abstract market observation.
+- BAD: "Vertical SaaS Consolidation in Regulated Industries", "Proxy-signal instrumentation"
+- GOOD: "Community Recipe Sharing App with AI Meal Planning", "TikTok-Style Short Video Editor for Realtors", "Slack Bot That Summarizes Long Threads"
 - Focus on specific pain points with clear software solutions
 - Target specific buyer personas (e.g., "DevOps engineers at seed-stage startups"), not abstract categories
-- The product must be buildable by a solo dev in 1-3 months — no enterprise platforms, no consulting frameworks, no marketplace plays
+- Focus on ideas with inherent viral/network-effect potential — products where users naturally bring other users
+- Assess growth loop mechanics: does usage create shareable content? Does the product get better with more users?
 
 YOUR RECENT OBSERVATIONS:
 ${journalBlock}
@@ -167,6 +168,7 @@ YOUR TASK:
 2. For each relevant thesis, provide a confidence_delta (-20 to +20) with reasoning.
 3. Identify 1-3 topics that deserve deeper investigation — areas where you see specific product opportunities that need more validation.
 4. Write 2-5 observations for your future self. Focus on concrete product angles and buyer pain points, not abstract market patterns.
+5. For each thesis update or new idea, assess virality potential — does it have inherent network effects, sharing mechanics, or community-driven growth loops?
 
 Return ONLY valid JSON:
 {
