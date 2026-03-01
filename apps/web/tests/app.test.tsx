@@ -266,4 +266,41 @@ describe('web app', () => {
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
   });
+
+  it('triggers agent run and shows running state', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    const mockFetch = buildMockFetch();
+    vi.stubGlobal('fetch', mockFetch);
+
+    render(<App />);
+
+    // Wait for initial data load
+    await screen.findByText('SOC2 prep copilot');
+
+    // Find and click the Run button
+    const runButton = screen.getByRole('button', { name: /^Run$/i });
+    expect(runButton).toBeDefined();
+    fireEvent.click(runButton);
+
+    // Verify "Running..." state appears
+    expect(await screen.findByText(/Running/i)).toBeDefined();
+  });
+
+  it('opens log drawer and shows log entries', async () => {
+    vi.stubGlobal('EventSource', undefined);
+    vi.stubGlobal('fetch', buildMockFetch());
+
+    render(<App />);
+
+    // Wait for app to load
+    await screen.findByText('SOC2 prep copilot');
+
+    // Find the Logs button and click it
+    const logsButton = screen.getByText(/Logs/i);
+    expect(logsButton).toBeDefined();
+    fireEvent.click(logsButton);
+
+    // Verify log entries are visible
+    expect(await screen.findByText(/ai judge call failed/i)).toBeTruthy();
+  });
 });
