@@ -51,7 +51,7 @@ export const scoreSignal = ({
     pain,
     timing,
     buildability,
-    blended: blendedScore({ pain, timing, buildability }),
+    blended: blendedScore({ demand: pain, timing, buildability, virality: 0 }),
     memory: {
       novelty,
       persistence,
