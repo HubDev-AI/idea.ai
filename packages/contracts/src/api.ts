@@ -41,6 +41,7 @@ export type ConnectorStatusRecord = {
   name: string;
   status: 'active' | 'disabled' | 'error';
   last_run: string | null;
+  cadence: 'hourly' | 'daily' | null;
 };
 
 // -- Execution logs ------------------------------------------------ */

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { Cadence, RawEventInput } from '@idea/connectors/src/common/http';
+import { OPEN_CONNECTOR_CADENCE, type Cadence, type RawEventInput } from '@idea/connectors/src/common/http';
 import type { RuntimeEnv } from '../config/env';
 import { loadRuntimeEnv } from '../config/env';
 import {
@@ -304,18 +304,21 @@ const toConnectorStatus = (
 ): ConnectorStatusRecord[] => {
   const openStatuses = openStatusMap(hourly, daily);
   const openRecords: ConnectorStatusRecord[] = OPEN_CONNECTORS.map((connector) => {
+    const cadence = (OPEN_CONNECTOR_CADENCE[connector] as Cadence) ?? null;
     if (!isConnectorSelected(connector, env) || !isConnectorConfigured(connector, env)) {
       return {
         name: connector,
         status: 'disabled',
-        last_run: null
+        last_run: null,
+        cadence
       };
     }
 
     return {
       name: connector,
       status: openStatuses.get(connector) === 'error' ? 'error' : 'active',
-      last_run: refreshedAtIso
+      last_run: refreshedAtIso,
+      cadence
     };
   });
 
@@ -325,42 +328,48 @@ const toConnectorStatus = (
 
   return [
     ...openRecords,
-    { name: 'exa_byo', status: exa.status, last_run: exa.last_run },
-    { name: 'perigon_byo', status: perigon.status, last_run: perigon.last_run },
-    { name: 'twitter_byo', status: twitter.status, last_run: twitter.last_run }
+    { name: 'exa_byo', status: exa.status, last_run: exa.last_run, cadence: 'daily' as const },
+    { name: 'perigon_byo', status: perigon.status, last_run: perigon.last_run, cadence: 'daily' as const },
+    { name: 'twitter_byo', status: twitter.status, last_run: twitter.last_run, cadence: 'daily' as const }
   ];
 };
 
 const toErrorFirstSnapshot = (env: RuntimeEnv, refreshedAtIso: string): ConnectorStatusRecord[] => [
   ...OPEN_CONNECTORS.map((connector): ConnectorStatusRecord => {
+    const cadence = (OPEN_CONNECTOR_CADENCE[connector] as Cadence) ?? null;
     if (!isConnectorSelected(connector, env) || !isConnectorConfigured(connector, env)) {
       return {
         name: connector,
         status: 'disabled',
-        last_run: null
+        last_run: null,
+        cadence
       };
     }
 
     return {
       name: connector,
       status: 'error',
-      last_run: refreshedAtIso
+      last_run: refreshedAtIso,
+      cadence
     };
   }),
   {
     name: 'exa_byo',
     status: (env.exaApiKey && env.exaDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
-    last_run: env.exaApiKey && env.exaDailyBudgetUsd > 0 ? refreshedAtIso : null
+    last_run: env.exaApiKey && env.exaDailyBudgetUsd > 0 ? refreshedAtIso : null,
+    cadence: 'daily'
   },
   {
     name: 'perigon_byo',
     status: (env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
-    last_run: env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? refreshedAtIso : null
+    last_run: env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? refreshedAtIso : null,
+    cadence: 'daily'
   },
   {
     name: 'twitter_byo',
     status: (env.xBearerToken && env.xDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
-    last_run: env.xBearerToken && env.xDailyBudgetUsd > 0 ? refreshedAtIso : null
+    last_run: env.xBearerToken && env.xDailyBudgetUsd > 0 ? refreshedAtIso : null,
+    cadence: 'daily'
   }
 ];
 
