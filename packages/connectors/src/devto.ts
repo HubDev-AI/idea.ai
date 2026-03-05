@@ -53,6 +53,7 @@ export const fetchDevtoEvents = async (
       source_item_id: `devto:${item.id}`,
       source_timestamp: item.published_at || new Date().toISOString(),
       text: item.description ? `${item.title}: ${item.description}` : item.title,
-      url: item.url
+      url: item.url,
+      engagement_count: (item.public_reactions_count ?? 0) + (item.comments_count ?? 0)
     }));
 };

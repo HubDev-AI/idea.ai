@@ -31,6 +31,7 @@ export const fetchLobstersEvents = async (
       source_item_id: `lobsters:${item.short_id}`,
       source_timestamp: item.created_at || new Date().toISOString(),
       text: item.title,
-      url: item.url || `https://lobste.rs/s/${item.short_id}`
+      url: item.url || `https://lobste.rs/s/${item.short_id}`,
+      engagement_count: (item.score ?? 0) + (item.comment_count ?? 0)
     }));
 };

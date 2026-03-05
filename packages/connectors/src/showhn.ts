@@ -39,7 +39,8 @@ export const fetchShowHnEvents = async (
         source_item_id: `showhn:${item.objectID}`,
         source_timestamp: new Date(timestampMs).toISOString(),
         text: (item.title ?? '').trim(),
-        url: item.url ?? `https://news.ycombinator.com/item?id=${item.objectID}`
+        url: item.url ?? `https://news.ycombinator.com/item?id=${item.objectID}`,
+        engagement_count: (item.points ?? 0) + (item.num_comments ?? 0)
       };
     })
     .filter((item) => item.text.length > 0);

@@ -4,6 +4,7 @@ export type RawEventInput = {
   source_timestamp: string;
   text: string;
   url: string;
+  engagement_count?: number;
 };
 
 export type Cadence = 'hourly' | 'daily';

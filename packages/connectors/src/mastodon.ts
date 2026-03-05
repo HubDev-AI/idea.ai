@@ -59,7 +59,8 @@ export const fetchMastodonEvents = async (
       source_item_id: `mastodon:${item.id}`,
       source_timestamp: item.created_at || new Date().toISOString(),
       text: stripHtml(item.content).slice(0, 2000),
-      url: item.url
+      url: item.url,
+      engagement_count: (item.reblogs_count ?? 0) + (item.favourites_count ?? 0) + (item.replies_count ?? 0)
     }))
     .filter((item) => item.text.length > 10);
 };

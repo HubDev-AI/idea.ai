@@ -26,6 +26,7 @@ import { indexSignalMemory } from '../jobs/memory_index';
 import { buildRetrieverQueryText, createInMemoryRetriever, type IndexedMemoryEntry } from '../jobs/memory_retriever';
 import { rankAndPreparePublish } from '../jobs/rank_publish';
 import { scoreSignalWithRetriever } from '../jobs/score';
+import { blendedScore } from '@idea/pipeline/src/scoring/blend';
 import type { AiHealthRecord, AiProviderHealthRecord } from '../routes/ai_health';
 import type { ConnectorStatusRecord } from '../routes/connectors';
 import type { FeedRecord } from '../routes/feed';
@@ -778,6 +779,22 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
           if (aiInsight?.timing !== undefined) scoreArgs.baseTiming = aiInsight.timing;
           if (aiInsight?.virality !== undefined) scoreArgs.baseVirality = aiInsight.virality;
           const score = await scoreSignalWithRetriever(scoreArgs);
+
+          // Engagement boost: high-engagement signals from sources with metrics get score boosts
+          const eng = event.engagement_count ?? 0;
+          if (eng >= 200) {
+            score.demand = Math.min(100, score.demand + 15);
+            score.virality = Math.min(100, score.virality + 10);
+          } else if (eng >= 50) {
+            score.demand = Math.min(100, score.demand + 10);
+            score.virality = Math.min(100, score.virality + 5);
+          } else if (eng >= 10) {
+            score.demand = Math.min(100, score.demand + 5);
+          }
+          if (eng >= 10) {
+            score.blended = blendedScore(score);
+          }
+
           const blended = applySourceQualityPenalty({
             source: event.source,
             idea,
@@ -806,6 +823,30 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
           if (persistentStore) {
             try {
               await persistentStore.save(indexedEntry);
+
+              // Multi-source convergence boost: if similar signals exist from other sources within 48h, boost virality
+              if (indexedEntry.embeddingRecord.embedding) {
+                const convergent = await persistentStore.findConvergentSignals(
+                  indexedEntry.memoryRecord.signal_id,
+                  indexedEntry.embeddingRecord.embedding,
+                  event.source
+                );
+                if (convergent.length > 0) {
+                  const convergenceBoost = Math.min(25, 15 + convergent.length * 5);
+                  // Boost the current signal
+                  await persistentStore.boostViralityScore(indexedEntry.memoryRecord.signal_id, convergenceBoost);
+                  // Boost the matched signals too
+                  for (const match of convergent) {
+                    await persistentStore.boostViralityScore(match.signal_id, convergenceBoost);
+                  }
+                  await logger.debug('live_read_model', 'convergence boost applied', {
+                    signal_id: indexedEntry.memoryRecord.signal_id,
+                    matches: convergent.length,
+                    boost: convergenceBoost,
+                    matched_sources: convergent.map((m) => m.source)
+                  });
+                }
+              }
             } catch (error) {
               await logger.error('live_read_model', 'persistent memory save failed', {
                 signal_id: indexedEntry.memoryRecord.signal_id,

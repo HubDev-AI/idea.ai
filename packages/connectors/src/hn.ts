@@ -5,6 +5,8 @@ type HnItem = {
   created_at_i: number;
   title?: string;
   url?: string;
+  points?: number;
+  num_comments?: number;
 };
 
 type HnLoader = (limit: number) => Promise<HnItem[]>;
@@ -37,7 +39,8 @@ export const fetchHnEvents = async (
         source_item_id: item.objectID,
         source_timestamp: new Date(timestampMs).toISOString(),
         text: (item.title ?? '').trim(),
-        url: item.url ?? `https://news.ycombinator.com/item?id=${item.objectID}`
+        url: item.url ?? `https://news.ycombinator.com/item?id=${item.objectID}`,
+        engagement_count: (item.points ?? 0) + (item.num_comments ?? 0)
       };
     })
     .filter((item) => item.text.length > 0);
