@@ -2,20 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { fetchIndieHackersEvents } from '../src/indiehackers';
 
 describe('indiehackers connector', () => {
-  it('maps RSS items to RawEventInput', async () => {
+  it('maps scraped posts to RawEventInput', async () => {
     const mockLoader = async () => [{
       source: 'indiehackers' as const,
-      source_item_id: 'ih:https://www.indiehackers.com/post/test',
-      source_timestamp: '2026-03-01T00:00:00.000Z',
-      text: 'Building a viral app\nHow I got to 10k users',
-      url: 'https://www.indiehackers.com/post/test'
+      source_item_id: 'ih:/post/building-a-saas-in-public-abc123',
+      source_timestamp: '2026-03-05T00:00:00.000Z',
+      text: 'Building a SaaS in public: lessons learned',
+      url: 'https://www.indiehackers.com/post/building-a-saas-in-public-abc123'
     }];
 
     const events = await fetchIndieHackersEvents(mockLoader, 20);
 
     expect(events).toHaveLength(1);
     expect(events[0].source).toBe('indiehackers');
-    expect(events[0].text).toContain('Building a viral app');
+    expect(events[0].text).toContain('Building a SaaS');
   });
 
   it('respects limit', async () => {

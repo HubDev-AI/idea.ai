@@ -1,44 +1,53 @@
-import { type RawEventInput, withRetry } from './common/http';
+import { OPEN_CONNECTOR_LIMITS, type RawEventInput, withRetry } from './common/http';
 
 type IndieHackersLoaderFn = (limit: number) => Promise<RawEventInput[]>;
 
-const defaultLoader: IndieHackersLoaderFn = async (limit) => {
-  const response = await withRetry(async () => {
-    const res = await fetch('https://www.indiehackers.com/feed.xml', {
-      headers: { 'User-Agent': 'idea.ai/1.0 (research bot)' }
-    });
-    if (!res.ok) throw new Error(`IndieHackers feed failed: ${res.status}`);
-    return res.text();
-  });
+const linkPattern = /<a\s+href="(\/(post|product)\/[^"]+)"[^>]*>\s*<h3[^>]*>([\s\S]*?)<\/h3>/g;
 
+const decodeEntities = (text: string): string =>
+  text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#x2F;/g, '/');
+
+const parsePostsFromHtml = (html: string, limit: number): RawEventInput[] => {
+  const seen = new Set<string>();
   const results: RawEventInput[] = [];
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+
+  linkPattern.lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = itemRegex.exec(response)) !== null && results.length < limit) {
-    const item = match[1];
-    const title = item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] ?? item.match(/<title>(.*?)<\/title>/)?.[1] ?? '';
-    const link = item.match(/<link>(.*?)<\/link>/)?.[1] ?? '';
-    const description = item.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/)?.[1] ?? item.match(/<description>(.*?)<\/description>/)?.[1] ?? '';
-    const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] ?? '';
+  while ((match = linkPattern.exec(html)) !== null && results.length < limit) {
+    const path = match[1];
+    const title = decodeEntities(match[3].replace(/<[^>]*>/g, '').trim());
 
-    if (title) {
-      results.push({
-        source: 'indiehackers',
-        source_item_id: `ih:${link || title}`,
-        source_timestamp: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-        text: `${title}\n${description.replace(/<[^>]*>/g, '')}`.slice(0, 2000),
-        url: link
-      });
-    }
+    if (!title || title.length < 5 || seen.has(path)) continue;
+    seen.add(path);
+
+    results.push({
+      source: 'indiehackers',
+      source_item_id: `ih:${path}`,
+      source_timestamp: new Date().toISOString(),
+      text: title,
+      url: `https://www.indiehackers.com${path}`
+    });
   }
 
   return results;
 };
 
+const defaultLoader: IndieHackersLoaderFn = async (limit) => {
+  const html = await withRetry(async () => {
+    const res = await fetch('https://www.indiehackers.com', {
+      headers: { 'User-Agent': 'idea.ai/1.0 (research bot)' }
+    });
+    if (!res.ok) throw new Error(`IndieHackers fetch failed: ${res.status}`);
+    return res.text();
+  });
+
+  return parsePostsFromHtml(html, limit);
+};
+
 export const fetchIndieHackersEvents = async (
   loadEvents: IndieHackersLoaderFn = defaultLoader,
-  limit = 20
+  limit = OPEN_CONNECTOR_LIMITS.indiehackers
 ): Promise<RawEventInput[]> => {
   const events = await loadEvents(limit);
   return events.slice(0, limit);

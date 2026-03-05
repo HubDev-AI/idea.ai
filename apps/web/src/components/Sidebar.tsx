@@ -1,5 +1,5 @@
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { AgentStatusRecord, AiHealthRecord, ConnectorRecord, InfraStatusRecord, ThesisListItem } from '../api';
 
 type SidebarProps = {
@@ -32,8 +32,13 @@ const connectorDisplayName: Record<string, string> = {
   greenhouse: 'Greenhouse',
   lever: 'Lever',
   yc_companies: 'YC Companies',
+  reddit: 'Reddit',
+  producthunt: 'Product Hunt',
+  appstore_trending: 'App Store',
+  indiehackers: 'IndieHackers',
   exa_byo: 'Exa',
   perigon_byo: 'Perigon',
+  twitter_byo: 'Twitter/X',
 };
 
 /** Maps connector config name to the source key stored in signal_memory */
@@ -46,6 +51,37 @@ const providerDisplayName: Record<string, string> = {
   codex: 'Codex',
 };
 
+/** Server-side refresh interval — all connectors run together every 5 min */
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+const formatCountdown = (ms: number): string => {
+  if (ms <= 0) return '0:00';
+  const totalSec = Math.ceil(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}:${sec.toString().padStart(2, '0')}`;
+};
+
+const useRefreshCountdown = (connectors: ConnectorRecord[]): string | null => {
+  const [now, setNow] = useState(Date.now());
+
+  const lastRunIso = connectors.find((c) => c.status === 'active' && c.last_run)?.last_run ?? null;
+
+  useEffect(() => {
+    if (!lastRunIso) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [lastRunIso]);
+
+  if (!lastRunIso) return null;
+
+  const nextRefreshAt = new Date(lastRunIso).getTime() + REFRESH_INTERVAL_MS;
+  const remaining = nextRefreshAt - now;
+
+  if (remaining <= 0) return 'now';
+  return formatCountdown(remaining);
+};
+
 export const Sidebar: React.FC<SidebarProps> = ({
   connectors, aiHealth, agentStatus, infraStatus, theses,
   thesisFilter, onThesisFilter, signalCount, latestSignalAt, signalCounts,
@@ -53,6 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const activeConnectors = connectors.filter((c) => c.status === 'active').length;
   const enabledProviders = aiHealth?.providers?.filter((p) => p.enabled) ?? [];
+  const countdown = useRefreshCountdown(connectors);
 
   return (
     <aside className="sidebar">
@@ -100,7 +137,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <nav className="sidebar-section">
-        <h3 className="sidebar-label">Connectors</h3>
+        <div className="sidebar-label-row">
+          <h3 className="sidebar-label">Connectors</h3>
+          {countdown && (
+            <span className={`sidebar-countdown ${countdown === 'now' ? 'refreshing' : ''}`}>
+              {countdown === 'now' ? 'refreshing\u2026' : countdown}
+            </span>
+          )}
+        </div>
         {connectors.map((c) => {
           const sourceKey = connectorSourceKey[c.name] ?? c.name;
           const count = signalCounts[sourceKey];

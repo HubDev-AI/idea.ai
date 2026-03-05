@@ -1,53 +1,50 @@
-import type { RawEventInput } from './common/http';
+import { type RawEventInput, withRetry } from './common/http';
 
-type PHNode = {
-  id: string;
-  name: string;
-  tagline: string;
-  url: string;
-  createdAt: string;
-  votesCount: number;
-  topics: { edges: { node: { name: string } }[] };
-};
+type ProductHuntLoaderFn = (limit: number) => Promise<RawEventInput[]>;
 
-type PHResponse = {
-  data: { posts: { edges: { node: PHNode }[] } };
-};
-
-const PH_GRAPHQL_URL = 'https://api.producthunt.com/v2/api/graphql';
-
-const POSTS_QUERY = `query { posts(order: NEWEST, first: 20) { edges { node { id name tagline url createdAt votesCount topics { edges { node { name } } } } } } }`;
-
-export const fetchProductHunt = async (options: {
-  token?: string;
-  fetchImpl?: typeof fetch;
-}): Promise<RawEventInput[]> => {
-  const token = options.token ?? process.env.PH_API_TOKEN;
-  if (!token) return [];
-
-  const fetchImpl = options.fetchImpl ?? fetch;
-
-  const response = await fetchImpl(PH_GRAPHQL_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({ query: POSTS_QUERY })
+const defaultLoader: ProductHuntLoaderFn = async (limit) => {
+  const response = await withRetry(async () => {
+    const res = await fetch('https://www.producthunt.com/feed', {
+      headers: { 'User-Agent': 'idea.ai/1.0 (research bot)' }
+    });
+    if (!res.ok) throw new Error(`ProductHunt feed failed: ${res.status}`);
+    return res.text();
   });
 
-  if (!response.ok) return [];
+  const results: RawEventInput[] = [];
+  // PH feed is Atom format (<entry> not <item>)
+  const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
+  let match: RegExpExecArray | null;
 
-  const data = (await response.json()) as PHResponse;
+  while ((match = entryRegex.exec(response)) !== null && results.length < limit) {
+    const entry = match[1];
+    const title = entry.match(/<title>(.*?)<\/title>/)?.[1] ?? '';
+    const link = entry.match(/<link[^>]+href="([^"]+)"/)?.[1] ?? '';
+    const content = entry.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? '';
+    const published = entry.match(/<published>(.*?)<\/published>/)?.[1] ?? '';
 
-  return (data.data?.posts?.edges ?? []).map(({ node }) => {
-    const topics = node.topics.edges.map((e) => e.node.name).join(', ');
-    return {
-      source: 'producthunt',
-      source_item_id: `ph:${node.id}`,
-      source_timestamp: node.createdAt,
-      text: `${node.name}: ${node.tagline} (${node.votesCount} votes, topics: ${topics})`,
-      url: node.url
-    };
-  });
+    if (title) {
+      const cleanContent = content
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+        .replace(/<[^>]*>/g, '').trim();
+
+      results.push({
+        source: 'producthunt',
+        source_item_id: `ph:${link || title}`,
+        source_timestamp: published ? new Date(published).toISOString() : new Date().toISOString(),
+        text: `${title}: ${cleanContent}`.slice(0, 2000),
+        url: link
+      });
+    }
+  }
+
+  return results;
+};
+
+export const fetchProductHunt = async (
+  loadEvents: ProductHuntLoaderFn = defaultLoader,
+  limit = 20
+): Promise<RawEventInput[]> => {
+  const events = await loadEvents(limit);
+  return events.slice(0, limit);
 };

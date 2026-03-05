@@ -47,11 +47,7 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
     }
     return fetchReddit(redditOpts);
   },
-  producthunt: () => {
-    const phOpts: Parameters<typeof fetchProductHunt>[0] = {};
-    if (process.env.PH_API_TOKEN !== undefined) phOpts.token = process.env.PH_API_TOKEN;
-    return fetchProductHunt(phOpts);
-  },
+  producthunt: () => fetchProductHunt(),
   appstore_trending: () => fetchAppStoreTrending(),
   indiehackers: () => fetchIndieHackersEvents()
 };

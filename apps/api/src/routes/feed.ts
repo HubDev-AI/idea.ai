@@ -1,4 +1,5 @@
 import type { FeedRecord, PaginatedFeedResponse } from '@idea/contracts/src/api';
+import { recommendNextAction } from '@idea/pipeline/src/recommend_action';
 import type { FastifyInstance } from 'fastify';
 import type {
   MemorySignalRow,
@@ -69,7 +70,7 @@ const signalToFeedRecord = (row: MemorySignalRow): FeedRecord => ({
   top_source: row.source,
   snippet: row.canonical_text.slice(0, 200),
   source_url: row.source_url ?? null,
-  next_action: 'validate_demand',
+  next_action: recommendNextAction({ demand: row.demand, timing: row.timing, buildability: row.buildability }),
   updated_at: row.observed_at,
   demand: row.demand,
   timing: row.timing,

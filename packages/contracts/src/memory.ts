@@ -14,6 +14,7 @@ export const signalMemoryRecordSchema = z
     timing: scoreSchema,
     buildability: scoreSchema,
     blended: scoreSchema,
+    virality: scoreSchema,
     source_url: z.string().nullish()
   })
   .strict();
