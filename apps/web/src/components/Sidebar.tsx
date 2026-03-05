@@ -225,7 +225,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {agentCountdown === null ? 'pending' : agentCountdown === 'now' ? 'due' : agentCountdown}
               </span>
             )}
-            {onRunAgent && (
+            {onRunAgent && enabledProviders.length > 0 && (
               <button
                 type="button"
                 className={`sidebar-run-btn ${agentRunning ? 'running' : ''}`}
