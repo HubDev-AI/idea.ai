@@ -381,9 +381,9 @@ const App = () => {
     setRequestedPage(1);
   };
 
-  const handleForceRefresh = async () => {
+  const handleForceRefresh = async (cadence?: 'hourly' | 'daily') => {
     try {
-      await triggerConnectorRefresh();
+      await triggerConnectorRefresh(cadence);
     } catch {
       // Ignore — will be visible in logs
     }

@@ -138,7 +138,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   listLogs: readModel.listLogs,
   getAiHealth: readModel.getAiHealth,
   getRefreshMeta: readModel.getRefreshMeta,
-  triggerRefresh: async () => { await readModel.refresh(); },
+  triggerRefresh: async (cadence) => { await readModel.refresh(cadence); },
   thesisStore,
   memoryStore,
   getAgentStatus: () => agentStatus,

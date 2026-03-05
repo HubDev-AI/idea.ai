@@ -408,7 +408,8 @@ export const createPostgresMemoryStore = ({
     const values: unknown[] = [];
     let paramIdx = 1;
 
-    conditions.push(`sm.observed_at >= NOW() - INTERVAL '${windowDays} days'`);
+    conditions.push(`sm.observed_at >= NOW() - INTERVAL '1 day' * $${paramIdx++}`);
+    values.push(windowDays);
 
     if (source) {
       conditions.push(`sm.source = $${paramIdx++}`);
@@ -431,13 +432,15 @@ export const createPostgresMemoryStore = ({
     const totalItems = countResult.rows[0]?.count ?? 0;
 
     const offset = (page - 1) * pageSize;
+    const limitIdx = paramIdx++;
+    const offsetIdx = paramIdx++;
     const dataSql = `
       SELECT DISTINCT sm.signal_id, sm.topic, sm.source, sm.canonical_text,
              sm.observed_at, sm.demand, sm.timing, sm.buildability, sm.blended, sm.virality, sm.source_url
       FROM signal_memory sm ${joinClause} ${whereClause}
       ${sortClause(sort)}
-      LIMIT ${pageSize} OFFSET ${offset}`;
-    const dataResult = await pool.query<Record<string, unknown>>(dataSql, values);
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
+    const dataResult = await pool.query<Record<string, unknown>>(dataSql, [...values, pageSize, offset]);
 
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const items: MemorySignalRow[] = dataResult.rows.map((row) => ({

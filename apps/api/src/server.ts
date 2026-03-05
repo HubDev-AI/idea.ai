@@ -29,7 +29,7 @@ export type ServerDeps = {
   agentRunStore?: AgentRunStore | null;
   infraStatusDeps?: InfraStatusDeps;
   getRefreshMeta?: () => RefreshMeta;
-  triggerRefresh?: () => Promise<void>;
+  triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
 };
 
 const defaultDeps: ServerDeps = {

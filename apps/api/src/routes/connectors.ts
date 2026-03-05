@@ -10,7 +10,7 @@ export const registerConnectorRoute = (
     listConnectors: () => Promise<ConnectorStatusRecord[]>;
     memoryStore?: PostgresMemoryStore | null;
     getRefreshMeta?: () => RefreshMeta;
-    triggerRefresh?: () => Promise<void>;
+    triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
   }
 ): void => {
   app.get('/v1/connectors', async () => deps.listConnectors());
@@ -29,13 +29,15 @@ export const registerConnectorRoute = (
     return deps.getRefreshMeta();
   });
 
-  app.post('/v1/connectors/refresh', {
-    config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
-  }, async () => {
+  app.post<{ Querystring: { cadence?: string } }>('/v1/connectors/refresh', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    schema: { querystring: { type: 'object', properties: { cadence: { type: 'string', enum: ['hourly', 'daily'] } } } }
+  }, async (request) => {
     if (!deps.triggerRefresh) {
       return { status: 'unavailable' };
     }
-    void deps.triggerRefresh();
+    const cadence = request.query.cadence as 'hourly' | 'daily' | undefined;
+    void deps.triggerRefresh(cadence);
     return { status: 'triggered' };
   });
 };

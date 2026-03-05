@@ -617,7 +617,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
     }
   };
 
-  const refresh = async (): Promise<Snapshot> => {
+  const refresh = async (forceCadence?: 'hourly' | 'daily'): Promise<Snapshot> => {
     const env = loadRuntimeEnv(process.env);
     const runId = process.env.RUN_ID ?? createRunId('read_model');
     const logger = createExecutionLogger({ env: process.env, runId });
@@ -641,22 +641,27 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
     try {
       const persistentStore = await resolvePostgresMemoryStore(env, logger);
       const DAILY_CADENCE_MS = 24 * 60 * 60 * 1000;
-      const dailyDue = Date.now() - snapshot.lastDailyRunAt >= DAILY_CADENCE_MS;
+      const dailyDue = forceCadence === 'daily' || (!forceCadence && Date.now() - snapshot.lastDailyRunAt >= DAILY_CADENCE_MS);
+
+      const skipHourly = forceCadence === 'daily';
+      const emptyIngestion = { events: [] as RawEventInput[], statuses: [] as OpenConnectorIngestionResult['statuses'] } as OpenConnectorIngestionResult;
 
       const [hourly, daily, byo] = await Promise.all([
-        runOpenConnectorIngestionDetailed('hourly', {
-          enabledConnectors: enabledOpenConnectors('hourly', env),
-          logger
-        }),
+        skipHourly
+          ? Promise.resolve(emptyIngestion)
+          : runOpenConnectorIngestionDetailed('hourly', {
+              enabledConnectors: enabledOpenConnectors('hourly', env),
+              logger
+            }),
         dailyDue
           ? runOpenConnectorIngestionDetailed('daily', {
               enabledConnectors: enabledOpenConnectors('daily', env),
               logger
             })
-          : Promise.resolve({ events: [] as RawEventInput[], statuses: [] as OpenConnectorIngestionResult['statuses'] } as OpenConnectorIngestionResult),
-        runByoConnectorIngestion(process.env, {
-          logger
-        })
+          : Promise.resolve(emptyIngestion),
+        forceCadence
+          ? Promise.resolve({ connectors: { exa: { status: 'skipped' as const, events: [] }, perigon: { status: 'skipped' as const, events: [] }, twitter: { status: 'skipped' as const, events: [] } } })
+          : runByoConnectorIngestion(process.env, { logger })
       ]);
 
       const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events, ...byo.connectors.twitter.events]);
