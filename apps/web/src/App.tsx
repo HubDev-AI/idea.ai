@@ -21,6 +21,7 @@ import {
   type SortField,
   type ThesisListItem,
   type ThesisSortField,
+  type ThesisStats,
   triggerAgentRun,
   triggerConnectorRefresh
 } from './api';
@@ -42,13 +43,11 @@ const formatContextValue = (value: unknown): string => {
   if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 197)}...` : value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   if (Array.isArray(value)) {
-    if (value.length <= 3) return value.map(formatContextValue).join(', ');
-    return `[${value.length} items]`;
+    return value.map(formatContextValue).join(', ');
   }
   if (typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length <= 3) return entries.map(([k, v]) => `${k}=${formatContextValue(v)}`).join(', ');
-    return `{${entries.length} fields}`;
+    return entries.map(([k, v]) => `${k}=${formatContextValue(v)}`).join(', ');
   }
   return String(value);
 };
@@ -90,16 +89,18 @@ const App = () => {
   const [logsRealtime, setLogsRealtime] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const failCountRef = useRef(0);
+  const prevRunningRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
-  const [sortField, setSortField] = useState<SortField>('score');
+  const [sortField, setSortField] = useState<SortField>('newest');
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
   const [deepDiveThesis, setDeepDiveThesis] = useState<ThesisListItem | null>(null);
   const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
-  const [thesisSortField, setThesisSortField] = useState<ThesisSortField>('score');
+  const [thesisSortField, setThesisSortField] = useState<ThesisSortField>('newest');
+  const [thesisStats, setThesisStats] = useState<ThesisStats>({ total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 });
   const [thesisPageInfo, setThesisPageInfo] = useState({
     page: 1,
     pageSize: 10,
@@ -120,7 +121,7 @@ const App = () => {
     hasNext: false,
     hasPrev: false
   });
-  const latestSignalAt = signals[0]?.updated_at ?? null;
+  const [latestSignalAt, setLatestSignalAt] = useState<string | null>(null);
   const renderedLogs = useMemo(() => logs.slice().reverse(), [logs]);
   const logListRef = useRef<HTMLUListElement | null>(null);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
@@ -182,6 +183,9 @@ const App = () => {
           hasNext: signalResult.value.has_next,
           hasPrev: signalResult.value.has_prev
         });
+        if (signalResult.value.page === 1 && signalResult.value.items.length > 0) {
+          setLatestSignalAt(signalResult.value.items[0].updated_at);
+        }
         if (signalResult.value.page !== requestedPage) {
           setRequestedPage(signalResult.value.page);
         }
@@ -202,7 +206,36 @@ const App = () => {
       }
 
       if (agentResult.status === 'fulfilled') {
+        const wasRunning = prevRunningRef.current;
+        const nowRunning = agentResult.value.isRunning;
+        prevRunningRef.current = nowRunning;
         setAgentStatus(agentResult.value);
+        setAgentRunning(nowRunning);
+        // Agent just finished — show result and refresh theses/signals
+        if (wasRunning && !nowRunning && agentResult.value.lastRun) {
+          const lr = agentResult.value.lastRun;
+          setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
+          // Refresh theses and signals to reflect agent changes
+          Promise.allSettled([
+            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField }),
+            fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
+            fetchSignalCounts()
+          ]).then(([thesesRes, signalsRes, countsRes]) => {
+            if (thesesRes.status === 'fulfilled') {
+              const tp = thesesRes.value;
+              setTheses(tp.items);
+              setRequestedThesisPage(1);
+              setThesisPageInfo({ page: tp.page, pageSize: tp.page_size, totalItems: tp.total_items, totalPages: tp.total_pages, hasNext: tp.has_next, hasPrev: tp.has_prev });
+              if (tp.stats) setThesisStats(tp.stats);
+            }
+            if (signalsRes.status === 'fulfilled') {
+              setSignals(signalsRes.value.items);
+              setPageInfo({ page: signalsRes.value.page, pageSize: signalsRes.value.page_size, totalItems: signalsRes.value.total_items, totalPages: signalsRes.value.total_pages, hasNext: signalsRes.value.has_next, hasPrev: signalsRes.value.has_prev });
+              if (signalsRes.value.items.length > 0) setLatestSignalAt(signalsRes.value.items[0].updated_at);
+            }
+            if (countsRes.status === 'fulfilled') setSignalCounts(countsRes.value);
+          });
+        }
       }
 
       if (countsResult.status === 'fulfilled') {
@@ -263,6 +296,7 @@ const App = () => {
           hasNext: tp.has_next,
           hasPrev: tp.has_prev
         });
+        if (tp.stats) setThesisStats(tp.stats);
       } catch { /* handled by bulk fetch warning */ }
     };
     void loadTheses();
@@ -397,45 +431,12 @@ const App = () => {
     setAgentRunResult(null);
     setLogDrawerOpen(true);
     try {
-      const result = await triggerAgentRun();
-      // Refresh all data since the agent creates/updates theses
-      const [statusRes, thesesRes, signalsRes, countsRes] = await Promise.allSettled([
-        fetchAgentStatus(),
-        fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField }),
-        fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
-        fetchSignalCounts()
-      ]);
-      if (statusRes.status === 'fulfilled') setAgentStatus(statusRes.value);
-      if (thesesRes.status === 'fulfilled') {
-        const tp = thesesRes.value;
-        setTheses(tp.items);
-        setRequestedThesisPage(1);
-        setThesisPageInfo({
-          page: tp.page,
-          pageSize: tp.page_size,
-          totalItems: tp.total_items,
-          totalPages: tp.total_pages,
-          hasNext: tp.has_next,
-          hasPrev: tp.has_prev
-        });
-      }
-      if (signalsRes.status === 'fulfilled') {
-        setSignals(signalsRes.value.items);
-        setPageInfo({
-          page: signalsRes.value.page,
-          pageSize: signalsRes.value.page_size,
-          totalItems: signalsRes.value.total_items,
-          totalPages: signalsRes.value.total_pages,
-          hasNext: signalsRes.value.has_next,
-          hasPrev: signalsRes.value.has_prev
-        });
-      }
-      if (countsRes.status === 'fulfilled') setSignalCounts(countsRes.value);
-      setAgentRunResult(`${result.thesesUpdated} updated, ${result.newCandidates} new`);
+      await triggerAgentRun();
+      // 202 accepted — agent runs in background.
+      // Polling via GET /v1/agent/status handles running→done transition.
     } catch {
-      setAgentRunResult('failed');
-    } finally {
       setAgentRunning(false);
+      setAgentRunResult('failed');
     }
   };
 
@@ -446,7 +447,7 @@ const App = () => {
         aiHealth={aiHealth}
         agentStatus={agentStatus}
         infraStatus={infraStatus}
-        theses={theses}
+        thesisStats={thesisStats}
         thesisFilter={thesisFilter}
         onThesisFilter={handleThesisFilter}
         signalCount={pageInfo.totalItems}
@@ -476,16 +477,15 @@ const App = () => {
           <section className="pane pane-left" style={{ width: `${splitPct}%` }}>
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
-              <span className="pane-count">{thesisPageInfo.totalItems}</span>
               <select
                 className="source-filter"
                 value={thesisSortField}
                 onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
               >
+                <option value="newest">Newest</option>
                 <option value="score">By Score</option>
                 <option value="latest">Latest Activity</option>
                 <option value="evidence">Most Evidence</option>
-                <option value="newest">Newest</option>
               </select>
               {thesisPageInfo.totalPages > 1 && (
                 <div className="pane-header-right">
@@ -559,8 +559,8 @@ const App = () => {
                   value={sortField}
                   onChange={(e) => { setSortField(e.target.value as SortField); setRequestedPage(1); }}
                 >
-                  <option value="score">By Score</option>
                   <option value="newest">Newest</option>
+                  <option value="score">By Score</option>
                   <option value="virality">By Virality</option>
                   <option value="demand">By Demand</option>
                 </select>
@@ -642,6 +642,29 @@ const App = () => {
             </span>
             <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
           </button>
+          {logDrawerOpen && (
+            <div className="log-drawer-actions">
+              <button
+                type="button"
+                className="log-action-btn"
+                title="Copy logs to clipboard"
+                onClick={() => {
+                  const text = renderedLogs.map(formatTerminalLine).join('\n');
+                  navigator.clipboard.writeText(text);
+                }}
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                className="log-action-btn"
+                title="Clear log view"
+                onClick={() => setLogs([])}
+              >
+                Clear
+              </button>
+            </div>
+          )}
           {logDrawerOpen && (
             <div className="log-scroll-wrapper">
               <ul ref={logListRef} className="log-list terminal-list" onScroll={handleLogScroll}>

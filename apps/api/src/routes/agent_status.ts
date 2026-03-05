@@ -28,5 +28,10 @@ export const registerAgentStatusRoute = (
 
   app.post('/v1/agent/run', {
     config: { rateLimit: { max: 100, timeWindow: '1 minute' } }
-  }, async () => deps.triggerRun());
+  }, async (_request, reply) => {
+    // Fire-and-forget: start the run but don't await it.
+    // Frontend tracks progress via GET /v1/agent/status polling.
+    deps.triggerRun().catch(() => {});
+    return reply.code(202).send({ accepted: true });
+  });
 };

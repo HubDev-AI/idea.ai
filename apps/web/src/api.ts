@@ -11,7 +11,8 @@ import type {
   FeedRecord as SignalRecord,
   ThesisDeepDive,
   ThesisListItem,
-  ThesisPage
+  ThesisPage,
+  ThesisStats
 } from '@idea/contracts/src/api';
 
 export type {
@@ -24,6 +25,7 @@ export type {
   ThesisDeepDive,
   ThesisListItem,
   ThesisPage,
+  ThesisStats,
   AgentStatusRecord,
   InfraStatusRecord,
   AgentRunResult,
@@ -148,7 +150,8 @@ export const fetchTheses = async ({
       total_items: data.length,
       total_pages: 1,
       has_next: false,
-      has_prev: false
+      has_prev: false,
+      stats: { total: data.length, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 }
     };
   }
   return data as ThesisPage;

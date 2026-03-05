@@ -147,11 +147,39 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
   async listPaginated({ page = 1, pageSize = 10, status, sort = 'score' }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField } = {}): Promise<ThesisPage> {
     const where = status ? 'WHERE status = $1' : '';
     const countParams = status ? [status] : [];
-    const countResult = await pool.query<{ count: string }>(
-      `SELECT COUNT(*)::text AS count FROM thesis_candidates ${where}`,
-      countParams
-    );
+
+    const [countResult, statsResult] = await Promise.all([
+      pool.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM thesis_candidates ${where}`,
+        countParams
+      ),
+      pool.query<{ total: string; promoted: string; watching: string; total_evidence: string; total_sources: string }>(
+        `SELECT COUNT(*)::text AS total,
+                COUNT(*) FILTER (WHERE status = 'promoted')::text AS promoted,
+                COUNT(*) FILTER (WHERE status = 'watching')::text AS watching,
+                COALESCE(SUM(ev_count), 0)::text AS total_evidence,
+                COALESCE(SUM(src_count), 0)::text AS total_sources
+         FROM (
+           SELECT tc.status,
+                  COUNT(DISTINCT te.signal_id) AS ev_count,
+                  COUNT(DISTINCT sm.source) AS src_count
+           FROM thesis_candidates tc
+           LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
+           LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+           GROUP BY tc.id, tc.status
+         ) sub`
+      )
+    ]);
+
     const totalItems = Number(countResult.rows[0]?.count ?? 0);
+    const statsRow = statsResult.rows[0];
+    const stats = {
+      total: Number(statsRow?.total ?? 0),
+      promoted: Number(statsRow?.promoted ?? 0),
+      watching: Number(statsRow?.watching ?? 0),
+      totalEvidence: Number(statsRow?.total_evidence ?? 0),
+      totalSources: Number(statsRow?.total_sources ?? 0)
+    };
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const safePage = Math.min(Math.max(1, page), totalPages);
     const offset = (safePage - 1) * pageSize;
@@ -198,7 +226,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       total_items: totalItems,
       total_pages: totalPages,
       has_next: safePage < totalPages,
-      has_prev: safePage > 1
+      has_prev: safePage > 1,
+      stats
     };
   },
 

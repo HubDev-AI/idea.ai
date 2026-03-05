@@ -505,6 +505,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
   let postgresMemoryStore: PostgresMemoryStore | null | undefined = opts?.persistentStore ?? undefined;
   let snapshotHydrated = false;
   let refreshInFlight: Promise<Snapshot> | null = null;
+  let refreshingCadence: 'hourly' | 'daily' | null = null;
   const sessionRunIds = new Set<string>();
   let aiHealth: AiHealthRecord = createAiHealthSnapshot({
     env: process.env,
@@ -636,14 +637,18 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
 
     await hydrateSnapshotFromDisk(process.env, logger);
 
-    await logger.info('live_read_model', 'refresh started', {
+    const persistentStore = await resolvePostgresMemoryStore(env, logger);
+    const DAILY_CADENCE_MS = 24 * 60 * 60 * 1000;
+    const dailyDue = forceCadence === 'daily' || (!forceCadence && Date.now() - snapshot.lastDailyRunAt >= DAILY_CADENCE_MS);
+    refreshingCadence = dailyDue ? 'daily' : 'hourly';
+    const cadenceLabel = dailyDue ? 'daily_refresh' : 'hourly_refresh';
+
+    await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH START ===`, {
       run_id: logger.runId
     });
 
     try {
-      const persistentStore = await resolvePostgresMemoryStore(env, logger);
-      const DAILY_CADENCE_MS = 24 * 60 * 60 * 1000;
-      const dailyDue = forceCadence === 'daily' || (!forceCadence && Date.now() - snapshot.lastDailyRunAt >= DAILY_CADENCE_MS);
+      const refreshStartedAt = Date.now();
 
       const skipHourly = forceCadence === 'daily';
       const emptyIngestion = { events: [] as RawEventInput[], statuses: [] as OpenConnectorIngestionResult['statuses'] } as OpenConnectorIngestionResult;
@@ -670,7 +675,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       const highSignalEvents = events.filter((event) => !isLowValueRecruitingEvent(event));
       const selectedEvents = selectEventsForScoring(highSignalEvents);
 
-      await logger.info('live_read_model', 'event selection prepared', {
+      await logger.info(cadenceLabel, 'event selection prepared', {
         total_events: events.length,
         filtered_events: highSignalEvents.length,
         filtered_recruiting_noise: events.length - highSignalEvents.length,
@@ -728,6 +733,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       if (aiPostScrapeBatch.provider) {
         aiProvidersUsed.add(aiPostScrapeBatch.provider);
       }
+      const noiseFilteredBySource: Record<string, number> = {};
 
       for (const input of selectedSignalInputs) {
         const { event, signalId, topic, ideaDraft } = input;
@@ -735,11 +741,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
           const aiInsight = aiPostScrapeInsights.get(signalId);
           if (aiInsight?.isNoise) {
             aiNoiseFiltered += 1;
-            await logger.debug('live_read_model', 'signal skipped by ai post-scrape noise filter', {
-              source: event.source,
-              source_item_id: event.source_item_id,
-              confidence: aiInsight.confidence ?? null
-            });
+            noiseFilteredBySource[event.source] = (noiseFilteredBySource[event.source] ?? 0) + 1;
             continue;
           }
 
@@ -748,7 +750,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
 
           if (requiresAiRewrite && aiPostScrapeSettings.maxSignals > 0 && (!aiInsight?.idea || aiInsight.idea.trim().length === 0)) {
             aiTransformRequiredSkipped += 1;
-            await logger.debug('live_read_model', 'signal skipped because ai opportunity rewrite is unavailable', {
+            await logger.debug(cadenceLabel, 'signal skipped because ai opportunity rewrite is unavailable', {
               source: event.source,
               source_item_id: event.source_item_id
             });
@@ -757,7 +759,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
 
           if ((!aiInsight?.idea || aiInsight.idea.trim().length === 0) && isLowValueOpportunityTitle(ideaDraft)) {
             lowValueTitleSkipped += 1;
-            await logger.debug('live_read_model', 'signal skipped because title appears low-value without ai rewrite', {
+            await logger.debug(cadenceLabel, 'signal skipped because title appears low-value without ai rewrite', {
               source: event.source,
               source_item_id: event.source_item_id,
               idea_draft: ideaDraft
@@ -883,7 +885,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
                   for (const match of convergent) {
                     await persistentStore.boostViralityScore(match.signal_id, convergenceBoost);
                   }
-                  await logger.debug('live_read_model', 'convergence boost applied', {
+                  await logger.debug(cadenceLabel, 'convergence boost applied', {
                     signal_id: indexedEntry.memoryRecord.signal_id,
                     matches: convergent.length,
                     boost: convergenceBoost,
@@ -892,7 +894,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
                 }
               }
             } catch (error) {
-              await logger.error('live_read_model', 'persistent memory save failed', {
+              await logger.error(cadenceLabel, 'persistent memory save failed', {
                 signal_id: indexedEntry.memoryRecord.signal_id,
                 error: toErrorMessage(error)
               });
@@ -912,7 +914,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             blended
           });
         } catch (error) {
-          await logger.error('live_read_model', 'signal scoring failed', {
+          await logger.error(cadenceLabel, 'signal scoring failed', {
             source: event.source,
             source_item_id: event.source_item_id,
             error: toErrorMessage(error)
@@ -920,7 +922,14 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
         }
       }
 
-      await logger.info('live_read_model', 'ai judge summary', {
+      if (aiNoiseFiltered > 0) {
+        await logger.info(cadenceLabel, 'ai post-scrape noise filtered', {
+          filtered_count: aiNoiseFiltered,
+          by_source: noiseFilteredBySource
+        });
+      }
+
+      await logger.info(cadenceLabel, 'ai judge summary', {
         post_scrape_enabled: aiPostScrapeSettings.enabled,
         post_scrape_attempted: aiPostScrapeBatch.attempted,
         post_scrape_provider: aiPostScrapeBatch.provider ?? null,
@@ -954,11 +963,11 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       const ideaCandidates = findIdeaCandidates(nextSignals);
 
       if (rankedSignals.length === 0 && snapshot.signals.length > 0) {
-        await logger.warn('live_read_model', 'no fresh signals, serving previous snapshot');
+        await logger.warn(cadenceLabel, 'no fresh signals, serving previous snapshot');
       }
 
       if (ideaCandidates.length > 0) {
-        await logger.info('live_read_model', 'idea candidate detected', {
+        await logger.info(cadenceLabel, 'idea candidate detected', {
           count: ideaCandidates.length,
           ideas: ideaCandidates.map((signal) => ({
             score: signal.score,
@@ -967,7 +976,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
           }))
         });
       } else {
-        await logger.info('live_read_model', 'no idea candidate detected', {
+        await logger.info(cadenceLabel, 'no idea candidate detected', {
           top_score: nextSignals[0]?.score ?? null
         });
       }
@@ -993,22 +1002,23 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       };
       await persistSnapshotToDisk(process.env, logger, snapshot);
 
-      await logger.info('live_read_model', 'refresh completed', {
+      await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH COMPLETE ===`, {
         run_id: logger.runId,
         events: events.length,
-        published_signals: snapshot.signals.length
+        published_signals: snapshot.signals.length,
+        duration_s: Math.round((Date.now() - refreshStartedAt) / 1000)
       });
 
       return snapshot;
     } catch (error) {
       const message = toErrorMessage(error);
-      await logger.error('live_read_model', 'refresh failed', {
+      await logger.error(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH FAILED ===`, {
         run_id: logger.runId,
         error: message
       });
 
       if (snapshot.refreshedAt > 0) {
-        await logger.warn('live_read_model', 'serving stale snapshot after refresh failure', {
+        await logger.warn(cadenceLabel, 'serving stale snapshot after refresh failure', {
           previous_refreshed_at: new Date(snapshot.refreshedAt).toISOString()
         });
         aiHealth = {
@@ -1033,6 +1043,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       };
 
       return snapshot;
+    } finally {
+      refreshingCadence = null;
     }
   };
 
@@ -1079,6 +1091,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       last_daily_run: new Date(snapshot.lastDailyRunAt > 0 ? snapshot.lastDailyRunAt : startedAt).toISOString(),
       hourly_interval_ms: refreshMs,
       daily_interval_ms: DAILY_CADENCE_MS,
+      refreshing: refreshingCadence,
     }),
     getAiHealth: async (): Promise<AiHealthRecord> => {
       await ensureFresh();
@@ -1100,6 +1113,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
 
         return rows.filter((row) => sessionRunIds.has(row.run_id)).slice(0, query.limit);
       })()),
+    registerRunId: (runId: string) => { sessionRunIds.add(runId); },
     refresh,
     close: async (): Promise<void> => {
       if (postgresMemoryStore) {

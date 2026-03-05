@@ -50,7 +50,7 @@ const agentRunStore: AgentRunStore | null = pool
   ? createAgentRunStore({ pool })
   : null;
 
-let agentStatus: AgentStatusRecord = { lastRun: null, investigateNext: null };
+let agentStatus: AgentStatusRecord = { isRunning: false, lastRun: null, investigateNext: null };
 let agentRunInFlight: Promise<AgentRunResult> | null = null;
 
 // Load last run status from DB on startup (survives restarts)
@@ -59,6 +59,7 @@ try {
     const row = await agentRunStore.latest();
     if (row && row.status === 'completed') {
       agentStatus = {
+        isRunning: false,
         lastRun: {
           timestamp: row.started_at,
           thesesUpdated: row.theses_updated,
@@ -79,6 +80,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
 
   const runId = `agent-${Date.now()}`;
   const logger = createExecutionLogger({ runId });
+  readModel.registerRunId(runId);
 
   agentRunInFlight = (async () => {
     await agentRunStore?.create(runId);
@@ -110,6 +112,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
       });
 
       agentStatus = {
+        isRunning: false,
         lastRun: {
           timestamp: new Date().toISOString(),
           thesesUpdated: result.thesesUpdated,
@@ -154,7 +157,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
     preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider
   },
   logger: createExecutionLogger({ runId: 'api-services' }),
-  getAgentStatus: () => agentStatus,
+  getAgentStatus: () => ({ ...agentStatus, isRunning: agentRunInFlight !== null }),
   triggerAgentRun: executeAgentRun,
   agentRunStore,
   corsOrigins,
