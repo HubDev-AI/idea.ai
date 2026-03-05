@@ -26,6 +26,7 @@ import {
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
 import { ThesisCard } from './components/ThesisCard';
+import { ThesisDeepDiveModal } from './components/ThesisDeepDiveModal';
 import { connectorDisplayName, connectorSourceKey } from './connectorNames';
 
 const PAGE_SIZE = 8;
@@ -81,6 +82,7 @@ const App = () => {
   const [sortField, setSortField] = useState<SortField>('score');
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
+  const [deepDiveThesis, setDeepDiveThesis] = useState<ThesisListItem | null>(null);
   const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
@@ -504,17 +506,7 @@ const App = () => {
                   key={t.canonicalKey}
                   thesis={t}
                   isActive={thesisFilter === t.canonicalKey}
-                  onClick={() => {
-                    if (thesisFilter === t.canonicalKey) {
-                      setThesisFilter(null);
-                      setThesisFilterTitle('');
-                      setRequestedPage(1);
-                    } else {
-                      setThesisFilter(t.canonicalKey);
-                      setThesisFilterTitle(t.title);
-                      setRequestedPage(1);
-                    }
-                  }}
+                  onClick={() => setDeepDiveThesis(t)}
                 />
               ))}
               {theses.length === 0 && (
@@ -662,6 +654,12 @@ const App = () => {
           )}
         </section>
       </main>
+      {deepDiveThesis && (
+        <ThesisDeepDiveModal
+          thesis={deepDiveThesis}
+          onClose={() => setDeepDiveThesis(null)}
+        />
+      )}
     </div>
   );
 };
