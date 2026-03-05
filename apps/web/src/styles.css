@@ -512,6 +512,10 @@ h1, h2, h3, p {
   background: var(--accent);
   box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.12);
 }
+.dot-pending {
+  background: transparent;
+  border: 1.5px solid var(--warn);
+}
 .dot-warn { background: var(--warn); }
 
 @keyframes dot-breathe {

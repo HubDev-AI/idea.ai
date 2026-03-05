@@ -18,14 +18,15 @@ type SidebarProps = {
   agentRunning?: boolean;
   agentRunResult?: string | null;
   refreshMeta: RefreshMeta | null;
-  onForceRefresh?: () => void;
+  onForceRefresh?: (cadence?: 'hourly' | 'daily') => void;
 };
 
-const dotClass = (status: string, enabled?: boolean): string => {
+const dotClass = (status: string, opts?: { enabled?: boolean; lastRun?: string | null }): string => {
+  if (status === 'active' && opts?.lastRun === null) return 'dot-pending';
   if (status === 'active' || status === 'healthy' || status === 'ok') return 'dot-ok';
   if (status === 'degraded') return 'dot-warn';
   if (status === 'error') return 'dot-err';
-  if (status === 'idle' && enabled) return 'dot-standby';
+  if (status === 'idle' && opts?.enabled) return 'dot-standby';
   return 'dot-idle';
 };
 
@@ -150,7 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <button
                     type="button"
                     className="sidebar-fetch-btn"
-                    onClick={onForceRefresh}
+                    onClick={() => onForceRefresh(cadence)}
                     title={`Force refresh ${cadence} connectors`}
                   >
                     Fetch
@@ -162,7 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 const count = signalCounts[sourceKey];
                 return (
                   <div key={c.name} className="sidebar-row">
-                    <span className={`status-dot ${dotClass(c.status)}`} />
+                    <span className={`status-dot ${dotClass(c.status, { lastRun: c.last_run })}`} />
                     <span className="sidebar-row-name">{connectorDisplayName[c.name] ?? c.name}</span>
                     {count != null && count > 0 && (
                       <span className="sidebar-row-detail detail-count">{count}</span>
@@ -178,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const count = signalCounts[sourceKey];
           return (
             <div key={c.name} className="sidebar-row">
-              <span className={`status-dot ${dotClass(c.status)}`} />
+              <span className={`status-dot ${dotClass(c.status, { lastRun: c.last_run })}`} />
               <span className="sidebar-row-name">{connectorDisplayName[c.name] ?? c.name}</span>
               {count != null && count > 0 && (
                 <span className="sidebar-row-detail detail-count">{count}</span>
@@ -197,7 +198,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             : null;
           return (
             <div key={p.provider} className="sidebar-row">
-              <span className={`status-dot ${dotClass(p.status, p.enabled)}`} />
+              <span className={`status-dot ${dotClass(p.status, { enabled: p.enabled })}`} />
               <span className="sidebar-row-name">
                 {providerDisplayName[p.provider] ?? p.provider}
                 {role && <span className={`sidebar-role-tag ${role}`}>{role}</span>}

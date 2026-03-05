@@ -180,7 +180,10 @@ export const fetchRefreshMeta = async (): Promise<RefreshMeta> => {
   return response.json() as Promise<RefreshMeta>;
 };
 
-export const triggerConnectorRefresh = async (): Promise<void> => {
-  const response = await fetch(buildApiUrl('/v1/connectors/refresh'), { method: 'POST' });
+export const triggerConnectorRefresh = async (cadence?: 'hourly' | 'daily'): Promise<void> => {
+  const url = cadence
+    ? buildApiUrl(`/v1/connectors/refresh?cadence=${cadence}`)
+    : buildApiUrl('/v1/connectors/refresh');
+  const response = await fetch(url, { method: 'POST' });
   if (!response.ok) throw new Error('Failed to trigger refresh');
 };
