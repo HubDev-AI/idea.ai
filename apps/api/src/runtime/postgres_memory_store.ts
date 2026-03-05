@@ -103,6 +103,7 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
         timing = EXCLUDED.timing,
         buildability = EXCLUDED.buildability,
         blended = EXCLUDED.blended,
+        virality = EXCLUDED.virality,
         source_url = COALESCE(EXCLUDED.source_url, signal_memory.source_url),
         updated_at = NOW()
     `,
@@ -116,7 +117,7 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
       entry.memoryRecord.timing,
       entry.memoryRecord.buildability,
       entry.memoryRecord.blended,
-      (entry.memoryRecord as Record<string, unknown>).virality ?? null,
+      entry.memoryRecord.virality,
       entry.memoryRecord.source_url ?? null
     ]
   );

@@ -12,7 +12,7 @@ services:
       DATABASE_URL: postgresql://idea_ai:idea_ai_dev@postgres:5432/idea_ai
       REDIS_URL: redis://redis:6379
       HOST: 0.0.0.0
-      PORT: 3000
+      PORT: ${PORT:-3000}
       IS_SANDBOX: "1"
       CLAUDE_CONFIG_SOURCE: /host-claude
       CLAUDE_CONFIG_DIR: /root/.claude
@@ -22,7 +22,7 @@ services:
       - idea_ai_pnpm_store:/root/.local/share/pnpm/store
       - ${HOME}/.claude:/host-claude:ro
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:${PORT:-3000}"
     depends_on:
       postgres:
         condition: service_healthy

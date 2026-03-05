@@ -13,6 +13,7 @@ export type ScoredSignalInput = {
   timing: number;
   buildability: number;
   blended: number;
+  virality: number;
   sourceUrl?: string | null;
 };
 
@@ -86,6 +87,7 @@ export const indexSignalMemory = async (
       timing: input.timing,
       buildability: input.buildability,
       blended: input.blended,
+      virality: input.virality,
       source_url: input.sourceUrl ?? null
     },
     embeddingRecord: {
