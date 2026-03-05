@@ -14,9 +14,12 @@ import { fetchProductHunt } from '@idea/connectors/src/producthunt';
 import { fetchReddit } from '@idea/connectors/src/reddit';
 import { fetchShowHnEvents } from '@idea/connectors/src/showhn';
 import { fetchYcCompanyEvents } from '@idea/connectors/src/yc_companies';
+import { fetchGoogleTrends } from '@idea/connectors/src/google_trends';
+import { fetchTikTokCreative } from '@idea/connectors/src/tiktok_creative';
+import { fetchAlternativeTo } from '@idea/connectors/src/alternativeto';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 
-export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew';
+export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew' | 'google_trends' | 'tiktok_creative' | 'alternativeto';
 
 export type OpenConnectorStatus = {
   name: OpenConnectorName;
@@ -38,7 +41,7 @@ type OpenIngestionDeps = {
   loaders?: Partial<Record<OpenConnectorName, OpenConnectorLoader>>;
 };
 
-const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew'];
+const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto'];
 
 const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   hn: () => fetchHnEvents(),
@@ -61,7 +64,10 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   showhn: () => fetchShowHnEvents(),
   mastodon: () => fetchMastodonEvents(),
   bluesky: () => fetchBlueskyEvents(),
-  homebrew: () => fetchHomebrewEvents()
+  homebrew: () => fetchHomebrewEvents(),
+  google_trends: () => fetchGoogleTrends(),
+  tiktok_creative: () => fetchTikTokCreative(),
+  alternativeto: () => fetchAlternativeTo()
 };
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');
