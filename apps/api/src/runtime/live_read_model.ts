@@ -43,7 +43,7 @@ import {
 
 const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
 const DEFAULT_SNAPSHOT_FILE = (): string => join(process.cwd(), 'logs', 'state', 'latest_snapshot.json');
-const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers'];
+const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew'];
 
 type Snapshot = {
   refreshedAt: number;
@@ -235,7 +235,7 @@ const countBySource = (events: RawEventInput[]): Record<string, number> =>
   }, {});
 
 const isConnectorSelected = (connector: OpenConnectorName, env: RuntimeEnv): boolean => {
-  if (connector === 'hn' || connector === 'github_issues') {
+  if (OPEN_CONNECTOR_CADENCE[connector] === 'hourly') {
     return env.hourlyConnectors.includes(connector);
   }
 
@@ -256,11 +256,7 @@ const isConnectorConfigured = (connector: OpenConnectorName, env: RuntimeEnv): b
 
 const enabledOpenConnectors = (cadence: Cadence, env: RuntimeEnv): OpenConnectorName[] =>
   OPEN_CONNECTORS.filter((connector) => {
-    if (cadence === 'hourly' && connector !== 'hn' && connector !== 'github_issues') {
-      return false;
-    }
-
-    if (cadence === 'daily' && (connector === 'hn' || connector === 'github_issues')) {
+    if (OPEN_CONNECTOR_CADENCE[connector] !== cadence) {
       return false;
     }
 

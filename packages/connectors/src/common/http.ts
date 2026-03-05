@@ -17,7 +17,13 @@ export const OPEN_CONNECTOR_LIMITS = {
   reddit: 25,
   producthunt: 20,
   appstore_trending: 30,
-  indiehackers: 20
+  indiehackers: 20,
+  lobsters: 25,
+  devto: 30,
+  showhn: 25,
+  mastodon: 30,
+  bluesky: 30,
+  homebrew: 50
 } as const;
 
 export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
@@ -29,7 +35,13 @@ export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
   reddit: 'daily',
   producthunt: 'daily',
   appstore_trending: 'daily',
-  indiehackers: 'daily'
+  indiehackers: 'daily',
+  lobsters: 'daily',
+  devto: 'daily',
+  showhn: 'hourly',
+  mastodon: 'daily',
+  bluesky: 'daily',
+  homebrew: 'daily'
 };
 
 const sleep = async (ms: number): Promise<void> => {
