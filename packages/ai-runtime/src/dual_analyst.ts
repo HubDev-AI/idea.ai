@@ -102,5 +102,13 @@ export const dualAnalystRun = async <T>(
     }
   }
 
+  // Retry with Claude if both providers failed
+  if (claude === null && codex === null) {
+    try {
+      const retry = await deps.runClaude(input);
+      try { claude = deps.parseResponse(retry.text); } catch { /* skip */ }
+    } catch { /* both attempts exhausted */ }
+  }
+
   return { claude, codex };
 };
