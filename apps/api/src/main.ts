@@ -4,6 +4,7 @@ import { embedText } from '@idea/ai-runtime/src/ollama';
 import type { AgentStatusRecord } from '@idea/contracts/src/api';
 import pg from 'pg';
 import { loadEnvFile } from './config/dotenv';
+import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
 import { createExecutionLogger } from './runtime/execution_logger';
@@ -61,7 +62,8 @@ if (agentRunStore) {
           newCandidates: row.new_candidates,
           clustersAnalyzed: row.clusters_analyzed,
           deepDivesPerformed: row.deep_dives_performed,
-          journalEntriesWritten: row.journal_entries_written
+          journalEntriesWritten: row.journal_entries_written,
+          provider: row.provider ?? null
         },
         investigateNext: row.investigate_next
       };
@@ -88,7 +90,8 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         runClaude: runClaudePrompt,
         runCodex: runCodexPrompt,
         logger,
-        runId
+        runId,
+        preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider
       });
 
       await agentRunStore?.complete(runId, result);
@@ -107,7 +110,8 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
           newCandidates: result.newCandidates,
           clustersAnalyzed: result.clustersAnalyzed,
           deepDivesPerformed: result.deepDivesPerformed,
-          journalEntriesWritten: result.journalEntriesWritten
+          journalEntriesWritten: result.journalEntriesWritten,
+          provider: result.provider
         },
         investigateNext: result.investigateNext || null
       };
@@ -133,6 +137,8 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   listConnectors: readModel.listConnectors,
   listLogs: readModel.listLogs,
   getAiHealth: readModel.getAiHealth,
+  getRefreshMeta: readModel.getRefreshMeta,
+  triggerRefresh: async () => { await readModel.refresh(); },
   thesisStore,
   memoryStore,
   getAgentStatus: () => agentStatus,
@@ -224,7 +230,7 @@ app
   .listen({ host, port })
   .then((address) => {
     console.log(`API ready on ${address}`);
-    const AGENT_INTERVAL_MS = 30 * 60 * 1000;
+    const AGENT_INTERVAL_MS = 2 * 60 * 60 * 1000;
     agentTimer = setInterval(() => {
       void executeAgentRun().catch((err) => {
         console.error('research agent cron failed:', err);

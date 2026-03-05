@@ -6,6 +6,7 @@ import type {
   ConnectorStatusRecord as ConnectorRecord,
   ExecutionLogRecord,
   InfraStatusRecord,
+  RefreshMeta,
   SignalPage,
   FeedRecord as SignalRecord,
   ThesisListItem,
@@ -23,7 +24,8 @@ export type {
   ThesisPage,
   AgentStatusRecord,
   InfraStatusRecord,
-  AgentRunResult
+  AgentRunResult,
+  RefreshMeta
 };
 
 const resolveApiBaseUrl = (): string => {
@@ -37,18 +39,22 @@ const API_BASE_URL = resolveApiBaseUrl();
 
 export const buildApiUrl = (path: string): string => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
+export type SortField = 'score' | 'newest' | 'virality' | 'demand';
+
 export const fetchSignals = async ({
   page = 1,
   pageSize = 20,
   window: timeWindow = '7d',
   source,
   thesisKey,
+  sort,
 }: {
   page?: number;
   pageSize?: number;
   window?: string;
   source?: string;
   thesisKey?: string;
+  sort?: SortField;
 } = {}): Promise<SignalPage> => {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -56,6 +62,7 @@ export const fetchSignals = async ({
   params.set('window', timeWindow);
   if (source) params.set('source', source);
   if (thesisKey) params.set('thesis_key', thesisKey);
+  if (sort) params.set('sort', sort);
   const res = await fetch(buildApiUrl(`/v1/signals?${params.toString()}`));
   if (!res.ok) throw new Error(`fetchSignals failed: ${res.status}`);
   return res.json();
@@ -165,4 +172,15 @@ export const fetchInfraStatus = async (): Promise<InfraStatusRecord> => {
   const response = await fetch(buildApiUrl('/v1/infra/status'));
   if (!response.ok) throw new Error('Failed to load infra status');
   return response.json() as Promise<InfraStatusRecord>;
+};
+
+export const fetchRefreshMeta = async (): Promise<RefreshMeta> => {
+  const response = await fetch(buildApiUrl('/v1/connectors/refresh-meta'));
+  if (!response.ok) throw new Error('Failed to load refresh meta');
+  return response.json() as Promise<RefreshMeta>;
+};
+
+export const triggerConnectorRefresh = async (): Promise<void> => {
+  const response = await fetch(buildApiUrl('/v1/connectors/refresh'), { method: 'POST' });
+  if (!response.ok) throw new Error('Failed to trigger refresh');
 };

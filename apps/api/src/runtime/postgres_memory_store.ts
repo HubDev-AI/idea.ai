@@ -228,12 +228,15 @@ export type SignalQueryResult = {
   hasPrev: boolean;
 };
 
+export type SignalSortField = 'score' | 'newest' | 'virality' | 'demand';
+
 export type SignalQueryParams = {
   windowDays: number;
   page: number;
   pageSize: number;
   source?: string;
   thesisKey?: string;
+  sort?: SignalSortField;
 };
 
 export type EmbeddingStats = {
@@ -390,8 +393,17 @@ export const createPostgresMemoryStore = ({
     }));
   };
 
+  const sortClause = (sort: SignalSortField | undefined): string => {
+    switch (sort) {
+      case 'newest': return 'ORDER BY sm.observed_at DESC';
+      case 'virality': return 'ORDER BY sm.virality DESC';
+      case 'demand': return 'ORDER BY sm.demand DESC';
+      default: return 'ORDER BY sm.blended DESC';
+    }
+  };
+
   const querySignals = async (params: SignalQueryParams): Promise<SignalQueryResult> => {
-    const { windowDays, page, pageSize, source, thesisKey } = params;
+    const { windowDays, page, pageSize, source, thesisKey, sort } = params;
     const conditions: string[] = [];
     const values: unknown[] = [];
     let paramIdx = 1;
@@ -423,7 +435,7 @@ export const createPostgresMemoryStore = ({
       SELECT DISTINCT sm.signal_id, sm.topic, sm.source, sm.canonical_text,
              sm.observed_at, sm.demand, sm.timing, sm.buildability, sm.blended, sm.virality, sm.source_url
       FROM signal_memory sm ${joinClause} ${whereClause}
-      ORDER BY sm.blended DESC
+      ${sortClause(sort)}
       LIMIT ${pageSize} OFFSET ${offset}`;
     const dataResult = await pool.query<Record<string, unknown>>(dataSql, values);
 

@@ -1,45 +1,33 @@
 import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput } from './common/http';
 
-type BlueskyPost = {
-  uri: string;
-  cid: string;
-  author: { handle: string };
-  record: { text: string; createdAt: string };
-  likeCount?: number;
-  repostCount?: number;
-  indexedAt: string;
+type BlueskyFeedPost = {
+  post: {
+    uri: string;
+    cid: string;
+    author: { handle: string; displayName?: string };
+    record: { text: string; createdAt: string };
+    likeCount?: number;
+    repostCount?: number;
+    replyCount?: number;
+    indexedAt: string;
+  };
 };
 
-type BlueskySearchResponse = {
-  posts: BlueskyPost[];
+type BlueskyFeedResponse = {
+  feed: BlueskyFeedPost[];
+  cursor?: string;
 };
 
-type BlueskyLoaderFn = () => Promise<BlueskyPost[]>;
+type BlueskyLoaderFn = () => Promise<BlueskyFeedPost[]>;
 
-const QUERIES = ['building in public', 'launched my app', 'side project launch', 'dev tool', 'open source project'];
+// "What's Hot" curated feed — no auth required via public API
+const WHATS_HOT_FEED = 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot';
 
 const defaultLoader: BlueskyLoaderFn = async () => {
-  const allPosts: BlueskyPost[] = [];
-
-  for (const query of QUERIES) {
-    try {
-      const response = await fetchJsonWithRetry<BlueskySearchResponse>(
-        `https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(query)}&limit=10`,
-        { init: { headers: { 'User-Agent': 'idea.ai/1.0 (research bot)' } } }
-      );
-      allPosts.push(...(response.posts ?? []));
-    } catch {
-      // Skip failed query
-    }
-  }
-
-  // Deduplicate by uri
-  const seen = new Set<string>();
-  return allPosts.filter((p) => {
-    if (seen.has(p.uri)) return false;
-    seen.add(p.uri);
-    return true;
-  });
+  const response = await fetchJsonWithRetry<BlueskyFeedResponse>(
+    `https://public.api.bsky.app/xrpc/app.bsky.feed.getFeed?feed=${encodeURIComponent(WHATS_HOT_FEED)}&limit=30`
+  );
+  return response.feed ?? [];
 };
 
 export const fetchBlueskyEvents = async (
@@ -50,18 +38,19 @@ export const fetchBlueskyEvents = async (
 
   return items
     .slice(0, limit)
-    .filter((item) => item.uri && item.record?.text)
+    .filter((item) => item.post?.uri && item.post?.record?.text)
     .map((item) => {
-      // Convert AT URI to web URL: at://did:plc:xxx/app.bsky.feed.post/yyy -> https://bsky.app/profile/handle/post/yyy
-      const rkey = item.uri.split('/').pop() ?? '';
-      const webUrl = `https://bsky.app/profile/${item.author.handle}/post/${rkey}`;
+      const p = item.post;
+      const rkey = p.uri.split('/').pop() ?? '';
+      const webUrl = `https://bsky.app/profile/${p.author.handle}/post/${rkey}`;
 
       return {
         source: 'bluesky',
-        source_item_id: `bsky:${item.cid}`,
-        source_timestamp: item.record.createdAt || item.indexedAt || new Date().toISOString(),
-        text: item.record.text.slice(0, 2000),
-        url: webUrl
+        source_item_id: `bsky:${p.cid}`,
+        source_timestamp: p.record.createdAt || p.indexedAt || new Date().toISOString(),
+        text: p.record.text.slice(0, 2000),
+        url: webUrl,
+        engagement_count: (p.likeCount ?? 0) + (p.repostCount ?? 0) + (p.replyCount ?? 0)
       };
     })
     .filter((item) => item.text.length > 10);

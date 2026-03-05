@@ -44,6 +44,13 @@ export type ConnectorStatusRecord = {
   cadence: 'hourly' | 'daily' | null;
 };
 
+export type RefreshMeta = {
+  last_hourly_run: string | null;
+  last_daily_run: string | null;
+  hourly_interval_ms: number;
+  daily_interval_ms: number;
+};
+
 // -- Execution logs ------------------------------------------------ */
 
 export type ExecutionLogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -84,6 +91,7 @@ export type AiHealthRecord = {
   run_id: string | null;
   refreshed_at: string | null;
   provider_setting: 'claude' | 'codex' | 'both';
+  primary_provider: AiProviderName;
   judge_mode: 'single' | 'ensemble';
   fallback_enabled: boolean;
   retry_budget: number;
@@ -124,6 +132,7 @@ export type AgentRunResult = {
   journalEntriesWritten: number;
   clustersAnalyzed: number;
   deepDivesPerformed: number;
+  provider: string | null;
 };
 
 export type AgentStatusRecord = {
@@ -134,6 +143,7 @@ export type AgentStatusRecord = {
     clustersAnalyzed: number;
     deepDivesPerformed: number;
     journalEntriesWritten: number;
+    provider: string | null;
   } | null;
   investigateNext: string | null;
 };
