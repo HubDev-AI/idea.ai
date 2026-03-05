@@ -640,31 +640,37 @@ const App = () => {
                 {logsRealtime ? 'LIVE' : 'POLLING'}
               </span>
             </span>
-            <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
+            <span className="log-drawer-right">
+              {logDrawerOpen && (
+                <>
+                  <button
+                    type="button"
+                    className="log-action-btn"
+                    title="Copy logs to clipboard"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const text = renderedLogs.map(formatTerminalLine).join('\n');
+                      navigator.clipboard.writeText(text);
+                    }}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className="log-action-btn"
+                    title="Clear log view"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLogs([]);
+                    }}
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+              <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
+            </span>
           </button>
-          {logDrawerOpen && (
-            <div className="log-drawer-actions">
-              <button
-                type="button"
-                className="log-action-btn"
-                title="Copy logs to clipboard"
-                onClick={() => {
-                  const text = renderedLogs.map(formatTerminalLine).join('\n');
-                  navigator.clipboard.writeText(text);
-                }}
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                className="log-action-btn"
-                title="Clear log view"
-                onClick={() => setLogs([])}
-              >
-                Clear
-              </button>
-            </div>
-          )}
           {logDrawerOpen && (
             <div className="log-scroll-wrapper">
               <ul ref={logListRef} className="log-list terminal-list" onScroll={handleLogScroll}>

@@ -1167,11 +1167,10 @@ a.signal-idea-link:hover {
   color: var(--muted);
 }
 
-.log-drawer-actions {
-  display: flex;
-  gap: 0.35rem;
-  padding: 0 1.25rem 0.3rem;
-  flex-shrink: 0;
+.log-drawer-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .log-action-btn {
