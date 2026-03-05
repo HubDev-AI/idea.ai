@@ -1,12 +1,17 @@
 import type { FastifyInstance } from 'fastify';
+import { generateDeepDive } from '../jobs/deep_dive_generator';
+import type { DeepDiveGeneratorDeps } from '../jobs/deep_dive_generator';
 import { buildThesisCandidates } from '../jobs/thesis_synthesizer';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { PaginatedThesisStore } from '../runtime/postgres_thesis_store';
+import type { DeepDiveStore } from '../runtime/deep_dive_store';
 import type { ThesisStore } from '../runtime/thesis_store';
 
 export type ThesesRouteDeps = {
   store: ThesisStore;
   memoryStore?: PostgresMemoryStore | null;
+  deepDiveStore?: DeepDiveStore | null;
+  deepDiveAi?: DeepDiveGeneratorDeps | null;
 };
 
 export const registerThesesRoute = (
@@ -89,5 +94,77 @@ export const registerThesesRoute = (
         evidenceCount: t.evidenceCount
       }))
     };
+  });
+
+  // GET /v1/theses/:key/deep-dive
+  app.get('/v1/theses/:key/deep-dive', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: { key: { type: 'string', minLength: 1, maxLength: 200 } },
+        required: ['key']
+      }
+    }
+  }, async (request, reply) => {
+    if (!deps.deepDiveStore) {
+      reply.code(503);
+      return { error: 'Deep-dive store not available' };
+    }
+    const { key } = request.params as { key: string };
+    const cached = await deps.deepDiveStore.getByKey(key);
+    if (!cached) {
+      reply.code(404);
+      return { error: 'Deep-dive not generated yet' };
+    }
+    return cached;
+  });
+
+  // POST /v1/theses/:key/deep-dive
+  app.post('/v1/theses/:key/deep-dive', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: { key: { type: 'string', minLength: 1, maxLength: 200 } },
+        required: ['key']
+      }
+    },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } }
+  }, async (request, reply) => {
+    if (!deps.deepDiveStore || !deps.deepDiveAi) {
+      reply.code(503);
+      return { error: 'Deep-dive not available' };
+    }
+    const { key } = request.params as { key: string };
+
+    // Return cached if exists
+    const cached = await deps.deepDiveStore.getByKey(key);
+    if (cached) return cached;
+
+    // Fetch thesis data
+    const thesis = await deps.store.getByKey(key);
+    if (!thesis) {
+      reply.code(404);
+      return { error: 'Thesis not found' };
+    }
+
+    // Generate via AI
+    const { result, provider } = await generateDeepDive({
+      title: thesis.title,
+      problemStatement: thesis.problemStatement,
+      targetBuyer: thesis.targetBuyer,
+      proposedSolution: thesis.proposedSolution,
+      confidence: thesis.confidence,
+    }, deps.deepDiveAi);
+
+    // Save and return
+    const saved = await deps.deepDiveStore.save(key, {
+      summary: result.summary,
+      howItWorks: result.howItWorks,
+      growthStrategy: result.growthStrategy,
+      buildSuggestions: result.buildSuggestions,
+      generatedBy: provider,
+    });
+
+    return saved;
   });
 };
