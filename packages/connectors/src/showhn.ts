@@ -1,29 +1,29 @@
-import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput, withRetry } from './common/http';
+import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput } from './common/http';
 
-type HnItem = {
+type ShowHnHit = {
   objectID: string;
   created_at_i: number;
   title?: string;
   url?: string;
-  points?: number;
-  num_comments?: number;
+  points: number;
+  num_comments: number;
+  story_text?: string;
 };
 
-type HnLoader = (limit: number) => Promise<HnItem[]>;
+type ShowHnLoaderFn = (limit: number) => Promise<ShowHnHit[]>;
 
-const defaultHnLoader: HnLoader = async (limit) => {
-  const response = await fetchJsonWithRetry<{ hits?: HnItem[] }>(
-    `https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=${limit}`
+const defaultLoader: ShowHnLoaderFn = async (limit) => {
+  const response = await fetchJsonWithRetry<{ hits?: ShowHnHit[] }>(
+    `https://hn.algolia.com/api/v1/search?tags=show_hn&numericFilters=points%3E15&hitsPerPage=${limit}`
   );
-
   return response.hits ?? [];
 };
 
-export const fetchHnEvents = async (
-  loadItems: HnLoader = defaultHnLoader,
-  limit = OPEN_CONNECTOR_LIMITS.hn
+export const fetchShowHnEvents = async (
+  loadItems: ShowHnLoaderFn = defaultLoader,
+  limit = OPEN_CONNECTOR_LIMITS.showhn
 ): Promise<RawEventInput[]> => {
-  const items = await withRetry(() => loadItems(limit));
+  const items = await loadItems(limit);
 
   return items
     .slice(0, limit)
@@ -35,8 +35,8 @@ export const fetchHnEvents = async (
           : Date.now();
 
       return {
-        source: 'hacker_news',
-        source_item_id: item.objectID,
+        source: 'showhn',
+        source_item_id: `showhn:${item.objectID}`,
         source_timestamp: new Date(timestampMs).toISOString(),
         text: (item.title ?? '').trim(),
         url: item.url ?? `https://news.ycombinator.com/item?id=${item.objectID}`,
