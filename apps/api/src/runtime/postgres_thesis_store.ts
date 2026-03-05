@@ -55,8 +55,10 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   estimatedScope: toScope(row.estimated_scope)
 });
 
+export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
+
 export type PaginatedThesisStore = ThesisStore & {
-  listPaginated(params: { page?: number; pageSize?: number; status?: string }): Promise<ThesisPage>;
+  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField }): Promise<ThesisPage>;
   close: () => Promise<void>;
 };
 
@@ -142,14 +144,42 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     }
   },
 
-  async listPaginated({ page = 1, pageSize = 10, status }: { page?: number; pageSize?: number; status?: string } = {}): Promise<ThesisPage> {
+  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score' }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField } = {}): Promise<ThesisPage> {
     const where = status ? 'WHERE status = $1' : '';
     const countParams = status ? [status] : [];
-    const countResult = await pool.query<{ count: string }>(
-      `SELECT COUNT(*)::text AS count FROM thesis_candidates ${where}`,
-      countParams
-    );
+
+    const [countResult, statsResult] = await Promise.all([
+      pool.query<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM thesis_candidates ${where}`,
+        countParams
+      ),
+      pool.query<{ total: string; promoted: string; watching: string; total_evidence: string; total_sources: string }>(
+        `SELECT COUNT(*)::text AS total,
+                COUNT(*) FILTER (WHERE status = 'promoted')::text AS promoted,
+                COUNT(*) FILTER (WHERE status = 'watching')::text AS watching,
+                COALESCE(SUM(ev_count), 0)::text AS total_evidence,
+                COALESCE(SUM(src_count), 0)::text AS total_sources
+         FROM (
+           SELECT tc.status,
+                  COUNT(DISTINCT te.signal_id) AS ev_count,
+                  COUNT(DISTINCT sm.source) AS src_count
+           FROM thesis_candidates tc
+           LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
+           LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+           GROUP BY tc.id, tc.status
+         ) sub`
+      )
+    ]);
+
     const totalItems = Number(countResult.rows[0]?.count ?? 0);
+    const statsRow = statsResult.rows[0];
+    const stats = {
+      total: Number(statsRow?.total ?? 0),
+      promoted: Number(statsRow?.promoted ?? 0),
+      watching: Number(statsRow?.watching ?? 0),
+      totalEvidence: Number(statsRow?.total_evidence ?? 0),
+      totalSources: Number(statsRow?.total_sources ?? 0)
+    };
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const safePage = Math.min(Math.max(1, page), totalPages);
     const offset = (safePage - 1) * pageSize;
@@ -164,17 +194,19 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
              ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
-             ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
+             ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality,
+             EXISTS(SELECT 1 FROM thesis_deep_dives dd WHERE dd.canonical_key = tc.canonical_key) AS has_deep_dive
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
       ${where}
       GROUP BY tc.id
-      ORDER BY tc.confidence DESC
+      ORDER BY ${sort === 'latest' ? 'tc.last_seen_at DESC' : sort === 'evidence' ? 'evidence_count DESC' : sort === 'newest' ? 'tc.first_seen_at DESC' : 'tc.confidence DESC'}
       LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
-    const result = await pool.query<ThesisRow>(sql, [...params, pageSize, offset]);
+    const result = await pool.query<ThesisRow & { has_deep_dive: boolean }>(sql, [...params, pageSize, offset]);
     const items = result.rows.map(rowToDraft);
+    const deepDiveFlags = new Map(result.rows.map((r) => [r.canonical_key, r.has_deep_dive]));
 
     return {
       items: items.map((d) => ({
@@ -185,14 +217,17 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         evidenceCount: d.evidenceCount,
         problemStatement: d.problemStatement,
         sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
-        estimatedScope: d.estimatedScope ?? null
+        estimatedScope: d.estimatedScope ?? null,
+        lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
+        hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true
       })),
       page: safePage,
       page_size: pageSize,
       total_items: totalItems,
       total_pages: totalPages,
       has_next: safePage < totalPages,
-      has_prev: safePage > 1
+      has_prev: safePage > 1,
+      stats
     };
   },
 

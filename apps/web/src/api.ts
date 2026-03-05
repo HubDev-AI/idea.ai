@@ -11,7 +11,8 @@ import type {
   FeedRecord as SignalRecord,
   ThesisDeepDive,
   ThesisListItem,
-  ThesisPage
+  ThesisPage,
+  ThesisStats
 } from '@idea/contracts/src/api';
 
 export type {
@@ -24,6 +25,7 @@ export type {
   ThesisDeepDive,
   ThesisListItem,
   ThesisPage,
+  ThesisStats,
   AgentStatusRecord,
   InfraStatusRecord,
   AgentRunResult,
@@ -117,19 +119,24 @@ export const fetchAiHealth = async (): Promise<AiHealthRecord> => {
   return response.json() as Promise<AiHealthRecord>;
 };
 
+export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
+
 export const fetchTheses = async ({
   page = 1,
   pageSize = 10,
-  status
+  status,
+  sort = 'score'
 }: {
   page?: number;
   pageSize?: number;
   status?: string;
+  sort?: ThesisSortField;
 } = {}): Promise<ThesisPage> => {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('page_size', String(pageSize));
   if (status) params.set('status', status);
+  if (sort !== 'score') params.set('sort', sort);
   const response = await fetch(buildApiUrl(`/v1/theses?${params.toString()}`));
   if (!response.ok) throw new Error('Failed to load theses');
   const data = await response.json();
@@ -143,7 +150,8 @@ export const fetchTheses = async ({
       total_items: data.length,
       total_pages: 1,
       has_next: false,
-      has_prev: false
+      has_prev: false,
+      stats: { total: data.length, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 }
     };
   }
   return data as ThesisPage;

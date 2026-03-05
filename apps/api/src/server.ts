@@ -15,6 +15,7 @@ import type { DeepDiveStore } from './runtime/deep_dive_store';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
 import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
+import type { ExecutionLogger } from './runtime/execution_logger';
 
 export type ServerDeps = {
   listSignals: () => Promise<FeedRecord[]>;
@@ -34,6 +35,7 @@ export type ServerDeps = {
   infraStatusDeps?: InfraStatusDeps;
   getRefreshMeta?: () => RefreshMeta;
   triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
+  logger?: ExecutionLogger;
 };
 
 const defaultDeps: ServerDeps = {
@@ -128,7 +130,8 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     listConnectors: resolvedDeps.listConnectors,
     memoryStore: resolvedDeps.memoryStore ?? null,
     getRefreshMeta: resolvedDeps.getRefreshMeta,
-    triggerRefresh: resolvedDeps.triggerRefresh
+    triggerRefresh: resolvedDeps.triggerRefresh,
+    logger: resolvedDeps.logger
   });
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
@@ -147,7 +150,8 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
       store: resolvedDeps.thesisStore,
       memoryStore: resolvedDeps.memoryStore ?? null,
       deepDiveStore: resolvedDeps.deepDiveStore ?? null,
-      deepDiveAi: resolvedDeps.deepDiveAi ?? null
+      deepDiveAi: resolvedDeps.deepDiveAi ?? null,
+      logger: resolvedDeps.logger
     });
   }
 

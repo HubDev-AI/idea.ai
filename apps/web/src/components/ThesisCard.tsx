@@ -1,4 +1,5 @@
 import React from 'react';
+import { relativeTime } from '../relativeTime';
 
 export type ThesisCardProps = {
   thesis: {
@@ -10,9 +11,12 @@ export type ThesisCardProps = {
     problemStatement: string;
     sourceCount: number;
     estimatedScope?: 'small' | 'medium' | 'large' | null;
+    lastSeenAt?: string;
+    hasDeepDive?: boolean;
   };
   isActive?: boolean;
   onClick?: () => void;
+  onExplore?: () => void;
 };
 
 const confidenceColor = (confidence: number): string => {
@@ -27,15 +31,16 @@ const scopeLabel: Record<string, { text: string; color: string }> = {
   large: { text: 'L', color: 'var(--err)' }
 };
 
-export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, isActive, onClick }) => {
+export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, isActive, onClick, onExplore }) => {
   const statusClass = thesis.status === 'promoted' ? 'promoted' : thesis.status === 'watching' ? 'watching' : '';
 
   return (
-    <button
-      type="button"
+    <div
       className={`thesis-card ${statusClass} ${isActive ? 'thesis-active' : ''}`}
       onClick={onClick}
+      role="button"
       tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onClick) { e.preventDefault(); onClick(); } }}
     >
       <div className="thesis-header">
         <h3 className="thesis-title">{thesis.title}</h3>
@@ -65,7 +70,17 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, isActive, onClic
         <span className={`thesis-status ${statusClass}`}>{thesis.status}</span>
         <span>{thesis.evidenceCount} evidence</span>
         <span>{thesis.sourceCount} sources</span>
+        {thesis.lastSeenAt && <span>{relativeTime(thesis.lastSeenAt)}</span>}
+        {onExplore && (
+          <button
+            type="button"
+            className={`thesis-explore-btn ${thesis.hasDeepDive ? 'has-data' : ''}`}
+            onClick={(e) => { e.stopPropagation(); onExplore(); }}
+          >
+            Explore
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   );
 };

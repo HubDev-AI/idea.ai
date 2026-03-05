@@ -8,6 +8,29 @@ type Props = {
 };
 
 const cache = new Map<string, ThesisDeepDive>();
+const pendingGenerations = new Map<string, Promise<ThesisDeepDive>>();
+
+const ensureDeepDive = (canonicalKey: string): Promise<ThesisDeepDive> => {
+  if (cache.has(canonicalKey)) return Promise.resolve(cache.get(canonicalKey)!);
+
+  const existing = pendingGenerations.get(canonicalKey);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    const cached = await fetchThesisDeepDive(canonicalKey);
+    if (cached) {
+      cache.set(canonicalKey, cached);
+      return cached;
+    }
+    const generated = await generateThesisDeepDive(canonicalKey);
+    cache.set(canonicalKey, generated);
+    return generated;
+  })();
+
+  pendingGenerations.set(canonicalKey, promise);
+  promise.finally(() => pendingGenerations.delete(canonicalKey));
+  return promise;
+};
 
 export const ThesisDeepDiveModal: React.FC<Props> = ({ thesis, onClose }) => {
   const [data, setData] = useState<ThesisDeepDive | null>(
@@ -21,29 +44,19 @@ export const ThesisDeepDiveModal: React.FC<Props> = ({ thesis, onClose }) => {
     if (cache.has(thesis.canonicalKey)) return;
 
     let cancelled = false;
-    const load = async () => {
-      try {
-        const cached = await fetchThesisDeepDive(thesis.canonicalKey);
-        if (cached && !cancelled) {
-          cache.set(thesis.canonicalKey, cached);
-          setData(cached);
-          setLoading(false);
-          return;
-        }
-        const generated = await generateThesisDeepDive(thesis.canonicalKey);
+    ensureDeepDive(thesis.canonicalKey)
+      .then((result) => {
         if (!cancelled) {
-          cache.set(thesis.canonicalKey, generated);
-          setData(generated);
+          setData(result);
           setLoading(false);
         }
-      } catch (err) {
+      })
+      .catch((err) => {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to generate deep-dive');
           setLoading(false);
         }
-      }
-    };
-    load();
+      });
     return () => { cancelled = true; };
   }, [thesis.canonicalKey]);
 

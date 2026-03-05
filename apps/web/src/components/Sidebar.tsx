@@ -1,6 +1,6 @@
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React, { useEffect, useState } from 'react';
-import type { AgentStatusRecord, AiHealthRecord, ConnectorRecord, InfraStatusRecord, RefreshMeta, ThesisListItem } from '../api';
+import type { AgentStatusRecord, AiHealthRecord, ConnectorRecord, InfraStatusRecord, RefreshMeta, ThesisStats } from '../api';
 import { connectorDisplayName, connectorSourceKey } from '../connectorNames';
 
 type SidebarProps = {
@@ -8,7 +8,7 @@ type SidebarProps = {
   aiHealth: AiHealthRecord | null;
   agentStatus: AgentStatusRecord | null;
   infraStatus: InfraStatusRecord | null;
-  theses: ThesisListItem[];
+  thesisStats: ThesisStats;
   thesisFilter: string | null;
   onThesisFilter: (key: string | null, title: string) => void;
   signalCount: number;
@@ -34,8 +34,6 @@ const providerDisplayName: Record<string, string> = {
   claude: 'Claude',
   codex: 'Codex',
 };
-
-const AGENT_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
 const formatCountdown = (ms: number): string => {
   if (ms <= 0) return '0:00';
@@ -68,8 +66,10 @@ const useCountdown = (lastRunIso: string | null, intervalMs: number): string | n
   return formatCountdown(remaining);
 };
 
+const AGENT_INTERVAL_MS = 1 * 60 * 60 * 1000;
+
 export const Sidebar: React.FC<SidebarProps> = ({
-  connectors, aiHealth, agentStatus, infraStatus, theses,
+  connectors, aiHealth, agentStatus, infraStatus, thesisStats,
   thesisFilter, onThesisFilter, signalCount, latestSignalAt, signalCounts,
   onRunAgent, agentRunning, agentRunResult, refreshMeta, onForceRefresh,
 }) => {
@@ -140,12 +140,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const group = connectors.filter((c) => c.cadence === cadence);
           if (group.length === 0) return null;
           const countdown = cadence === 'hourly' ? hourlyCountdown : dailyCountdown;
+          const isRefreshing = refreshMeta?.refreshing === cadence;
           return (
             <div key={cadence} className="sidebar-cadence-group">
               <div className="sidebar-cadence-header">
                 <span className="sidebar-cadence-label">{cadence}</span>
-                <span className={`sidebar-countdown ${countdown === 'now' ? 'refreshing' : ''}`}>
-                  {countdown === null ? 'pending' : countdown === 'now' ? 'refreshing\u2026' : countdown}
+                <span className={`sidebar-countdown ${countdown === 'now' || isRefreshing ? 'refreshing' : ''}`}>
+                  {isRefreshing ? 'refreshing\u2026' : countdown === null ? 'pending' : countdown === 'now' ? 'refreshing\u2026' : countdown}
                 </span>
                 {onForceRefresh && (
                   <button
@@ -283,28 +284,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </nav>
 
-      {theses.length > 0 && (
+      {thesisStats.total > 0 && (
         <nav className="sidebar-section">
           <h3 className="sidebar-label">Theses Overview</h3>
           <div className="sidebar-row">
             <span className="sidebar-row-name">Total</span>
-            <span className="sidebar-row-detail detail-count">{theses.length}</span>
+            <span className="sidebar-row-detail detail-count">{thesisStats.total}</span>
           </div>
           <div className="sidebar-row">
             <span className="sidebar-row-name">Promoted</span>
-            <span className="sidebar-row-detail detail-count">{theses.filter((t) => t.status === 'promoted').length}</span>
+            <span className="sidebar-row-detail detail-count">{thesisStats.promoted}</span>
           </div>
           <div className="sidebar-row">
             <span className="sidebar-row-name">Watching</span>
-            <span className="sidebar-row-detail detail-count">{theses.filter((t) => t.status === 'watching').length}</span>
+            <span className="sidebar-row-detail detail-count">{thesisStats.watching}</span>
           </div>
           <div className="sidebar-row">
             <span className="sidebar-row-name">Evidence</span>
-            <span className="sidebar-row-detail detail-count">{theses.reduce((sum, t) => sum + (t.evidenceCount || 0), 0)}</span>
+            <span className="sidebar-row-detail detail-count">{thesisStats.totalEvidence}</span>
           </div>
           <div className="sidebar-row">
             <span className="sidebar-row-name">Sources</span>
-            <span className="sidebar-row-detail detail-count">{theses.reduce((sum, t) => sum + (t.sourceCount || 0), 0)}</span>
+            <span className="sidebar-row-detail detail-count">{thesisStats.totalSources}</span>
           </div>
         </nav>
       )}

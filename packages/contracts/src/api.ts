@@ -49,6 +49,7 @@ export type RefreshMeta = {
   last_daily_run: string | null;
   hourly_interval_ms: number;
   daily_interval_ms: number;
+  refreshing: 'hourly' | 'daily' | null;
 };
 
 // -- Execution logs ------------------------------------------------ */
@@ -112,6 +113,16 @@ export type ThesisListItem = {
   problemStatement: string;
   sourceCount: number;
   estimatedScope: 'small' | 'medium' | 'large' | null;
+  lastSeenAt: string;
+  hasDeepDive: boolean;
+};
+
+export type ThesisStats = {
+  total: number;
+  promoted: number;
+  watching: number;
+  totalEvidence: number;
+  totalSources: number;
 };
 
 export type ThesisPage = {
@@ -122,6 +133,7 @@ export type ThesisPage = {
   total_pages: number;
   has_next: boolean;
   has_prev: boolean;
+  stats: ThesisStats;
 };
 
 export type ThesisDeepDive = {
@@ -146,6 +158,7 @@ export type AgentRunResult = {
 };
 
 export type AgentStatusRecord = {
+  isRunning: boolean;
   lastRun: {
     timestamp: string;
     thesesUpdated: number;
