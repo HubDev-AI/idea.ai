@@ -9,6 +9,7 @@ import type {
   RefreshMeta,
   SignalPage,
   FeedRecord as SignalRecord,
+  ThesisDeepDive,
   ThesisListItem,
   ThesisPage
 } from '@idea/contracts/src/api';
@@ -20,6 +21,7 @@ export type {
   ExecutionLogRecord,
   AiProviderHealthRecord,
   AiHealthRecord,
+  ThesisDeepDive,
   ThesisListItem,
   ThesisPage,
   AgentStatusRecord,
@@ -186,4 +188,20 @@ export const triggerConnectorRefresh = async (cadence?: 'hourly' | 'daily'): Pro
     : buildApiUrl('/v1/connectors/refresh');
   const response = await fetch(url, { method: 'POST' });
   if (!response.ok) throw new Error('Failed to trigger refresh');
+};
+
+export const fetchThesisDeepDive = async (canonicalKey: string): Promise<ThesisDeepDive | null> => {
+  const response = await fetch(buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/deep-dive`));
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`fetchThesisDeepDive failed: ${response.status}`);
+  return response.json() as Promise<ThesisDeepDive>;
+};
+
+export const generateThesisDeepDive = async (canonicalKey: string): Promise<ThesisDeepDive> => {
+  const response = await fetch(
+    buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/deep-dive`),
+    { method: 'POST', signal: AbortSignal.timeout(120_000) }
+  );
+  if (!response.ok) throw new Error(`generateThesisDeepDive failed: ${response.status}`);
+  return response.json() as Promise<ThesisDeepDive>;
 };
