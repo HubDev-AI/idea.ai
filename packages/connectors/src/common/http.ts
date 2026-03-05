@@ -26,7 +26,7 @@ export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
   greenhouse: 'daily',
   lever: 'daily',
   yc_companies: 'daily',
-  reddit: 'hourly',
+  reddit: 'daily',
   producthunt: 'daily',
   appstore_trending: 'daily',
   indiehackers: 'daily'

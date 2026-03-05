@@ -15,12 +15,7 @@ DB_NAME="${DB_NAME:-idea_ai}"
 
 export PGPASSWORD="${POSTGRES_PASSWORD:-idea_ai_dev}"
 
-for migration in apps/api/db/migrations/0001_init.sql \
-                 apps/api/db/migrations/0002_memory.sql \
-                 apps/api/db/migrations/0003_thesis.sql \
-                 apps/api/db/migrations/0004_tsvector.sql \
-                 apps/api/db/migrations/0005_embed_768.sql \
-                 apps/api/db/migrations/0006_source_index.sql; do
+for migration in apps/api/db/migrations/*.sql; do
   echo "Running $migration..."
   psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -f "$migration"
 done

@@ -25,6 +25,7 @@ export type ScoreSignalInput = {
   memoryContext?: MemoryContext;
   baseDemand?: number;
   baseTiming?: number;
+  baseVirality?: number;
 };
 
 export const scoreSignal = ({
@@ -32,7 +33,8 @@ export const scoreSignal = ({
   judgeScores,
   memoryContext = emptyMemoryContext,
   baseDemand,
-  baseTiming
+  baseTiming,
+  baseVirality
 }: ScoreSignalInput) => {
   const demandCurrent = Number.isFinite(baseDemand) ? Math.max(0, Math.min(100, Number(baseDemand))) : scorePain(text);
   const timingCurrent = Number.isFinite(baseTiming)
@@ -51,7 +53,8 @@ export const scoreSignal = ({
     demand,
     timing,
     buildability,
-    blended: blendedScore({ demand, timing, buildability, virality: 0 }),
+    virality: Number.isFinite(baseVirality) ? Math.max(0, Math.min(100, Number(baseVirality))) : 0,
+    blended: blendedScore({ demand, timing, buildability, virality: Number.isFinite(baseVirality) ? Math.max(0, Math.min(100, Number(baseVirality))) : 0 }),
     memory: {
       novelty,
       persistence,
@@ -70,7 +73,8 @@ export const scoreSignalWithRetriever = async ({
   memoryRetriever,
   topK,
   baseDemand,
-  baseTiming
+  baseTiming,
+  baseVirality
 }: {
   text: string;
   judgeScores: [number, number, number];
@@ -81,6 +85,7 @@ export const scoreSignalWithRetriever = async ({
   topK?: number;
   baseDemand?: number;
   baseTiming?: number;
+  baseVirality?: number;
 }) => {
   const memoryQuery: Parameters<typeof loadMemoryContext>[1] = { topic, source, canonicalText };
   if (topK !== undefined) memoryQuery.topK = topK;
@@ -89,6 +94,7 @@ export const scoreSignalWithRetriever = async ({
   const scoreInput: ScoreSignalInput = { text, judgeScores, memoryContext };
   if (baseDemand !== undefined) scoreInput.baseDemand = baseDemand;
   if (baseTiming !== undefined) scoreInput.baseTiming = baseTiming;
+  if (baseVirality !== undefined) scoreInput.baseVirality = baseVirality;
   return scoreSignal(scoreInput);
 };
 

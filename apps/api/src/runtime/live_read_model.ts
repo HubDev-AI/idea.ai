@@ -780,6 +780,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
           };
           if (aiInsight?.demand !== undefined) scoreArgs.baseDemand = aiInsight.demand;
           if (aiInsight?.timing !== undefined) scoreArgs.baseTiming = aiInsight.timing;
+          if (aiInsight?.virality !== undefined) scoreArgs.baseVirality = aiInsight.virality;
           const score = await scoreSignalWithRetriever(scoreArgs);
           const blended = applySourceQualityPenalty({
             source: event.source,
@@ -800,6 +801,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             timing: score.timing,
             buildability: score.buildability,
             blended,
+            virality: score.virality ?? aiInsight?.virality ?? 0,
             sourceUrl: event.url || null
           });
 
@@ -825,7 +827,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             demand: score.demand,
             timing: score.timing,
             buildability: score.buildability,
-            virality: 0,
+            virality: score.virality ?? aiInsight?.virality ?? 0,
             blended
           });
         } catch (error) {

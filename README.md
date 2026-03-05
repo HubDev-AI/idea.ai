@@ -2,17 +2,43 @@
 
 Sixth Sense SaaS idea engine for solo founders.
 
-The app ingests signals from multiple sources, runs AI post-scrape opportunity synthesis, scores opportunities with memory-aware logic, and publishes a ranked feed with suggested next actions.
+Ingests signals from multiple sources, runs AI opportunity synthesis, scores with memory-aware logic, and publishes a ranked feed with suggested next actions.
 
-## Setup
+## Quick Start
 
-Use [setup.md](./setup.md) as the source of truth for:
-- local environment setup
-- connector account configuration
-- running API and web app
-- verification and preview commands
+**Prerequisites:** Docker, Node.js 20+, [pnpm](https://pnpm.io/)
 
-Use [Sixth Sense V2 Roadmap](./docs/plans/2026-02-25-sixth-sense-v2-roadmap.md) for the next implementation phases.
+```bash
+make setup        # copy .env.example, install deps, start infra, run migrations
+make dev          # start API (port 3000) + web UI (port 5173)
+```
+
+Open http://localhost:5173.
+
+## Make Targets
+
+| Target | Description |
+|--------|-------------|
+| `make setup` | First-time setup (env + install + infra + migrations) |
+| `make install` | Install dependencies |
+| `make infra` | Start Postgres, Redis, Ollama (Docker) |
+| `make infra-down` | Stop infrastructure containers |
+| `make db-migrate` | Run database migrations |
+| `make dev` | Start API + web in parallel |
+| `make dev-api` | Start API only |
+| `make dev-web` | Start web UI only |
+| `make docker-api` | Start API in Docker (with `claude -p` support) |
+| `make docker-api-down` | Stop Docker API |
+| `make docker-api-logs` | Tail Docker API logs |
+| `make test` | Run all tests |
+| `make lint` | Run linter |
+| `make preview` | One-shot ingestion + scoring preview |
+| `make health` | Check API health |
+| `make stop` | Stop all services |
+
+## Configuration
+
+Copy `.env.example` to `.env` and edit. See [setup.md](./setup.md) for connector accounts, AI provider modes, and BYO API keys.
 
 ## Repository Layout
 
@@ -22,16 +48,3 @@ Use [Sixth Sense V2 Roadmap](./docs/plans/2026-02-25-sixth-sense-v2-roadmap.md) 
 - `packages/pipeline` - ranking/scoring/routing pipeline logic
 - `packages/contracts` - shared schemas/contracts
 - `packages/ai-runtime` - local CLI AI provider adapters
-- `docs/operations` - operational notes and provider policy
-
-## Quick Commands
-
-```bash
-pnpm install
-CI=1 pnpm test
-pnpm lint
-pnpm --filter @idea/api dev
-pnpm --filter @idea/web dev
-pnpm preview:pipeline
-pnpm api:docker:up
-```

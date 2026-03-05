@@ -236,7 +236,6 @@ const App = () => {
         const tp = await fetchTheses({
           page: requestedThesisPage,
           pageSize: 10,
-          ...(thesisFilter ? { status: thesisFilter } : {})
         });
         if (isCancelled) return;
         setTheses(tp.items);
@@ -252,7 +251,7 @@ const App = () => {
     };
     void loadTheses();
     return () => { isCancelled = true; };
-  }, [requestedThesisPage, thesisFilter]);
+  }, [requestedThesisPage]);
 
   useEffect(() => {
     let isCancelled = false;

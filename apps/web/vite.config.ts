@@ -1,20 +1,24 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
-const proxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://127.0.0.1:3000';
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const port = env.PORT || '3000';
+  const proxyTarget = env.VITE_API_PROXY_TARGET || `http://127.0.0.1:${port}`;
 
-export default defineConfig({
-  root: 'apps/web',
-  server: {
-    port: 5173,
-    proxy: {
-      '/v1': {
-        target: proxyTarget,
-        changeOrigin: true,
-        timeout: 300_000
+  return {
+    root: 'apps/web',
+    server: {
+      port: 5173,
+      proxy: {
+        '/v1': {
+          target: proxyTarget,
+          changeOrigin: true,
+          timeout: 300_000
+        }
       }
+    },
+    preview: {
+      port: 4173
     }
-  },
-  preview: {
-    port: 4173
-  }
+  };
 });
