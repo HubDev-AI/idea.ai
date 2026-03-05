@@ -35,8 +35,6 @@ const providerDisplayName: Record<string, string> = {
   codex: 'Codex',
 };
 
-const AGENT_INTERVAL_MS = 2 * 60 * 60 * 1000;
-
 const formatCountdown = (ms: number): string => {
   if (ms <= 0) return '0:00';
   const totalSec = Math.ceil(ms / 1000);
@@ -67,6 +65,8 @@ const useCountdown = (lastRunIso: string | null, intervalMs: number): string | n
   if (remaining <= 0) return 'now';
   return formatCountdown(remaining);
 };
+
+const AGENT_INTERVAL_MS = 1 * 60 * 60 * 1000;
 
 export const Sidebar: React.FC<SidebarProps> = ({
   connectors, aiHealth, agentStatus, infraStatus, theses,

@@ -1,5 +1,6 @@
 import type { ConnectorStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
 import type { FastifyInstance } from 'fastify';
+import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 
 export type { ConnectorStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
@@ -11,6 +12,7 @@ export const registerConnectorRoute = (
     memoryStore?: PostgresMemoryStore | null;
     getRefreshMeta?: () => RefreshMeta;
     triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
+    logger?: Pick<ExecutionLogger, 'info'>;
   }
 ): void => {
   app.get('/v1/connectors', async () => deps.listConnectors());
@@ -37,6 +39,9 @@ export const registerConnectorRoute = (
       return { status: 'unavailable' };
     }
     const cadence = request.query.cadence as 'hourly' | 'daily' | undefined;
+    await deps.logger?.info('connectors', 'manual refresh triggered', {
+      cadence: cadence ?? 'all'
+    });
     void deps.triggerRefresh(cadence);
     return { status: 'triggered' };
   });

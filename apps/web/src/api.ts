@@ -117,19 +117,24 @@ export const fetchAiHealth = async (): Promise<AiHealthRecord> => {
   return response.json() as Promise<AiHealthRecord>;
 };
 
+export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
+
 export const fetchTheses = async ({
   page = 1,
   pageSize = 10,
-  status
+  status,
+  sort = 'score'
 }: {
   page?: number;
   pageSize?: number;
   status?: string;
+  sort?: ThesisSortField;
 } = {}): Promise<ThesisPage> => {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('page_size', String(pageSize));
   if (status) params.set('status', status);
+  if (sort !== 'score') params.set('sort', sort);
   const response = await fetch(buildApiUrl(`/v1/theses?${params.toString()}`));
   if (!response.ok) throw new Error('Failed to load theses');
   const data = await response.json();

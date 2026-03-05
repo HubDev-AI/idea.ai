@@ -4,6 +4,7 @@ import { embedText } from '@idea/ai-runtime/src/ollama';
 import type { AgentStatusRecord } from '@idea/contracts/src/api';
 import pg from 'pg';
 import { loadEnvFile } from './config/dotenv';
+import { loadRuntimeEnv } from './config/env';
 import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
@@ -53,8 +54,9 @@ let agentStatus: AgentStatusRecord = { lastRun: null, investigateNext: null };
 let agentRunInFlight: Promise<AgentRunResult> | null = null;
 
 // Load last run status from DB on startup (survives restarts)
-if (agentRunStore) {
-  agentRunStore.latest().then((row) => {
+try {
+  if (agentRunStore) {
+    const row = await agentRunStore.latest();
     if (row && row.status === 'completed') {
       agentStatus = {
         lastRun: {
@@ -69,8 +71,8 @@ if (agentRunStore) {
         investigateNext: row.investigate_next
       };
     }
-  }).catch(() => { /* DB may not have the table yet */ });
-}
+  }
+} catch { /* DB may not have the table yet */ }
 
 const executeAgentRun = async (): Promise<AgentRunResult> => {
   if (agentRunInFlight) return agentRunInFlight;
@@ -83,6 +85,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
     await logger.info('agent_runner', 'run started', { run_id: runId });
 
     try {
+      const agentEnv = loadRuntimeEnv(process.env);
       const result = await runResearchAgent({
         thesisStore,
         memoryStore,
@@ -92,7 +95,9 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         runCodex: runCodexPrompt,
         logger,
         runId,
-        preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider
+        preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider,
+        timeoutMs: agentEnv.agentTimeoutMs,
+        maxClusters: agentEnv.agentMaxClusters
       });
 
       await agentRunStore?.complete(runId, result);
@@ -148,6 +153,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
     runCodex: runCodexPrompt,
     preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider
   },
+  logger: createExecutionLogger({ runId: 'api-services' }),
   getAgentStatus: () => agentStatus,
   triggerAgentRun: executeAgentRun,
   agentRunStore,
@@ -237,12 +243,22 @@ app
   .listen({ host, port })
   .then((address) => {
     console.log(`API ready on ${address}`);
-    const AGENT_INTERVAL_MS = 2 * 60 * 60 * 1000;
+    const runtimeEnv = loadRuntimeEnv(process.env);
+
+    // If overdue from a previous session, run immediately then start the regular interval
+    const lastRunTs = agentStatus.lastRun?.timestamp;
+    const isOverdue = lastRunTs && (Date.now() - new Date(lastRunTs).getTime()) > runtimeEnv.agentIntervalMs;
+    if (isOverdue) {
+      void executeAgentRun().catch((err) => {
+        console.error('research agent catch-up run failed:', err);
+      });
+    }
+
     agentTimer = setInterval(() => {
       void executeAgentRun().catch((err) => {
         console.error('research agent cron failed:', err);
       });
-    }, AGENT_INTERVAL_MS);
+    }, runtimeEnv.agentIntervalMs);
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
     void runRetentionCleanup();
   })

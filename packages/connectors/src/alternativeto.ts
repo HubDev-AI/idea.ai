@@ -7,7 +7,10 @@ const ALTTO_RSS_URL = 'https://alternativeto.net/platform/online/feed/';
 const defaultLoader: AlternativeToLoaderFn = async () => {
   return withRetry(async () => {
     const res = await fetch(ALTTO_RSS_URL, {
-      headers: { 'User-Agent': 'idea.ai/1.0 (research bot)' }
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+      }
     });
     if (!res.ok) throw new Error(`AlternativeTo RSS failed: ${res.status}`);
     return res.text();

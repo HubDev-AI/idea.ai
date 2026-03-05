@@ -20,6 +20,7 @@ import {
   type SignalRecord,
   type SortField,
   type ThesisListItem,
+  type ThesisSortField,
   triggerAgentRun,
   triggerConnectorRefresh
 } from './api';
@@ -36,24 +37,36 @@ const DATA_POLL_INTERVAL_MS = 15_000;
 const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
 
+const formatContextValue = (value: unknown): string => {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 197)}...` : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    if (value.length <= 3) return value.map(formatContextValue).join(', ');
+    return `[${value.length} items]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length <= 3) return entries.map(([k, v]) => `${k}=${formatContextValue(v)}`).join(', ');
+    return `{${entries.length} fields}`;
+  }
+  return String(value);
+};
+
 const formatLogContext = (context: Record<string, unknown> | undefined): string => {
-  if (!context || Object.keys(context).length === 0) {
-    return '';
-  }
-
-  const serialized = JSON.stringify(context);
-  if (serialized.length <= 280) {
-    return serialized;
-  }
-
-  return `${serialized.slice(0, 277)}...`;
+  if (!context || Object.keys(context).length === 0) return '';
+  const entries = Object.entries(context);
+  const maxKeyLen = Math.max(...entries.map(([k]) => k.length));
+  return entries
+    .map(([key, value]) => `    ${key.padEnd(maxKeyLen)} = ${formatContextValue(value)}`)
+    .join('\n');
 };
 
 const formatTerminalLine = (entry: ExecutionLogRecord): string => {
   const timestamp = new Date(entry.ts).toLocaleTimeString();
   const context = formatLogContext(entry.context);
-  const suffix = context ? ` | ${context}` : '';
-  return `[${timestamp}] [${entry.level.toUpperCase()}] [${entry.component}] run=${entry.run_id} ${entry.message}${suffix}`;
+  const suffix = context ? `\n${context}` : '';
+  return `[${timestamp}] [${entry.level.toUpperCase()}] [${entry.component}] ${entry.message}${suffix}`;
 };
 
 const logLevelIcons: Record<ExecutionLogRecord['level'], string> = {
@@ -86,6 +99,7 @@ const App = () => {
   const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
+  const [thesisSortField, setThesisSortField] = useState<ThesisSortField>('score');
   const [thesisPageInfo, setThesisPageInfo] = useState({
     page: 1,
     pageSize: 10,
@@ -141,7 +155,7 @@ const App = () => {
       if (showLoading) {
         setIsLoading(true);
       }
-      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult, infraResult, refreshMetaResult] = await Promise.allSettled([
+      const [signalResult, connectorResult, aiHealthResult, agentResult, countsResult, infraResult, refreshMetaResult] = await Promise.allSettled([
         fetchSignals({
           page: requestedPage,
           pageSize: PAGE_SIZE,
@@ -151,7 +165,6 @@ const App = () => {
         }),
         fetchConnectors(),
         fetchAiHealth(),
-        fetchTheses({ page: requestedThesisPage, pageSize: 10 }),
         fetchAgentStatus(),
         fetchSignalCounts(),
         fetchInfraStatus(),
@@ -186,19 +199,6 @@ const App = () => {
         setAiHealth(aiHealthResult.value);
       } else {
         warnings.push('ai_health');
-      }
-
-      if (thesesResult.status === 'fulfilled') {
-        const tp = thesesResult.value;
-        setTheses(tp.items);
-        setThesisPageInfo({
-          page: tp.page,
-          pageSize: tp.page_size,
-          totalItems: tp.total_items,
-          totalPages: tp.total_pages,
-          hasNext: tp.has_next,
-          hasPrev: tp.has_prev
-        });
       }
 
       if (agentResult.status === 'fulfilled') {
@@ -251,6 +251,7 @@ const App = () => {
         const tp = await fetchTheses({
           page: requestedThesisPage,
           pageSize: 10,
+          sort: thesisSortField,
         });
         if (isCancelled) return;
         setTheses(tp.items);
@@ -266,7 +267,7 @@ const App = () => {
     };
     void loadTheses();
     return () => { isCancelled = true; };
-  }, [requestedThesisPage]);
+  }, [requestedThesisPage, thesisSortField]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -400,7 +401,7 @@ const App = () => {
       // Refresh all data since the agent creates/updates theses
       const [statusRes, thesesRes, signalsRes, countsRes] = await Promise.allSettled([
         fetchAgentStatus(),
-        fetchTheses({ page: 1, pageSize: 10 }),
+        fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField }),
         fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
         fetchSignalCounts()
       ]);
@@ -476,6 +477,16 @@ const App = () => {
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
               <span className="pane-count">{thesisPageInfo.totalItems}</span>
+              <select
+                className="source-filter"
+                value={thesisSortField}
+                onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
+              >
+                <option value="score">By Score</option>
+                <option value="latest">Latest Activity</option>
+                <option value="evidence">Most Evidence</option>
+                <option value="newest">Newest</option>
+              </select>
               {thesisPageInfo.totalPages > 1 && (
                 <div className="pane-header-right">
                   <button
@@ -506,7 +517,11 @@ const App = () => {
                   key={t.canonicalKey}
                   thesis={t}
                   isActive={thesisFilter === t.canonicalKey}
-                  onClick={() => setDeepDiveThesis(t)}
+                  onClick={() => handleThesisFilter(
+                    thesisFilter === t.canonicalKey ? null : t.canonicalKey,
+                    thesisFilter === t.canonicalKey ? '' : t.title
+                  )}
+                  onExplore={() => setDeepDiveThesis(t)}
                 />
               ))}
               {theses.length === 0 && (

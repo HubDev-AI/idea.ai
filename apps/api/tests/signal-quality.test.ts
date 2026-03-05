@@ -84,13 +84,14 @@ describe('signal quality', () => {
     }
 
     const filtered = events.filter((entry) => !isLowValueRecruitingEvent(entry));
-    const selected = selectEventsForScoring(filtered, 80);
+    const selected = selectEventsForScoring(filtered);
     const bySource = selected.reduce<Record<string, number>>((acc, entry) => {
       acc[entry.source] = (acc[entry.source] ?? 0) + 1;
       return acc;
     }, {});
 
-    expect(selected).toHaveLength(80);
+    // All non-recruiting events pass through (no cap)
+    expect(selected).toHaveLength(filtered.length);
     expect(bySource.github_issues).toBeGreaterThan(0);
     expect(bySource.yc_companies).toBeGreaterThan(0);
     expect(bySource.greenhouse ?? 0).toBe(0);

@@ -546,6 +546,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
         return;
       }
 
+      // Reset last_run so connectors show as pending until they actually refresh in this session
+      parsed.connectors = parsed.connectors.map((c) => ({ ...c, last_run: null }));
       snapshot = parsed;
       await logger.info('live_read_model', 'loaded persisted snapshot', {
         snapshot_file: snapshotFile,
@@ -937,7 +939,18 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       const now = Date.now();
       const refreshedAtIso = new Date(now).toISOString();
       const rankedSignals = rankAndPreparePublish(scoredSignals);
-      const nextSignals = rankedSignals.length > 0 ? rankedSignals : snapshot.signals;
+
+      // On hourly-only refreshes, retain signals from sources that weren't refreshed (daily sources)
+      // so they don't disappear until the next daily refresh replaces them
+      let nextSignals: FeedRecord[];
+      if (rankedSignals.length > 0) {
+        const refreshedSources = new Set(rankedSignals.map((s) => s.top_source));
+        const retainedSignals = snapshot.signals.filter((s) => !refreshedSources.has(s.top_source));
+        nextSignals = [...rankedSignals, ...retainedSignals].sort((a, b) => b.score - a.score);
+      } else {
+        nextSignals = snapshot.signals;
+      }
+
       const ideaCandidates = findIdeaCandidates(nextSignals);
 
       if (rankedSignals.length === 0 && snapshot.signals.length > 0) {

@@ -29,10 +29,11 @@ export type AgentRunnerDeps = {
   logger?: ExecutionLogger;
   runId?: string;
   preferredProvider?: 'claude' | 'codex';
+  timeoutMs?: number;
+  maxClusters?: number;
 };
 
 const MAX_DEEP_DIVES = 2;
-const AGENT_TIMEOUT_MS = 60_000;
 
 const titleWords = (title: string): Set<string> =>
   new Set(title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2));
@@ -71,6 +72,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   const log = deps.logger ?? noopLogger;
   const runId = deps.runId ?? `agent-${Date.now()}`;
   const preferred = deps.preferredProvider ?? 'claude';
+  const timeoutMs = deps.timeoutMs ?? 180_000;
+  const maxClusters = deps.maxClusters ?? 50;
   let thesesUpdated = 0;
   let newCandidates = 0;
   const allAlerts: string[] = [];
@@ -146,9 +149,21 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     : [];
 
   // === Phase 1: Broad Scan ===
+  // Cap clusters by signal count (largest first) to keep prompt within timeout budget
+  const topClusters = clusters
+    .slice()
+    .sort((a, b) => b.totalCount - a.totalCount)
+    .slice(0, maxClusters);
+
+  await log.info('agent_runner', 'cluster cap applied', {
+    total_clusters: clusters.length,
+    sent_to_ai: topClusters.length,
+    dropped: clusters.length - topClusters.length
+  });
+
   const broadCtx = {
     activeTheses,
-    clusters: clusters.map((c) => ({
+    clusters: topClusters.map((c) => ({
       id: c.id,
       label: c.label,
       totalCount: c.totalCount,
@@ -174,11 +189,20 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     trendSummary
   };
 
-  await log.info('agent_runner', 'broad scan started', { cluster_count: clusters.length });
-
   const broadPrompt = buildBroadScanPrompt(broadCtx);
+
+  await log.info('agent_runner', 'broad scan started', {
+    cluster_count: clusters.length,
+    thesis_count: activeTheses.length,
+    signal_count: recentSignals.length
+  });
+  await log.debug('agent_runner', 'broad scan prompt sent', {
+    provider: preferred,
+    prompt_length: broadPrompt.length,
+    prompt_preview: broadPrompt.slice(0, 300)
+  });
   const broadResult = await dualAnalystRun<BroadScanOutput>(
-    { prompt: broadPrompt, timeoutMs: AGENT_TIMEOUT_MS },
+    { prompt: broadPrompt, timeoutMs: timeoutMs },
     {
       runClaude: deps.runClaude,
       runCodex: deps.runCodex,
@@ -320,8 +344,14 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     };
 
     const divePrompt = buildDeepDivePrompt(diveCtx);
+    await log.debug('agent_runner', 'deep dive prompt sent', {
+      topic: dig.topic,
+      provider: preferred,
+      prompt_length: divePrompt.length,
+      prompt_preview: divePrompt.slice(0, 300)
+    });
     const diveResult = await dualAnalystRun<DeepDiveOutput>(
-      { prompt: divePrompt, timeoutMs: AGENT_TIMEOUT_MS },
+      { prompt: divePrompt, timeoutMs: timeoutMs },
       {
         runClaude: deps.runClaude,
         runCodex: deps.runCodex,

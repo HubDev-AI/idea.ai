@@ -847,14 +847,45 @@ h1, h2, h3, p {
 .thesis-status.promoted { color: var(--ok); }
 .thesis-status.watching { color: var(--warn); }
 
-button.thesis-card { cursor: pointer; }
+.thesis-card { cursor: pointer; }
 
-button.thesis-card:hover {
+.thesis-card:hover {
   background: #282c35;
 }
 
-button.thesis-card:active {
+.thesis-card:active {
   transform: scale(0.98);
+}
+
+.thesis-explore-btn {
+  background: transparent;
+  color: #9b59b6;
+  border: 1px solid #9b59b6;
+  padding: 1px 8px;
+  font-size: 0.6rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 3px;
+  margin-left: auto;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.thesis-explore-btn:hover {
+  background: rgba(155, 89, 182, 0.15);
+}
+
+.thesis-explore-btn.has-data {
+  background: #9b59b6;
+  color: #fff;
+  border-color: #9b59b6;
+}
+
+.thesis-explore-btn.has-data:hover {
+  background: #8e44ad;
+  border-color: #8e44ad;
 }
 
 .thesis-card.thesis-active {

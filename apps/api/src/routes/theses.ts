@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { generateDeepDive } from '../jobs/deep_dive_generator';
 import type { DeepDiveGeneratorDeps } from '../jobs/deep_dive_generator';
 import { buildThesisCandidates } from '../jobs/thesis_synthesizer';
+import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { PaginatedThesisStore } from '../runtime/postgres_thesis_store';
 import type { DeepDiveStore } from '../runtime/deep_dive_store';
@@ -12,6 +13,7 @@ export type ThesesRouteDeps = {
   memoryStore?: PostgresMemoryStore | null;
   deepDiveStore?: DeepDiveStore | null;
   deepDiveAi?: DeepDiveGeneratorDeps | null;
+  logger?: Pick<ExecutionLogger, 'info' | 'debug' | 'error'>;
 };
 
 export const registerThesesRoute = (
@@ -22,7 +24,11 @@ export const registerThesesRoute = (
     'store' in storeOrDeps ? storeOrDeps : { store: storeOrDeps };
 
   app.get('/v1/theses', async (request) => {
-    const query = request.query as { page?: string; page_size?: string; status?: string };
+    const query = request.query as { page?: string; page_size?: string; status?: string; sort?: string };
+    const validSorts = ['score', 'latest', 'evidence', 'newest'] as const;
+    const sort = validSorts.includes(query.sort as typeof validSorts[number])
+      ? (query.sort as typeof validSorts[number])
+      : 'score';
 
     // If the store supports pagination, use it
     if ('listPaginated' in deps.store) {
@@ -31,6 +37,7 @@ export const registerThesesRoute = (
       return (deps.store as PaginatedThesisStore).listPaginated({
         page,
         pageSize,
+        sort,
         ...(query.status ? { status: query.status } : {})
       });
     }
@@ -138,7 +145,10 @@ export const registerThesesRoute = (
 
     // Return cached if exists
     const cached = await deps.deepDiveStore.getByKey(key);
-    if (cached) return cached;
+    if (cached) {
+      await deps.logger?.info('deep_dive', 'deep-dive served from cache', { thesis: key });
+      return cached;
+    }
 
     // Fetch thesis data
     const thesis = await deps.store.getByKey(key);
@@ -154,7 +164,7 @@ export const registerThesesRoute = (
       targetBuyer: thesis.targetBuyer,
       proposedSolution: thesis.proposedSolution,
       confidence: thesis.confidence,
-    }, deps.deepDiveAi);
+    }, { ...deps.deepDiveAi, logger: deps.logger });
 
     // Save and return
     const saved = await deps.deepDiveStore.save(key, {

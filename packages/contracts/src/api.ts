@@ -112,6 +112,8 @@ export type ThesisListItem = {
   problemStatement: string;
   sourceCount: number;
   estimatedScope: 'small' | 'medium' | 'large' | null;
+  lastSeenAt: string;
+  hasDeepDive: boolean;
 };
 
 export type ThesisPage = {

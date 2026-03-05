@@ -1,4 +1,5 @@
 import type { RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
+import type { ExecutionLogger } from '../runtime/execution_logger';
 
 export type DeepDiveInput = {
   title: string;
@@ -19,6 +20,7 @@ export type DeepDiveGeneratorDeps = {
   runClaude: (input: RunPromptInput) => Promise<RunPromptResult>;
   runCodex: (input: RunPromptInput) => Promise<RunPromptResult>;
   preferredProvider?: 'claude' | 'codex';
+  logger?: Pick<ExecutionLogger, 'info' | 'debug' | 'error'>;
 };
 
 const TIMEOUT_MS = 60_000;
@@ -87,35 +89,69 @@ const parseDeepDiveJson = (text: string): DeepDiveResult | null => {
   return { summary, howItWorks, growthStrategy, buildSuggestions };
 };
 
+const noopLog = { info: async () => {}, debug: async () => {}, error: async () => {} };
+
 export const generateDeepDive = async (
   input: DeepDiveInput,
   deps: DeepDiveGeneratorDeps
 ): Promise<{ result: DeepDiveResult; provider: string }> => {
-  const { runClaude, runCodex, preferredProvider = 'claude' } = deps;
+  const { runClaude, runCodex, preferredProvider = 'claude', logger } = deps;
+  const log = logger ?? noopLog;
   const prompt = buildPrompt(input);
   const promptInput: RunPromptInput = { prompt, timeoutMs: TIMEOUT_MS };
 
   const primaryRun = preferredProvider === 'codex' ? runCodex : runClaude;
   const fallbackRun = preferredProvider === 'codex' ? runClaude : runCodex;
+  const primaryName = preferredProvider === 'codex' ? 'codex' : 'claude';
+  const fallbackName = preferredProvider === 'codex' ? 'claude' : 'codex';
+
+  await log.info('deep_dive', 'generating deep-dive', {
+    thesis: input.title,
+    provider: primaryName,
+    prompt_preview: prompt.slice(0, 300)
+  });
+
+  const startMs = Date.now();
 
   let primaryResult: RunPromptResult;
   try {
     primaryResult = await primaryRun(promptInput);
     const parsed = parseDeepDiveJson(primaryResult.text);
     if (parsed) {
+      await log.info('deep_dive', 'deep-dive complete', {
+        thesis: input.title,
+        provider: primaryResult.provider,
+        duration_ms: Date.now() - startMs
+      });
       return { result: parsed, provider: primaryResult.provider };
     }
-  } catch {
-    // fall through to fallback
+    await log.debug('deep_dive', 'primary parse failed, trying fallback', {
+      thesis: input.title, provider: primaryName
+    });
+  } catch (err) {
+    await log.debug('deep_dive', 'primary provider failed, trying fallback', {
+      thesis: input.title, provider: primaryName,
+      error: err instanceof Error ? err.message : String(err)
+    });
   }
 
   const fallbackResult = await fallbackRun(promptInput);
   const parsed = parseDeepDiveJson(fallbackResult.text);
   if (!parsed) {
+    await log.error('deep_dive', 'deep-dive failed', {
+      thesis: input.title,
+      providers: `${primaryName}+${fallbackName}`,
+      duration_ms: Date.now() - startMs
+    });
     throw new Error(
       `deep_dive_generator: failed to parse AI response from both providers. Preview: ${fallbackResult.text.slice(0, 200)}`
     );
   }
 
+  await log.info('deep_dive', 'deep-dive complete (fallback)', {
+    thesis: input.title,
+    provider: fallbackResult.provider,
+    duration_ms: Date.now() - startMs
+  });
   return { result: parsed, provider: fallbackResult.provider };
 };
