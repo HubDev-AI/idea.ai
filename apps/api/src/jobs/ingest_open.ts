@@ -3,14 +3,20 @@ import { fetchAppStoreTrending } from '@idea/connectors/src/appstore';
 import { fetchGithubIssueEvents } from '@idea/connectors/src/github_issues';
 import { fetchGreenhouseJobEvents } from '@idea/connectors/src/greenhouse';
 import { fetchHnEvents } from '@idea/connectors/src/hn';
+import { fetchBlueskyEvents } from '@idea/connectors/src/bluesky';
+import { fetchDevtoEvents } from '@idea/connectors/src/devto';
+import { fetchHomebrewEvents } from '@idea/connectors/src/homebrew';
 import { fetchIndieHackersEvents } from '@idea/connectors/src/indiehackers';
 import { fetchLeverJobEvents } from '@idea/connectors/src/lever';
+import { fetchLobstersEvents } from '@idea/connectors/src/lobsters';
+import { fetchMastodonEvents } from '@idea/connectors/src/mastodon';
 import { fetchProductHunt } from '@idea/connectors/src/producthunt';
 import { fetchReddit } from '@idea/connectors/src/reddit';
+import { fetchShowHnEvents } from '@idea/connectors/src/showhn';
 import { fetchYcCompanyEvents } from '@idea/connectors/src/yc_companies';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 
-export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers';
+export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew';
 
 export type OpenConnectorStatus = {
   name: OpenConnectorName;
@@ -32,7 +38,7 @@ type OpenIngestionDeps = {
   loaders?: Partial<Record<OpenConnectorName, OpenConnectorLoader>>;
 };
 
-const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers'];
+const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew'];
 
 const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   hn: () => fetchHnEvents(),
@@ -49,7 +55,13 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   },
   producthunt: () => fetchProductHunt(),
   appstore_trending: () => fetchAppStoreTrending(),
-  indiehackers: () => fetchIndieHackersEvents()
+  indiehackers: () => fetchIndieHackersEvents(),
+  lobsters: () => fetchLobstersEvents(),
+  devto: () => fetchDevtoEvents(),
+  showhn: () => fetchShowHnEvents(),
+  mastodon: () => fetchMastodonEvents(),
+  bluesky: () => fetchBlueskyEvents(),
+  homebrew: () => fetchHomebrewEvents()
 };
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');

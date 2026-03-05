@@ -242,6 +242,12 @@ export type EmbeddingStats = {
   fallbackModel: string;
 };
 
+export type ConvergentMatch = {
+  signal_id: string;
+  source: string;
+  distance: number;
+};
+
 export type PostgresMemoryStore = {
   retriever: MemoryRetriever;
   save: (entry: IndexedMemoryEntry) => Promise<void>;
@@ -250,6 +256,8 @@ export type PostgresMemoryStore = {
   countSignalsBySource: () => Promise<Record<string, number>>;
   getEmbeddings: (signalIds: string[]) => Promise<Map<string, number[]>>;
   getEmbeddingStats: () => Promise<EmbeddingStats>;
+  findConvergentSignals: (signalId: string, embedding: number[], source: string) => Promise<ConvergentMatch[]>;
+  boostViralityScore: (signalId: string, boost: number) => Promise<void>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -485,6 +493,49 @@ export const createPostgresMemoryStore = ({
     };
   };
 
+  const convergentSql = `
+    SELECT
+      sm.signal_id,
+      sm.source,
+      LEAST(GREATEST((se.embedding <=> $1::vector)::double precision, 0), 1) AS distance
+    FROM signal_embeddings se
+    JOIN signal_memory sm ON sm.signal_id = se.signal_id
+    WHERE sm.signal_id != $2
+      AND sm.source != $3
+      AND sm.observed_at >= NOW() - INTERVAL '48 hours'
+      AND (se.embedding <=> $1::vector) < 0.35
+    ORDER BY se.embedding <=> $1::vector
+    LIMIT 5
+  `;
+
+  const findConvergentSignals = async (
+    signalId: string,
+    embedding: number[],
+    source: string
+  ): Promise<ConvergentMatch[]> => {
+    const result = await pool.query<{ signal_id: string; source: string; distance: number | string }>(
+      convergentSql,
+      [toVectorLiteral(embedding), signalId, source]
+    );
+
+    return result.rows.map((row) => ({
+      signal_id: row.signal_id,
+      source: row.source,
+      distance: toNumber(row.distance)
+    }));
+  };
+
+  const boostViralityScore = async (signalId: string, boost: number): Promise<void> => {
+    await pool.query(
+      `UPDATE signal_memory
+       SET virality = LEAST(100, virality + $2),
+           blended = ROUND((0.25 * demand + 0.20 * timing + 0.20 * buildability + 0.35 * LEAST(100, virality + $2))::numeric, 2),
+           updated_at = NOW()
+       WHERE signal_id = $1`,
+      [signalId, boost]
+    );
+  };
+
   return {
     retriever,
     save,
@@ -493,6 +544,8 @@ export const createPostgresMemoryStore = ({
     countSignalsBySource,
     getEmbeddings,
     getEmbeddingStats,
+    findConvergentSignals,
+    boostViralityScore,
     ping,
     close: async () => {
       await pool.end();
