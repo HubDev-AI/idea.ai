@@ -28,6 +28,7 @@ export type AgentRunnerDeps = {
   runCodex: (input: RunPromptInput) => Promise<RunPromptResult>;
   logger?: ExecutionLogger;
   runId?: string;
+  preferredProvider?: 'claude' | 'codex';
 };
 
 const MAX_DEEP_DIVES = 2;
@@ -58,9 +59,18 @@ const noopLogger: Pick<ExecutionLogger, 'info' | 'warn' | 'debug' | 'error'> = {
   info: noopLog, warn: noopLog, debug: noopLog, error: noopLog
 };
 
+const pickPreferred = <T>(result: { claude: T | null; codex: T | null }, preferred: 'claude' | 'codex'): T | null =>
+  preferred === 'codex' ? (result.codex ?? result.claude) : (result.claude ?? result.codex);
+
+const resolveUsedProvider = (result: { claude: unknown | null; codex: unknown | null }, preferred: 'claude' | 'codex'): string | null =>
+  preferred === 'codex'
+    ? (result.codex ? 'codex' : result.claude ? 'claude' : null)
+    : (result.claude ? 'claude' : result.codex ? 'codex' : null);
+
 export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunResult> => {
   const log = deps.logger ?? noopLogger;
   const runId = deps.runId ?? `agent-${Date.now()}`;
+  const preferred = deps.preferredProvider ?? 'claude';
   let thesesUpdated = 0;
   let newCandidates = 0;
   const allAlerts: string[] = [];
@@ -181,11 +191,11 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     }
   );
 
-  const broadOutput = broadResult.claude ?? broadResult.codex;
+  const broadOutput = pickPreferred(broadResult, preferred);
 
   await log.info('agent_runner', 'broad scan complete', {
     has_output: !!broadOutput,
-    provider: broadResult.claude ? 'claude' : broadResult.codex ? 'codex' : 'none',
+    provider: resolveUsedProvider(broadResult, preferred) ?? 'none',
     updates: broadOutput?.thesis_updates?.length ?? 0,
     observations: broadOutput?.observations?.length ?? 0,
     dig_deeper: broadOutput?.dig_deeper?.length ?? 0
@@ -324,7 +334,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       }
     );
 
-    const diveOutput = diveResult.claude ?? diveResult.codex;
+    const diveOutput = pickPreferred(diveResult, preferred);
 
     await log.info('agent_runner', 'deep dive complete', {
       topic: dig.topic,
@@ -447,6 +457,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     await deps.journalStore.write(allJournalEntries);
   }
 
+  const provider = resolveUsedProvider(broadResult, preferred);
+
   return {
     thesesUpdated,
     newCandidates,
@@ -454,7 +466,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     investigateNext,
     journalEntriesWritten: allJournalEntries.length,
     clustersAnalyzed: clusters.length,
-    deepDivesPerformed
+    deepDivesPerformed,
+    provider
   };
 };
 

@@ -42,7 +42,7 @@ import {
   selectEventsForScoring
 } from './signal_quality';
 
-const DEFAULT_REFRESH_MS = 5 * 60 * 1000;
+const DEFAULT_REFRESH_MS = 60 * 60 * 1000;
 const DEFAULT_SNAPSHOT_FILE = (): string => join(process.cwd(), 'logs', 'state', 'latest_snapshot.json');
 const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew'];
 
@@ -50,6 +50,8 @@ type Snapshot = {
   refreshedAt: number;
   signals: FeedRecord[];
   connectors: ConnectorStatusRecord[];
+  lastHourlyRunAt: number;
+  lastDailyRunAt: number;
 };
 
 const resolveProviderSetting = (env: NodeJS.ProcessEnv): 'claude' | 'codex' | 'both' => {
@@ -103,7 +105,7 @@ const createAiHealthSnapshot = ({
   env: NodeJS.ProcessEnv;
   runId: string | null;
   refreshedAt: string | null;
-  aiJudgeSettings: Pick<AiJudgeSettings, 'mode' | 'allowFallback' | 'retries' | 'maxSignals'>;
+  aiJudgeSettings: Pick<AiJudgeSettings, 'mode' | 'allowFallback' | 'retries' | 'maxSignals' | 'preferredProvider'>;
   aiPostScrapeSettings: Pick<AiPostScrapeSettings, 'enabled' | 'maxSignals'>;
 }): AiHealthRecord => {
   const providerSetting = resolveProviderSetting(env);
@@ -122,6 +124,7 @@ const createAiHealthSnapshot = ({
     run_id: runId,
     refreshed_at: refreshedAt,
     provider_setting: providerSetting,
+    primary_provider: aiJudgeSettings.preferredProvider,
     judge_mode: aiJudgeSettings.mode,
     fallback_enabled: aiJudgeSettings.allowFallback,
     retry_budget: aiJudgeSettings.retries,
@@ -297,9 +300,11 @@ const toConnectorStatus = (
   hourly: OpenConnectorIngestionResult,
   daily: OpenConnectorIngestionResult,
   byo: Awaited<ReturnType<typeof runByoConnectorIngestion>>,
-  refreshedAtIso: string
+  refreshedAtIso: string,
+  lastDailyRunAt: number
 ): ConnectorStatusRecord[] => {
   const openStatuses = openStatusMap(hourly, daily);
+  const dailyLastRunIso = lastDailyRunAt > 0 ? new Date(lastDailyRunAt).toISOString() : null;
   const openRecords: ConnectorStatusRecord[] = OPEN_CONNECTORS.map((connector) => {
     const cadence = (OPEN_CONNECTOR_CADENCE[connector] as Cadence) ?? null;
     if (!isConnectorSelected(connector, env) || !isConnectorConfigured(connector, env)) {
@@ -311,10 +316,12 @@ const toConnectorStatus = (
       };
     }
 
+    const lastRun = cadence === 'daily' ? (dailyLastRunIso ?? refreshedAtIso) : refreshedAtIso;
+
     return {
       name: connector,
       status: openStatuses.get(connector) === 'error' ? 'error' : 'active',
-      last_run: refreshedAtIso,
+      last_run: lastRun,
       cadence
     };
   });
@@ -450,10 +457,12 @@ const parseSnapshotPayload = (raw: string): Snapshot | null => {
           return null;
         }
 
+        const cadence = entry.cadence === 'hourly' || entry.cadence === 'daily' ? entry.cadence : null;
         return {
           name: entry.name,
           status: entry.status,
-          last_run: entry.last_run
+          last_run: entry.last_run,
+          cadence
         } satisfies ConnectorStatusRecord;
       })
       .filter((entry): entry is ConnectorStatusRecord => entry !== null);
@@ -461,14 +470,35 @@ const parseSnapshotPayload = (raw: string): Snapshot | null => {
     return {
       refreshedAt: toNumber(parsed.refreshedAt, 0),
       signals,
-      connectors
+      connectors,
+      lastHourlyRunAt: toNumber(parsed.lastHourlyRunAt, 0),
+      lastDailyRunAt: toNumber(parsed.lastDailyRunAt, 0)
     };
   } catch {
     return null;
   }
 };
 
+const buildInitialConnectors = (env: RuntimeEnv): ConnectorStatusRecord[] => {
+  const openRecords: ConnectorStatusRecord[] = OPEN_CONNECTORS.map((connector) => {
+    const cadence = (OPEN_CONNECTOR_CADENCE[connector] as Cadence) ?? null;
+    if (!isConnectorSelected(connector, env) || !isConnectorConfigured(connector, env)) {
+      return { name: connector, status: 'disabled' as const, last_run: null, cadence };
+    }
+    return { name: connector, status: 'active' as const, last_run: null, cadence };
+  });
+
+  return [
+    ...openRecords,
+    { name: 'exa_byo', status: (env.exaApiKey && env.exaDailyBudgetUsd > 0 ? 'active' : 'disabled') as ConnectorStatusRecord['status'], last_run: null, cadence: 'daily' as const },
+    { name: 'perigon_byo', status: (env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? 'active' : 'disabled') as ConnectorStatusRecord['status'], last_run: null, cadence: 'daily' as const },
+    { name: 'twitter_byo', status: (env.xBearerToken && env.xDailyBudgetUsd > 0 ? 'active' : 'disabled') as ConnectorStatusRecord['status'], last_run: null, cadence: 'daily' as const }
+  ];
+};
+
 export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { persistentStore?: PostgresMemoryStore }) => {
+  const startedAt = Date.now();
+  const initialEnv = loadRuntimeEnv(process.env);
   const initialAiJudgeSettings = resolveAiJudgeSettings(process.env);
   const initialAiPostScrapeSettings = resolveAiPostScrapeSettings(process.env);
   const memoryEntries: IndexedMemoryEntry[] = [];
@@ -486,7 +516,9 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
   let snapshot: Snapshot = {
     refreshedAt: 0,
     signals: [],
-    connectors: []
+    connectors: buildInitialConnectors(initialEnv),
+    lastHourlyRunAt: 0,
+    lastDailyRunAt: 0
   };
 
   const hydrateSnapshotFromDisk = async (
@@ -608,15 +640,20 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
 
     try {
       const persistentStore = await resolvePostgresMemoryStore(env, logger);
+      const DAILY_CADENCE_MS = 24 * 60 * 60 * 1000;
+      const dailyDue = Date.now() - snapshot.lastDailyRunAt >= DAILY_CADENCE_MS;
+
       const [hourly, daily, byo] = await Promise.all([
         runOpenConnectorIngestionDetailed('hourly', {
           enabledConnectors: enabledOpenConnectors('hourly', env),
           logger
         }),
-        runOpenConnectorIngestionDetailed('daily', {
-          enabledConnectors: enabledOpenConnectors('daily', env),
-          logger
-        }),
+        dailyDue
+          ? runOpenConnectorIngestionDetailed('daily', {
+              enabledConnectors: enabledOpenConnectors('daily', env),
+              logger
+            })
+          : Promise.resolve({ events: [] as RawEventInput[], statuses: [] as OpenConnectorIngestionResult['statuses'] } as OpenConnectorIngestionResult),
         runByoConnectorIngestion(process.env, {
           logger
         })
@@ -920,7 +957,9 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       snapshot = {
         refreshedAt: now,
         signals: nextSignals,
-        connectors: toConnectorStatus(env, hourly, daily, byo, refreshedAtIso)
+        connectors: toConnectorStatus(env, hourly, daily, byo, refreshedAtIso, dailyDue ? now : snapshot.lastDailyRunAt),
+        lastHourlyRunAt: now,
+        lastDailyRunAt: dailyDue ? now : snapshot.lastDailyRunAt
       };
       aiHealth = {
         ...runAiHealth,
@@ -966,7 +1005,9 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       snapshot = {
         refreshedAt: now,
         signals: [],
-        connectors: toErrorFirstSnapshot(env, refreshedAtIso)
+        connectors: toErrorFirstSnapshot(env, refreshedAtIso),
+        lastHourlyRunAt: now,
+        lastDailyRunAt: snapshot.lastDailyRunAt
       };
       aiHealth = {
         ...runAiHealth,
@@ -1010,9 +1051,17 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
     return snapshot;
   };
 
+  const DAILY_CADENCE_MS = 24 * 60 * 60 * 1000;
+
   return {
     listSignals: async (): Promise<FeedRecord[]> => (await ensureFresh()).signals,
     listConnectors: async (): Promise<ConnectorStatusRecord[]> => (await ensureFresh()).connectors,
+    getRefreshMeta: () => ({
+      last_hourly_run: new Date(snapshot.lastHourlyRunAt > 0 ? snapshot.lastHourlyRunAt : startedAt).toISOString(),
+      last_daily_run: new Date(snapshot.lastDailyRunAt > 0 ? snapshot.lastDailyRunAt : startedAt).toISOString(),
+      hourly_interval_ms: refreshMs,
+      daily_interval_ms: DAILY_CADENCE_MS,
+    }),
     getAiHealth: async (): Promise<AiHealthRecord> => {
       await ensureFresh();
       return aiHealth;

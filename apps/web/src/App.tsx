@@ -11,17 +11,22 @@ import {
   fetchConnectors,
   fetchInfraStatus,
   fetchLogs,
+  fetchRefreshMeta,
   fetchSignalCounts,
   fetchSignals,
   fetchTheses,
   type InfraStatusRecord,
+  type RefreshMeta,
   type SignalRecord,
+  type SortField,
   type ThesisListItem,
-  triggerAgentRun
+  triggerAgentRun,
+  triggerConnectorRefresh
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
 import { ThesisCard } from './components/ThesisCard';
+import { connectorDisplayName, connectorSourceKey } from './connectorNames';
 
 const PAGE_SIZE = 8;
 const LOG_POLL_INTERVAL_MS = 3_000;
@@ -73,8 +78,10 @@ const App = () => {
   const failCountRef = useRef(0);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [sortField, setSortField] = useState<SortField>('score');
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
+  const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
   const [thesisPageInfo, setThesisPageInfo] = useState({
@@ -132,19 +139,21 @@ const App = () => {
       if (showLoading) {
         setIsLoading(true);
       }
-      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult, infraResult] = await Promise.allSettled([
+      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult, infraResult, refreshMetaResult] = await Promise.allSettled([
         fetchSignals({
           page: requestedPage,
           pageSize: PAGE_SIZE,
           ...(sourceFilter !== 'all' ? { source: sourceFilter } : {}),
           ...(thesisFilter !== null ? { thesisKey: thesisFilter } : {}),
+          sort: sortField,
         }),
         fetchConnectors(),
         fetchAiHealth(),
         fetchTheses({ page: requestedThesisPage, pageSize: 10 }),
         fetchAgentStatus(),
         fetchSignalCounts(),
-        fetchInfraStatus()
+        fetchInfraStatus(),
+        fetchRefreshMeta()
       ]);
       const warnings: string[] = [];
 
@@ -202,6 +211,10 @@ const App = () => {
         setInfraStatus(infraResult.value);
       }
 
+      if (refreshMetaResult.status === 'fulfilled') {
+        setRefreshMeta(refreshMetaResult.value);
+      }
+
       if (warnings.length > 0) {
         failCountRef.current++;
         // Show warning immediately on initial load, after 2+ consecutive on background polls
@@ -226,7 +239,7 @@ const App = () => {
     return () => {
       clearInterval(timer);
     };
-  }, [requestedPage, sourceFilter, thesisFilter]);
+  }, [requestedPage, sourceFilter, thesisFilter, sortField]);
 
   // Separate thesis-only fetch (avoids 7-endpoint refresh on page change)
   useEffect(() => {
@@ -368,6 +381,14 @@ const App = () => {
     setRequestedPage(1);
   };
 
+  const handleForceRefresh = async () => {
+    try {
+      await triggerConnectorRefresh();
+    } catch {
+      // Ignore — will be visible in logs
+    }
+  };
+
   const handleRunAgent = async () => {
     setAgentRunning(true);
     setAgentRunResult(null);
@@ -431,6 +452,8 @@ const App = () => {
         onRunAgent={handleRunAgent}
         agentRunning={agentRunning}
         agentRunResult={agentRunResult}
+        refreshMeta={refreshMeta}
+        onForceRefresh={handleForceRefresh}
       />
       <button
         type="button"
@@ -518,9 +541,21 @@ const App = () => {
                   onChange={(e) => { setSourceFilter(e.target.value); setRequestedPage(1); }}
                 >
                   <option value="all">All Sources</option>
-                  {connectors.map((c) => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
+                  {connectors.filter((c) => c.status === 'active').map((c) => (
+                    <option key={c.name} value={connectorSourceKey[c.name] ?? c.name}>
+                      {connectorDisplayName[c.name] ?? c.name}
+                    </option>
                   ))}
+                </select>
+                <select
+                  className="source-filter"
+                  value={sortField}
+                  onChange={(e) => { setSortField(e.target.value as SortField); setRequestedPage(1); }}
+                >
+                  <option value="score">By Score</option>
+                  <option value="newest">Newest</option>
+                  <option value="virality">By Virality</option>
+                  <option value="demand">By Demand</option>
                 </select>
                 {thesisFilter && (
                   <div className="filter-chip">

@@ -19,7 +19,7 @@ const mockSignals = [
 ];
 
 const mockConnectors = [
-  { name: 'hn', status: 'active', last_run: '2026-02-24T01:00:00.000Z' }
+  { name: 'hn', status: 'active', last_run: '2026-02-24T01:00:00.000Z', cadence: 'hourly' }
 ];
 
 const mockLogs = [
@@ -39,6 +39,7 @@ const mockAiHealth = {
   run_id: 'read_model-run-1',
   refreshed_at: '2026-02-24T02:00:00.000Z',
   provider_setting: 'both',
+  primary_provider: 'claude',
   judge_mode: 'single',
   fallback_enabled: true,
   retry_budget: 1,
@@ -99,7 +100,8 @@ const mockAgentStatus = {
     newCandidates: 1,
     clustersAnalyzed: 3,
     deepDivesPerformed: 1,
-    journalEntriesWritten: 5
+    journalEntriesWritten: 5,
+    provider: 'claude'
   },
   investigateNext: 'API security testing tools'
 };
@@ -175,6 +177,15 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       return Promise.resolve(new Response(JSON.stringify(mockInfraStatus), { status: 200 }));
     }
 
+    if (url.includes('/v1/connectors/refresh-meta')) {
+      return Promise.resolve(new Response(JSON.stringify({
+        last_hourly_run: '2026-02-24T01:00:00.000Z',
+        last_daily_run: '2026-02-24T00:00:00.000Z',
+        hourly_interval_ms: 3600000,
+        daily_interval_ms: 86400000
+      }), { status: 200 }));
+    }
+
     // Default: connectors
     return Promise.resolve(new Response(JSON.stringify(mockConnectors), { status: 200 }));
   });
@@ -219,8 +230,8 @@ describe('web app', () => {
 
     render(<App />);
 
-    // Connector name appears in source filter dropdown
-    expect((await screen.findAllByText('hn')).length).toBeGreaterThan(0);
+    // Connector display name appears in source filter dropdown
+    expect((await screen.findAllByText('Hacker News')).length).toBeGreaterThan(0);
     expect(screen.getByText(/Top Ideas/i)).toBeDefined();
     expect(screen.getByText(/Some data could not be loaded/i)).toBeDefined();
   });

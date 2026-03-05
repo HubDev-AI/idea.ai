@@ -14,6 +14,7 @@ export type AgentRunRow = {
   new_candidates: number;
   journal_entries_written: number;
   investigate_next: string | null;
+  provider: string | null;
   error_message: string | null;
   error_stack: string | null;
 };
@@ -45,7 +46,8 @@ export const createAgentRunStore = ({ pool }: { pool: Pool }): AgentRunStore => 
         theses_updated = $4,
         new_candidates = $5,
         journal_entries_written = $6,
-        investigate_next = $7
+        investigate_next = $7,
+        provider = $8
       WHERE run_id = $1`,
       [
         runId,
@@ -54,7 +56,8 @@ export const createAgentRunStore = ({ pool }: { pool: Pool }): AgentRunStore => 
         result.thesesUpdated,
         result.newCandidates,
         result.journalEntriesWritten,
-        result.investigateNext || null
+        result.investigateNext || null,
+        result.provider || null
       ]
     );
   },

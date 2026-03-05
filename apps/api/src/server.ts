@@ -1,5 +1,5 @@
 import rateLimit from '@fastify/rate-limit';
-import type { AgentStatusRecord } from '@idea/contracts/src/api';
+import type { AgentStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AgentRunResult } from './jobs/agent_runner';
 import { registerAgentStatusRoute } from './routes/agent_status';
@@ -28,6 +28,8 @@ export type ServerDeps = {
   triggerAgentRun?: () => Promise<AgentRunResult>;
   agentRunStore?: AgentRunStore | null;
   infraStatusDeps?: InfraStatusDeps;
+  getRefreshMeta?: () => RefreshMeta;
+  triggerRefresh?: () => Promise<void>;
 };
 
 const defaultDeps: ServerDeps = {
@@ -38,6 +40,7 @@ const defaultDeps: ServerDeps = {
     run_id: null,
     refreshed_at: null,
     provider_setting: 'claude',
+    primary_provider: 'claude',
     judge_mode: 'single',
     fallback_enabled: false,
     retry_budget: 0,
@@ -119,7 +122,9 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   registerFeedRoute(app, feedDeps);
   registerConnectorRoute(app, {
     listConnectors: resolvedDeps.listConnectors,
-    memoryStore: resolvedDeps.memoryStore ?? null
+    memoryStore: resolvedDeps.memoryStore ?? null,
+    getRefreshMeta: resolvedDeps.getRefreshMeta,
+    triggerRefresh: resolvedDeps.triggerRefresh
   });
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
