@@ -124,6 +124,16 @@ export type ThesisPage = {
   has_prev: boolean;
 };
 
+export type ThesisDeepDive = {
+  canonicalKey: string;
+  summary: string;
+  howItWorks: string;
+  growthStrategy: string;
+  buildSuggestions: string;
+  generatedBy: string;
+  createdAt: string;
+};
+
 export type AgentRunResult = {
   thesesUpdated: number;
   newCandidates: number;

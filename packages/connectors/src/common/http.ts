@@ -24,7 +24,10 @@ export const OPEN_CONNECTOR_LIMITS = {
   showhn: 25,
   mastodon: 30,
   bluesky: 30,
-  homebrew: 50
+  homebrew: 50,
+  google_trends: 30,
+  tiktok_creative: 30,
+  alternativeto: 30
 } as const;
 
 export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
@@ -42,7 +45,10 @@ export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
   showhn: 'hourly',
   mastodon: 'daily',
   bluesky: 'daily',
-  homebrew: 'daily'
+  homebrew: 'daily',
+  google_trends: 'daily',
+  tiktok_creative: 'daily',
+  alternativeto: 'daily'
 };
 
 const sleep = async (ms: number): Promise<void> => {

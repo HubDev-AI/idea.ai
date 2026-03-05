@@ -7,6 +7,7 @@ import { loadEnvFile } from './config/dotenv';
 import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
+import { createDeepDiveStore } from './runtime/deep_dive_store';
 import { createExecutionLogger } from './runtime/execution_logger';
 import { createPostgresJournalStore } from './runtime/journal_store';
 import { createLiveReadModel } from './runtime/live_read_model';
@@ -141,6 +142,12 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   triggerRefresh: async (cadence) => { await readModel.refresh(cadence); },
   thesisStore,
   memoryStore,
+  deepDiveStore: pool ? createDeepDiveStore({ pool }) : null,
+  deepDiveAi: {
+    runClaude: runClaudePrompt,
+    runCodex: runCodexPrompt,
+    preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider
+  },
   getAgentStatus: () => agentStatus,
   triggerAgentRun: executeAgentRun,
   agentRunStore,

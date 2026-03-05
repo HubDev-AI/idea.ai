@@ -11,8 +11,10 @@ import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_s
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
 import { registerThesesRoute } from './routes/theses';
 import type { AgentRunStore } from './runtime/agent_run_store';
+import type { DeepDiveStore } from './runtime/deep_dive_store';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
+import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
 
 export type ServerDeps = {
   listSignals: () => Promise<FeedRecord[]>;
@@ -21,6 +23,8 @@ export type ServerDeps = {
   getAiHealth: () => Promise<AiHealthRecord>;
   thesisStore?: ThesisStore;
   memoryStore?: PostgresMemoryStore | null;
+  deepDiveStore?: DeepDiveStore | null;
+  deepDiveAi?: DeepDiveGeneratorDeps | null;
   corsOrigins?: string[];
   apiKey?: string;
   rateLimitMax?: number;
@@ -141,7 +145,9 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   if (resolvedDeps.thesisStore) {
     registerThesesRoute(app, {
       store: resolvedDeps.thesisStore,
-      memoryStore: resolvedDeps.memoryStore ?? null
+      memoryStore: resolvedDeps.memoryStore ?? null,
+      deepDiveStore: resolvedDeps.deepDiveStore ?? null,
+      deepDiveAi: resolvedDeps.deepDiveAi ?? null
     });
   }
 
