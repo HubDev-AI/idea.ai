@@ -1,8 +1,6 @@
 import type { RawEventInput } from '@idea/connectors/src/common/http';
 import type { FeedRecord } from '../routes/feed';
 
-const MAX_SIGNALS_PER_REFRESH = 80;
-
 const recruitingMarkers = [
   'who we are',
   'about us',
@@ -68,78 +66,10 @@ export const isLowValueRecruitingEvent = (event: RawEventInput): boolean => {
 };
 
 export const selectEventsForScoring = (
-  events: RawEventInput[],
-  maxSignals = MAX_SIGNALS_PER_REFRESH
+  events: RawEventInput[]
 ): RawEventInput[] => {
-  if (events.length <= maxSignals) {
-    return events;
-  }
-
-  const bucketMap = new Map<string, RawEventInput[]>();
-
-  for (const event of events) {
-    const bucket = bucketMap.get(event.source) ?? [];
-    bucket.push(event);
-    bucketMap.set(event.source, bucket);
-  }
-
-  for (const bucket of bucketMap.values()) {
-    bucket.sort((left, right) => toTs(right.source_timestamp) - toTs(left.source_timestamp));
-  }
-
-  const sources = Array.from(bucketMap.keys()).sort((left, right) => left.localeCompare(right));
-  const perSourceQuota = Math.max(1, Math.ceil(maxSignals / Math.max(1, sources.length)));
-
-  const selected: RawEventInput[] = [];
-  const usedBySource = new Map<string, number>();
-
-  let madeProgress = true;
-  while (selected.length < maxSignals && madeProgress) {
-    madeProgress = false;
-
-    for (const source of sources) {
-      if (selected.length >= maxSignals) {
-        break;
-      }
-
-      const bucket = bucketMap.get(source);
-      if (!bucket || bucket.length === 0) {
-        continue;
-      }
-
-      const used = usedBySource.get(source) ?? 0;
-      if (used >= perSourceQuota) {
-        continue;
-      }
-
-      const next = bucket.shift();
-      if (!next) {
-        continue;
-      }
-
-      selected.push(next);
-      usedBySource.set(source, used + 1);
-      madeProgress = true;
-    }
-  }
-
-  if (selected.length >= maxSignals) {
-    return selected;
-  }
-
-  const leftovers = Array.from(bucketMap.values())
-    .flat()
-    .sort((left, right) => toTs(right.source_timestamp) - toTs(left.source_timestamp));
-
-  for (const event of leftovers) {
-    if (selected.length >= maxSignals) {
-      break;
-    }
-
-    selected.push(event);
-  }
-
-  return selected;
+  // Sort newest first — all events get scored, no cap
+  return events.slice().sort((left, right) => toTs(right.source_timestamp) - toTs(left.source_timestamp));
 };
 
 export const isIdeaCandidateSignal = (

@@ -11,17 +11,25 @@ import {
   fetchConnectors,
   fetchInfraStatus,
   fetchLogs,
+  fetchRefreshMeta,
   fetchSignalCounts,
   fetchSignals,
   fetchTheses,
   type InfraStatusRecord,
+  type RefreshMeta,
   type SignalRecord,
+  type SortField,
   type ThesisListItem,
-  triggerAgentRun
+  type ThesisSortField,
+  type ThesisStats,
+  triggerAgentRun,
+  triggerConnectorRefresh
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
 import { ThesisCard } from './components/ThesisCard';
+import { ThesisDeepDiveModal } from './components/ThesisDeepDiveModal';
+import { connectorDisplayName, connectorSourceKey } from './connectorNames';
 
 const PAGE_SIZE = 8;
 const LOG_POLL_INTERVAL_MS = 3_000;
@@ -30,24 +38,34 @@ const DATA_POLL_INTERVAL_MS = 15_000;
 const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
 
+const formatContextValue = (value: unknown): string => {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 197)}...` : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value.map(formatContextValue).join(', ');
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>);
+    return entries.map(([k, v]) => `${k}=${formatContextValue(v)}`).join(', ');
+  }
+  return String(value);
+};
+
 const formatLogContext = (context: Record<string, unknown> | undefined): string => {
-  if (!context || Object.keys(context).length === 0) {
-    return '';
-  }
-
-  const serialized = JSON.stringify(context);
-  if (serialized.length <= 280) {
-    return serialized;
-  }
-
-  return `${serialized.slice(0, 277)}...`;
+  if (!context || Object.keys(context).length === 0) return '';
+  const entries = Object.entries(context);
+  const maxKeyLen = Math.max(...entries.map(([k]) => k.length));
+  return entries
+    .map(([key, value]) => `    ${key.padEnd(maxKeyLen)} = ${formatContextValue(value)}`)
+    .join('\n');
 };
 
 const formatTerminalLine = (entry: ExecutionLogRecord): string => {
   const timestamp = new Date(entry.ts).toLocaleTimeString();
   const context = formatLogContext(entry.context);
-  const suffix = context ? ` | ${context}` : '';
-  return `[${timestamp}] [${entry.level.toUpperCase()}] [${entry.component}] run=${entry.run_id} ${entry.message}${suffix}`;
+  const suffix = context ? `\n${context}` : '';
+  return `[${timestamp}] [${entry.level.toUpperCase()}] [${entry.component}] ${entry.message}${suffix}`;
 };
 
 const logLevelIcons: Record<ExecutionLogRecord['level'], string> = {
@@ -71,12 +89,18 @@ const App = () => {
   const [logsRealtime, setLogsRealtime] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const failCountRef = useRef(0);
+  const prevRunningRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [sortField, setSortField] = useState<SortField>('newest');
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
+  const [deepDiveThesis, setDeepDiveThesis] = useState<ThesisListItem | null>(null);
+  const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
+  const [thesisSortField, setThesisSortField] = useState<ThesisSortField>('newest');
+  const [thesisStats, setThesisStats] = useState<ThesisStats>({ total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 });
   const [thesisPageInfo, setThesisPageInfo] = useState({
     page: 1,
     pageSize: 10,
@@ -97,7 +121,7 @@ const App = () => {
     hasNext: false,
     hasPrev: false
   });
-  const latestSignalAt = signals[0]?.updated_at ?? null;
+  const [latestSignalAt, setLatestSignalAt] = useState<string | null>(null);
   const renderedLogs = useMemo(() => logs.slice().reverse(), [logs]);
   const logListRef = useRef<HTMLUListElement | null>(null);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
@@ -132,19 +156,20 @@ const App = () => {
       if (showLoading) {
         setIsLoading(true);
       }
-      const [signalResult, connectorResult, aiHealthResult, thesesResult, agentResult, countsResult, infraResult] = await Promise.allSettled([
+      const [signalResult, connectorResult, aiHealthResult, agentResult, countsResult, infraResult, refreshMetaResult] = await Promise.allSettled([
         fetchSignals({
           page: requestedPage,
           pageSize: PAGE_SIZE,
           ...(sourceFilter !== 'all' ? { source: sourceFilter } : {}),
           ...(thesisFilter !== null ? { thesisKey: thesisFilter } : {}),
+          sort: sortField,
         }),
         fetchConnectors(),
         fetchAiHealth(),
-        fetchTheses({ page: requestedThesisPage, pageSize: 10 }),
         fetchAgentStatus(),
         fetchSignalCounts(),
-        fetchInfraStatus()
+        fetchInfraStatus(),
+        fetchRefreshMeta()
       ]);
       const warnings: string[] = [];
 
@@ -158,6 +183,9 @@ const App = () => {
           hasNext: signalResult.value.has_next,
           hasPrev: signalResult.value.has_prev
         });
+        if (signalResult.value.page === 1 && signalResult.value.items.length > 0) {
+          setLatestSignalAt(signalResult.value.items[0].updated_at);
+        }
         if (signalResult.value.page !== requestedPage) {
           setRequestedPage(signalResult.value.page);
         }
@@ -177,21 +205,37 @@ const App = () => {
         warnings.push('ai_health');
       }
 
-      if (thesesResult.status === 'fulfilled') {
-        const tp = thesesResult.value;
-        setTheses(tp.items);
-        setThesisPageInfo({
-          page: tp.page,
-          pageSize: tp.page_size,
-          totalItems: tp.total_items,
-          totalPages: tp.total_pages,
-          hasNext: tp.has_next,
-          hasPrev: tp.has_prev
-        });
-      }
-
       if (agentResult.status === 'fulfilled') {
+        const wasRunning = prevRunningRef.current;
+        const nowRunning = agentResult.value.isRunning;
+        prevRunningRef.current = nowRunning;
         setAgentStatus(agentResult.value);
+        setAgentRunning(nowRunning);
+        // Agent just finished — show result and refresh theses/signals
+        if (wasRunning && !nowRunning && agentResult.value.lastRun) {
+          const lr = agentResult.value.lastRun;
+          setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
+          // Refresh theses and signals to reflect agent changes
+          Promise.allSettled([
+            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField }),
+            fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
+            fetchSignalCounts()
+          ]).then(([thesesRes, signalsRes, countsRes]) => {
+            if (thesesRes.status === 'fulfilled') {
+              const tp = thesesRes.value;
+              setTheses(tp.items);
+              setRequestedThesisPage(1);
+              setThesisPageInfo({ page: tp.page, pageSize: tp.page_size, totalItems: tp.total_items, totalPages: tp.total_pages, hasNext: tp.has_next, hasPrev: tp.has_prev });
+              if (tp.stats) setThesisStats(tp.stats);
+            }
+            if (signalsRes.status === 'fulfilled') {
+              setSignals(signalsRes.value.items);
+              setPageInfo({ page: signalsRes.value.page, pageSize: signalsRes.value.page_size, totalItems: signalsRes.value.total_items, totalPages: signalsRes.value.total_pages, hasNext: signalsRes.value.has_next, hasPrev: signalsRes.value.has_prev });
+              if (signalsRes.value.items.length > 0) setLatestSignalAt(signalsRes.value.items[0].updated_at);
+            }
+            if (countsRes.status === 'fulfilled') setSignalCounts(countsRes.value);
+          });
+        }
       }
 
       if (countsResult.status === 'fulfilled') {
@@ -200,6 +244,10 @@ const App = () => {
 
       if (infraResult.status === 'fulfilled') {
         setInfraStatus(infraResult.value);
+      }
+
+      if (refreshMetaResult.status === 'fulfilled') {
+        setRefreshMeta(refreshMetaResult.value);
       }
 
       if (warnings.length > 0) {
@@ -226,7 +274,7 @@ const App = () => {
     return () => {
       clearInterval(timer);
     };
-  }, [requestedPage, sourceFilter, thesisFilter]);
+  }, [requestedPage, sourceFilter, thesisFilter, sortField]);
 
   // Separate thesis-only fetch (avoids 7-endpoint refresh on page change)
   useEffect(() => {
@@ -236,6 +284,7 @@ const App = () => {
         const tp = await fetchTheses({
           page: requestedThesisPage,
           pageSize: 10,
+          sort: thesisSortField,
         });
         if (isCancelled) return;
         setTheses(tp.items);
@@ -247,11 +296,12 @@ const App = () => {
           hasNext: tp.has_next,
           hasPrev: tp.has_prev
         });
+        if (tp.stats) setThesisStats(tp.stats);
       } catch { /* handled by bulk fetch warning */ }
     };
     void loadTheses();
     return () => { isCancelled = true; };
-  }, [requestedThesisPage]);
+  }, [requestedThesisPage, thesisSortField]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -368,50 +418,25 @@ const App = () => {
     setRequestedPage(1);
   };
 
+  const handleForceRefresh = async (cadence?: 'hourly' | 'daily') => {
+    try {
+      await triggerConnectorRefresh(cadence);
+    } catch {
+      // Ignore — will be visible in logs
+    }
+  };
+
   const handleRunAgent = async () => {
     setAgentRunning(true);
     setAgentRunResult(null);
     setLogDrawerOpen(true);
     try {
-      const result = await triggerAgentRun();
-      // Refresh all data since the agent creates/updates theses
-      const [statusRes, thesesRes, signalsRes, countsRes] = await Promise.allSettled([
-        fetchAgentStatus(),
-        fetchTheses({ page: 1, pageSize: 10 }),
-        fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
-        fetchSignalCounts()
-      ]);
-      if (statusRes.status === 'fulfilled') setAgentStatus(statusRes.value);
-      if (thesesRes.status === 'fulfilled') {
-        const tp = thesesRes.value;
-        setTheses(tp.items);
-        setRequestedThesisPage(1);
-        setThesisPageInfo({
-          page: tp.page,
-          pageSize: tp.page_size,
-          totalItems: tp.total_items,
-          totalPages: tp.total_pages,
-          hasNext: tp.has_next,
-          hasPrev: tp.has_prev
-        });
-      }
-      if (signalsRes.status === 'fulfilled') {
-        setSignals(signalsRes.value.items);
-        setPageInfo({
-          page: signalsRes.value.page,
-          pageSize: signalsRes.value.page_size,
-          totalItems: signalsRes.value.total_items,
-          totalPages: signalsRes.value.total_pages,
-          hasNext: signalsRes.value.has_next,
-          hasPrev: signalsRes.value.has_prev
-        });
-      }
-      if (countsRes.status === 'fulfilled') setSignalCounts(countsRes.value);
-      setAgentRunResult(`${result.thesesUpdated} updated, ${result.newCandidates} new`);
+      await triggerAgentRun();
+      // 202 accepted — agent runs in background.
+      // Polling via GET /v1/agent/status handles running→done transition.
     } catch {
-      setAgentRunResult('failed');
-    } finally {
       setAgentRunning(false);
+      setAgentRunResult('failed');
     }
   };
 
@@ -422,7 +447,7 @@ const App = () => {
         aiHealth={aiHealth}
         agentStatus={agentStatus}
         infraStatus={infraStatus}
-        theses={theses}
+        thesisStats={thesisStats}
         thesisFilter={thesisFilter}
         onThesisFilter={handleThesisFilter}
         signalCount={pageInfo.totalItems}
@@ -431,6 +456,8 @@ const App = () => {
         onRunAgent={handleRunAgent}
         agentRunning={agentRunning}
         agentRunResult={agentRunResult}
+        refreshMeta={refreshMeta}
+        onForceRefresh={handleForceRefresh}
       />
       <button
         type="button"
@@ -450,7 +477,16 @@ const App = () => {
           <section className="pane pane-left" style={{ width: `${splitPct}%` }}>
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
-              <span className="pane-count">{thesisPageInfo.totalItems}</span>
+              <select
+                className="source-filter"
+                value={thesisSortField}
+                onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
+              >
+                <option value="newest">Newest</option>
+                <option value="score">By Score</option>
+                <option value="latest">Latest Activity</option>
+                <option value="evidence">Most Evidence</option>
+              </select>
               {thesisPageInfo.totalPages > 1 && (
                 <div className="pane-header-right">
                   <button
@@ -481,17 +517,11 @@ const App = () => {
                   key={t.canonicalKey}
                   thesis={t}
                   isActive={thesisFilter === t.canonicalKey}
-                  onClick={() => {
-                    if (thesisFilter === t.canonicalKey) {
-                      setThesisFilter(null);
-                      setThesisFilterTitle('');
-                      setRequestedPage(1);
-                    } else {
-                      setThesisFilter(t.canonicalKey);
-                      setThesisFilterTitle(t.title);
-                      setRequestedPage(1);
-                    }
-                  }}
+                  onClick={() => handleThesisFilter(
+                    thesisFilter === t.canonicalKey ? null : t.canonicalKey,
+                    thesisFilter === t.canonicalKey ? '' : t.title
+                  )}
+                  onExplore={() => setDeepDiveThesis(t)}
                 />
               ))}
               {theses.length === 0 && (
@@ -518,9 +548,21 @@ const App = () => {
                   onChange={(e) => { setSourceFilter(e.target.value); setRequestedPage(1); }}
                 >
                   <option value="all">All Sources</option>
-                  {connectors.map((c) => (
-                    <option key={c.name} value={c.name}>{c.name}</option>
+                  {connectors.filter((c) => c.status === 'active').map((c) => (
+                    <option key={c.name} value={connectorSourceKey[c.name] ?? c.name}>
+                      {connectorDisplayName[c.name] ?? c.name}
+                    </option>
                   ))}
+                </select>
+                <select
+                  className="source-filter"
+                  value={sortField}
+                  onChange={(e) => { setSortField(e.target.value as SortField); setRequestedPage(1); }}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="score">By Score</option>
+                  <option value="virality">By Virality</option>
+                  <option value="demand">By Demand</option>
                 </select>
                 {thesisFilter && (
                   <div className="filter-chip">
@@ -598,7 +640,36 @@ const App = () => {
                 {logsRealtime ? 'LIVE' : 'POLLING'}
               </span>
             </span>
-            <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
+            <span className="log-drawer-right">
+              {logDrawerOpen && (
+                <>
+                  <button
+                    type="button"
+                    className="log-action-btn"
+                    title="Copy logs to clipboard"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const text = renderedLogs.map(formatTerminalLine).join('\n');
+                      navigator.clipboard.writeText(text);
+                    }}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className="log-action-btn"
+                    title="Clear log view"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLogs([]);
+                    }}
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+              <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
+            </span>
           </button>
           {logDrawerOpen && (
             <div className="log-scroll-wrapper">
@@ -627,6 +698,12 @@ const App = () => {
           )}
         </section>
       </main>
+      {deepDiveThesis && (
+        <ThesisDeepDiveModal
+          thesis={deepDiveThesis}
+          onClose={() => setDeepDiveThesis(null)}
+        />
+      )}
     </div>
   );
 };

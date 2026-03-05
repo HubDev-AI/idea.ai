@@ -228,12 +228,15 @@ export type SignalQueryResult = {
   hasPrev: boolean;
 };
 
+export type SignalSortField = 'score' | 'newest' | 'virality' | 'demand';
+
 export type SignalQueryParams = {
   windowDays: number;
   page: number;
   pageSize: number;
   source?: string;
   thesisKey?: string;
+  sort?: SignalSortField;
 };
 
 export type EmbeddingStats = {
@@ -390,13 +393,23 @@ export const createPostgresMemoryStore = ({
     }));
   };
 
+  const sortClause = (sort: SignalSortField | undefined): string => {
+    switch (sort) {
+      case 'newest': return 'ORDER BY sm.observed_at DESC';
+      case 'virality': return 'ORDER BY sm.virality DESC';
+      case 'demand': return 'ORDER BY sm.demand DESC';
+      default: return 'ORDER BY sm.blended DESC';
+    }
+  };
+
   const querySignals = async (params: SignalQueryParams): Promise<SignalQueryResult> => {
-    const { windowDays, page, pageSize, source, thesisKey } = params;
+    const { windowDays, page, pageSize, source, thesisKey, sort } = params;
     const conditions: string[] = [];
     const values: unknown[] = [];
     let paramIdx = 1;
 
-    conditions.push(`sm.observed_at >= NOW() - INTERVAL '${windowDays} days'`);
+    conditions.push(`sm.observed_at >= NOW() - INTERVAL '1 day' * $${paramIdx++}`);
+    values.push(windowDays);
 
     if (source) {
       conditions.push(`sm.source = $${paramIdx++}`);
@@ -419,13 +432,15 @@ export const createPostgresMemoryStore = ({
     const totalItems = countResult.rows[0]?.count ?? 0;
 
     const offset = (page - 1) * pageSize;
+    const limitIdx = paramIdx++;
+    const offsetIdx = paramIdx++;
     const dataSql = `
       SELECT DISTINCT sm.signal_id, sm.topic, sm.source, sm.canonical_text,
              sm.observed_at, sm.demand, sm.timing, sm.buildability, sm.blended, sm.virality, sm.source_url
       FROM signal_memory sm ${joinClause} ${whereClause}
-      ORDER BY sm.blended DESC
-      LIMIT ${pageSize} OFFSET ${offset}`;
-    const dataResult = await pool.query<Record<string, unknown>>(dataSql, values);
+      ${sortClause(sort)}
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
+    const dataResult = await pool.query<Record<string, unknown>>(dataSql, [...values, pageSize, offset]);
 
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const items: MemorySignalRow[] = dataResult.rows.map((row) => ({

@@ -3,7 +3,8 @@ import { recommendNextAction } from '@idea/pipeline/src/recommend_action';
 import type { FastifyInstance } from 'fastify';
 import type {
   MemorySignalRow,
-  PostgresMemoryStore
+  PostgresMemoryStore,
+  SignalSortField
 } from '../runtime/postgres_memory_store';
 
 export type { FeedRecord, PaginatedFeedResponse } from '@idea/contracts/src/api';
@@ -94,6 +95,7 @@ export const registerFeedRoute = (
       window?: string;
       source?: string;
       thesis_key?: string;
+      sort?: string;
     };
   }>('/v1/signals', {
     schema: {
@@ -104,7 +106,8 @@ export const registerFeedRoute = (
           page_size: { type: 'string', pattern: '^[0-9]+$' },
           window: { type: 'string' },
           source: { type: 'string' },
-          thesis_key: { type: 'string' }
+          thesis_key: { type: 'string' },
+          sort: { type: 'string', enum: ['score', 'newest', 'virality', 'demand'] }
         }
       }
     }
@@ -119,6 +122,7 @@ export const registerFeedRoute = (
 
     const sourceParam = request.query.source;
     const thesisKeyParam = request.query.thesis_key;
+    const sortParam = request.query.sort as SignalSortField | undefined;
 
     // When memoryStore is available, use DB-backed pagination via querySignals
     if (deps.memoryStore) {
@@ -134,6 +138,7 @@ export const registerFeedRoute = (
       };
       if (sourceParam !== undefined) queryParams.source = sourceParam;
       if (thesisKeyParam !== undefined) queryParams.thesisKey = thesisKeyParam;
+      if (sortParam !== undefined) queryParams.sort = sortParam;
       const result = await deps.memoryStore.querySignals(queryParams);
 
       const items = result.items

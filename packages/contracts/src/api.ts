@@ -44,6 +44,14 @@ export type ConnectorStatusRecord = {
   cadence: 'hourly' | 'daily' | null;
 };
 
+export type RefreshMeta = {
+  last_hourly_run: string | null;
+  last_daily_run: string | null;
+  hourly_interval_ms: number;
+  daily_interval_ms: number;
+  refreshing: 'hourly' | 'daily' | null;
+};
+
 // -- Execution logs ------------------------------------------------ */
 
 export type ExecutionLogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -84,6 +92,7 @@ export type AiHealthRecord = {
   run_id: string | null;
   refreshed_at: string | null;
   provider_setting: 'claude' | 'codex' | 'both';
+  primary_provider: AiProviderName;
   judge_mode: 'single' | 'ensemble';
   fallback_enabled: boolean;
   retry_budget: number;
@@ -104,6 +113,16 @@ export type ThesisListItem = {
   problemStatement: string;
   sourceCount: number;
   estimatedScope: 'small' | 'medium' | 'large' | null;
+  lastSeenAt: string;
+  hasDeepDive: boolean;
+};
+
+export type ThesisStats = {
+  total: number;
+  promoted: number;
+  watching: number;
+  totalEvidence: number;
+  totalSources: number;
 };
 
 export type ThesisPage = {
@@ -114,6 +133,17 @@ export type ThesisPage = {
   total_pages: number;
   has_next: boolean;
   has_prev: boolean;
+  stats: ThesisStats;
+};
+
+export type ThesisDeepDive = {
+  canonicalKey: string;
+  summary: string;
+  howItWorks: string;
+  growthStrategy: string;
+  buildSuggestions: string;
+  generatedBy: string;
+  createdAt: string;
 };
 
 export type AgentRunResult = {
@@ -124,9 +154,11 @@ export type AgentRunResult = {
   journalEntriesWritten: number;
   clustersAnalyzed: number;
   deepDivesPerformed: number;
+  provider: string | null;
 };
 
 export type AgentStatusRecord = {
+  isRunning: boolean;
   lastRun: {
     timestamp: string;
     thesesUpdated: number;
@@ -134,6 +166,7 @@ export type AgentStatusRecord = {
     clustersAnalyzed: number;
     deepDivesPerformed: number;
     journalEntriesWritten: number;
+    provider: string | null;
   } | null;
   investigateNext: string | null;
 };

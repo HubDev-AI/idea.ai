@@ -1,5 +1,5 @@
 import rateLimit from '@fastify/rate-limit';
-import type { AgentStatusRecord } from '@idea/contracts/src/api';
+import type { AgentStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AgentRunResult } from './jobs/agent_runner';
 import { registerAgentStatusRoute } from './routes/agent_status';
@@ -11,8 +11,11 @@ import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_s
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
 import { registerThesesRoute } from './routes/theses';
 import type { AgentRunStore } from './runtime/agent_run_store';
+import type { DeepDiveStore } from './runtime/deep_dive_store';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
+import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
+import type { ExecutionLogger } from './runtime/execution_logger';
 
 export type ServerDeps = {
   listSignals: () => Promise<FeedRecord[]>;
@@ -21,6 +24,8 @@ export type ServerDeps = {
   getAiHealth: () => Promise<AiHealthRecord>;
   thesisStore?: ThesisStore;
   memoryStore?: PostgresMemoryStore | null;
+  deepDiveStore?: DeepDiveStore | null;
+  deepDiveAi?: DeepDiveGeneratorDeps | null;
   corsOrigins?: string[];
   apiKey?: string;
   rateLimitMax?: number;
@@ -28,6 +33,9 @@ export type ServerDeps = {
   triggerAgentRun?: () => Promise<AgentRunResult>;
   agentRunStore?: AgentRunStore | null;
   infraStatusDeps?: InfraStatusDeps;
+  getRefreshMeta?: () => RefreshMeta;
+  triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
+  logger?: ExecutionLogger;
 };
 
 const defaultDeps: ServerDeps = {
@@ -38,6 +46,7 @@ const defaultDeps: ServerDeps = {
     run_id: null,
     refreshed_at: null,
     provider_setting: 'claude',
+    primary_provider: 'claude',
     judge_mode: 'single',
     fallback_enabled: false,
     retry_budget: 0,
@@ -119,7 +128,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   registerFeedRoute(app, feedDeps);
   registerConnectorRoute(app, {
     listConnectors: resolvedDeps.listConnectors,
-    memoryStore: resolvedDeps.memoryStore ?? null
+    memoryStore: resolvedDeps.memoryStore ?? null,
+    getRefreshMeta: resolvedDeps.getRefreshMeta,
+    triggerRefresh: resolvedDeps.triggerRefresh,
+    logger: resolvedDeps.logger
   });
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
@@ -136,7 +148,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   if (resolvedDeps.thesisStore) {
     registerThesesRoute(app, {
       store: resolvedDeps.thesisStore,
-      memoryStore: resolvedDeps.memoryStore ?? null
+      memoryStore: resolvedDeps.memoryStore ?? null,
+      deepDiveStore: resolvedDeps.deepDiveStore ?? null,
+      deepDiveAi: resolvedDeps.deepDiveAi ?? null,
+      logger: resolvedDeps.logger
     });
   }
 
