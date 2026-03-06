@@ -125,6 +125,9 @@ export type ThesisListItem = {
   posteriorConfidence?: number;
   velocity?: number;
   corroborationScore?: number;
+  debateVerdict?: 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null;
+  categoryEmerging?: boolean;
+  supplyDemand?: 'opportunity' | 'competitive' | 'niche' | 'saturated' | null;
 };
 
 export type ThesisStats = {

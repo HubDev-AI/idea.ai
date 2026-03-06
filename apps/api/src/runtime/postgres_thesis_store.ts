@@ -224,18 +224,26 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
              ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality,
-             EXISTS(SELECT 1 FROM thesis_deep_dives dd WHERE dd.canonical_key = tc.canonical_key) AS has_deep_dive
+             EXISTS(SELECT 1 FROM thesis_deep_dives dd WHERE dd.canonical_key = tc.canonical_key) AS has_deep_dive,
+             dv.debate_verdict
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+      LEFT JOIN LATERAL (
+        SELECT moderator_verdict->>'verdict' AS debate_verdict
+        FROM thesis_debates td
+        WHERE td.thesis_key = tc.canonical_key
+        ORDER BY td.created_at DESC LIMIT 1
+      ) dv ON true
       ${where}
-      GROUP BY tc.id
+      GROUP BY tc.id, dv.debate_verdict
       ORDER BY ${sort === 'latest' ? 'tc.last_seen_at DESC' : sort === 'evidence' ? 'evidence_count DESC' : sort === 'newest' ? 'tc.first_seen_at DESC' : 'tc.confidence DESC'}
       LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
-    const result = await pool.query<ThesisRow & { has_deep_dive: boolean }>(sql, [...params, pageSize, offset]);
+    const result = await pool.query<ThesisRow & { has_deep_dive: boolean; debate_verdict: string | null }>(sql, [...params, pageSize, offset]);
     const items = result.rows.map(rowToDraft);
     const deepDiveFlags = new Map(result.rows.map((r) => [r.canonical_key, r.has_deep_dive]));
+    const debateVerdicts = new Map(result.rows.map((r) => [r.canonical_key, r.debate_verdict ?? null]));
 
     return {
       items: items.map((d) => ({
@@ -254,6 +262,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         posteriorConfidence: (d as any).posteriorConfidence ?? d.confidence,
         velocity: (d as any).velocity ?? undefined,
         corroborationScore: (d as any).corroborationScore ?? undefined,
+        debateVerdict: (debateVerdicts.get(d.canonicalKey) ?? null) as 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null,
       })),
       page: safePage,
       page_size: pageSize,
