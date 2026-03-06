@@ -16,6 +16,8 @@ import {
   parseBroadScanResponse,
   parseDeepDiveResponse,
 } from './research_agent';
+import { corroborationScore } from '@idea/pipeline/src/scoring/correlation';
+import { computeVelocity, velocityMultiplier } from '@idea/pipeline/src/scoring/velocity';
 import { type ClusterableSignal, clusterSignals } from './signal_clusterer';
 import type { ThesisEvidenceDraft } from './thesis_synthesizer';
 
@@ -123,6 +125,26 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   }
 
   const clusters = clusterSignals(clusterableSignals);
+
+  // Compute velocity and corroboration per cluster for thesis enrichment
+  const clusterMetrics = new Map<number, { velocity: number; corroboration: number }>();
+  const now7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const now30d = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  for (const cluster of clusters) {
+    const clusterSignalIds = new Set(cluster.representatives.map((r) => r.signal_id));
+    const matchedSignals = recentSignals.filter((s) => clusterSignalIds.has(s.signal_id));
+    let week = 0;
+    let month = 0;
+    for (const s of matchedSignals) {
+      const ts = new Date(s.observed_at).getTime();
+      if (ts >= now7d) week++;
+      if (ts >= now30d) month++;
+    }
+    const avgWeekly = month > 0 ? month / 4 : 0;
+    const vel = computeVelocity(week, avgWeekly);
+    const corr = corroborationScore(cluster.sources);
+    clusterMetrics.set(cluster.id, { velocity: vel, corroboration: corr });
+  }
 
   await log.info('agent_runner', 'clustering complete', {
     signal_count: recentSignals.length,
@@ -464,6 +486,50 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     }
 
     deepDivesPerformed++;
+  }
+
+  // === Enrich all theses with velocity and corroboration from cluster data ===
+  if (clusters.length > 0) {
+    const allThesesNow = await deps.thesisStore.list();
+    let enriched = 0;
+    for (const thesis of allThesesNow) {
+      // Find the best matching cluster by checking if cluster representatives overlap with thesis evidence signals
+      // Fallback: use the most recent cluster metrics globally
+      let bestMetrics: { velocity: number; corroboration: number } | undefined;
+
+      // Match thesis to cluster via signal overlap with representatives
+      for (const cluster of clusters) {
+        const repIds = new Set(cluster.representatives.map((r) => r.signal_id));
+        const hasOverlap = thesis.evidence.some((e) => repIds.has(e.signal_id));
+        if (hasOverlap) {
+          bestMetrics = clusterMetrics.get(cluster.id);
+          break;
+        }
+      }
+
+      // Fallback: compute from cluster sources that mention similar topics
+      if (!bestMetrics) {
+        const matchingCluster = clusters.find((c) =>
+          c.label.toLowerCase().includes(thesis.topic.toLowerCase()) ||
+          thesis.title.toLowerCase().includes(c.label.toLowerCase().split(' ')[0])
+        );
+        if (matchingCluster) {
+          bestMetrics = clusterMetrics.get(matchingCluster.id);
+        }
+      }
+
+      if (bestMetrics) {
+        await deps.thesisStore.upsert({
+          ...thesis,
+          velocity: Math.round(bestMetrics.velocity * 100) / 100,
+          corroborationScore: Math.round(bestMetrics.corroboration * 100) / 100,
+        });
+        enriched++;
+      }
+    }
+    if (enriched > 0) {
+      await log.info('agent_runner', 'theses enriched with velocity/corroboration', { enriched, total: allThesesNow.length });
+    }
   }
 
   // === Phase 3: Commit journal entries ===
