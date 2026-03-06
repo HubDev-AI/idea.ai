@@ -18,6 +18,9 @@ export type ThesisCardProps = {
     posteriorConfidence?: number;
     velocity?: number;
     corroborationScore?: number;
+    debateVerdict?: 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null;
+    categoryEmerging?: boolean;
+    supplyDemand?: 'opportunity' | 'competitive' | 'niche' | 'saturated' | null;
   };
   profileDisplay?: { badge: string; badgeColor: string } | null;
   isActive?: boolean;
@@ -96,6 +99,16 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
               {scopeLabel[thesis.estimatedScope].text}
             </span>
           )}
+          {thesis.debateVerdict && (
+            <span
+              className={`thesis-verdict-badge verdict-${thesis.debateVerdict.replace(/_/g, '-')}`}
+              title={`Debate: ${thesis.debateVerdict.replace(/_/g, ' ')}`}
+            >
+              {thesis.debateVerdict === 'strong_opportunity' ? '\u2713\u2713' :
+               thesis.debateVerdict === 'needs_investigation' ? '?' :
+               thesis.debateVerdict === 'contested' ? '\u26A0' : '\u2717'}
+            </span>
+          )}
           <span className="thesis-confidence" style={{ color: confidenceColor(displayConfidence) }}>
             {displayConfidence}%
           </span>
@@ -130,6 +143,15 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
             </span>
           ) : null;
         })()}
+        {thesis.categoryEmerging && (
+          <span className="thesis-category-emerging" title="Emerging category detected">new category</span>
+        )}
+        {thesis.supplyDemand && thesis.supplyDemand !== 'competitive' && (
+          <span className={`thesis-imbalance imbalance-${thesis.supplyDemand}`}
+                title={`Market: ${thesis.supplyDemand}`}>
+            {thesis.supplyDemand}
+          </span>
+        )}
         {thesis.lastSeenAt && <span>{relativeTime(thesis.lastSeenAt)}</span>}
         {onLabelChange && (
           <span className="thesis-label-btns">
