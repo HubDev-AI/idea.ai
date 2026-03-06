@@ -61,15 +61,15 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
     >
       <div className="thesis-header">
         <h3 className="thesis-title">{thesis.title}</h3>
-        {profileDisplay && (
-          <span
-            className="thesis-profile-badge"
-            style={{ background: profileDisplay.badgeColor }}
-          >
-            {profileDisplay.badge}
-          </span>
-        )}
         <div className="thesis-header-right">
+          {profileDisplay && (
+            <span
+              className="thesis-profile-badge"
+              style={{ background: profileDisplay.badgeColor }}
+            >
+              {profileDisplay.badge}
+            </span>
+          )}
           {thesis.estimatedScope && scopeLabel[thesis.estimatedScope] && (
             <span
               className="thesis-scope-badge"

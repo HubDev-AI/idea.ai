@@ -696,8 +696,8 @@ const App = () => {
           {/* Right pane — Signal Feed */}
           <section className="pane pane-right" style={{ width: `${100 - splitPct}%` }}>
             <div className="pane-header">
-              <div className="pane-header-left">
-                <h2 className="pane-title">Signals</h2>
+              <h2 className="pane-title">Signals</h2>
+              <div className="pane-header-right">
                 <select
                   className="source-filter"
                   value={sourceFilter}
@@ -728,8 +728,6 @@ const App = () => {
                     </button>
                   </div>
                 )}
-              </div>
-              <div className="pane-header-right">
                 <button
                   type="button"
                   className="page-btn"
