@@ -4,61 +4,39 @@ import { fetchThesisDeepDive, generateThesisDeepDive } from '../api';
 
 type Props = {
   thesis: ThesisListItem;
+  cachedData?: ThesisDeepDive | null;
   onClose: () => void;
 };
 
-const cache = new Map<string, ThesisDeepDive>();
-const pendingGenerations = new Map<string, Promise<ThesisDeepDive>>();
-
-const ensureDeepDive = (canonicalKey: string): Promise<ThesisDeepDive> => {
-  if (cache.has(canonicalKey)) return Promise.resolve(cache.get(canonicalKey)!);
-
-  const existing = pendingGenerations.get(canonicalKey);
-  if (existing) return existing;
-
-  const promise = (async () => {
-    const cached = await fetchThesisDeepDive(canonicalKey);
-    if (cached) {
-      cache.set(canonicalKey, cached);
-      return cached;
-    }
-    const generated = await generateThesisDeepDive(canonicalKey);
-    cache.set(canonicalKey, generated);
-    return generated;
-  })();
-
-  pendingGenerations.set(canonicalKey, promise);
-  promise.finally(() => pendingGenerations.delete(canonicalKey));
-  return promise;
-};
-
-export const ThesisDeepDiveModal: React.FC<Props> = ({ thesis, onClose }) => {
-  const [data, setData] = useState<ThesisDeepDive | null>(
-    cache.get(thesis.canonicalKey) ?? null
-  );
-  const [loading, setLoading] = useState(!cache.has(thesis.canonicalKey));
+export const ThesisDeepDiveModal: React.FC<Props> = ({ thesis, cachedData, onClose }) => {
+  const [data, setData] = useState<ThesisDeepDive | null>(cachedData ?? null);
+  const [loading, setLoading] = useState(!cachedData);
   const [error, setError] = useState<string | null>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (cache.has(thesis.canonicalKey)) return;
+    if (cachedData || data) return;
 
     let cancelled = false;
-    ensureDeepDive(thesis.canonicalKey)
-      .then((result) => {
+    (async () => {
+      try {
+        let result = await fetchThesisDeepDive(thesis.canonicalKey);
+        if (!result) {
+          result = await generateThesisDeepDive(thesis.canonicalKey);
+        }
         if (!cancelled) {
           setData(result);
           setLoading(false);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to generate deep-dive');
           setLoading(false);
         }
-      });
+      }
+    })();
     return () => { cancelled = true; };
-  }, [thesis.canonicalKey]);
+  }, [thesis.canonicalKey, cachedData, data]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -75,12 +53,44 @@ export const ThesisDeepDiveModal: React.FC<Props> = ({ thesis, onClose }) => {
     [onClose]
   );
 
+  const buildMarkdown = (): string => {
+    const lines = [
+      `# ${thesis.title}`,
+      '',
+      `**Confidence:** ${thesis.confidence}%${thesis.estimatedScope ? ` | **Scope:** ${thesis.estimatedScope}` : ''} | **Evidence:** ${thesis.evidenceCount} | **Sources:** ${thesis.sourceCount}`,
+      '',
+      `## Problem`,
+      thesis.problemStatement,
+    ];
+    if (data) {
+      lines.push('', `## What is this?`, data.summary);
+      lines.push('', `## How it works`, data.howItWorks);
+      lines.push('', `## Growth strategy`, data.growthStrategy);
+      lines.push('', `## Build suggestions`, data.buildSuggestions);
+    }
+    return lines.join('\n');
+  };
+
   return (
     <div className="deep-dive-backdrop" ref={backdropRef} onClick={handleBackdropClick}>
       <div className="deep-dive-modal">
         <div className="deep-dive-header">
           <h2 className="deep-dive-title">{thesis.title}</h2>
-          <button className="deep-dive-close" onClick={onClose} type="button">&times;</button>
+          <div className="deep-dive-header-actions">
+            {data && (
+              <button
+                className="deep-dive-copy-btn"
+                onClick={() => {
+                  navigator.clipboard.writeText(buildMarkdown());
+                }}
+                type="button"
+                title="Copy as Markdown"
+              >
+                Copy MD
+              </button>
+            )}
+            <button className="deep-dive-close" onClick={onClose} type="button">&times;</button>
+          </div>
         </div>
 
         <div className="deep-dive-meta">

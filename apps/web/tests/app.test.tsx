@@ -89,7 +89,8 @@ const mockTheses = [
     evidenceCount: 3,
     problemStatement: 'Engineering teams waste weeks onboarding new developers',
     sourceCount: 2,
-    estimatedScope: 'medium' as const
+    estimatedScope: 'medium' as const,
+    hasDeepDive: true
   }
 ];
 
@@ -149,6 +150,22 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
 
     if (url.includes('/v1/logs')) {
       return Promise.resolve(new Response(JSON.stringify(mockLogs), { status: 200 }));
+    }
+
+    // Must come before /v1/theses to avoid prefix match
+    if (url.includes('/deep-dive')) {
+      if (url.includes('soc2-automation')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          canonicalKey: 'soc2-automation',
+          summary: 'SOC2 automation test summary',
+          howItWorks: 'How it works',
+          growthStrategy: 'Growth strategy',
+          buildSuggestions: 'Build suggestions',
+          generatedBy: 'test',
+          createdAt: '2026-02-24T00:00:00.000Z'
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('', { status: 404 }));
     }
 
     if (url.includes('/v1/theses')) {

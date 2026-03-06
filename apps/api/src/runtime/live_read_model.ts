@@ -1105,6 +1105,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
         };
         if (query.level !== undefined) logArgs.level = query.level;
         if (query.run_id !== undefined) logArgs.runId = query.run_id;
+        if (query.component !== undefined) logArgs.component = query.component;
         const rows = await readExecutionLogs(logArgs);
 
         if (query.scope === 'all' || query.run_id) {

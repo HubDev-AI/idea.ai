@@ -24,7 +24,7 @@ export const registerThesesRoute = (
     'store' in storeOrDeps ? storeOrDeps : { store: storeOrDeps };
 
   app.get('/v1/theses', async (request) => {
-    const query = request.query as { page?: string; page_size?: string; status?: string; sort?: string; profile?: string };
+    const query = request.query as { page?: string; page_size?: string; status?: string; sort?: string; profile?: string; label?: string };
     const validSorts = ['score', 'latest', 'evidence', 'newest'] as const;
     const sort = validSorts.includes(query.sort as typeof validSorts[number])
       ? (query.sort as typeof validSorts[number])
@@ -40,7 +40,8 @@ export const registerThesesRoute = (
         pageSize,
         sort,
         ...(query.status ? { status: query.status } : {}),
-        ...(profile !== 'all' ? { profile } : {})
+        ...(profile !== 'all' ? { profile } : {}),
+        ...(query.label ? { label: query.label } : {})
       });
     }
 
@@ -72,6 +73,46 @@ export const registerThesesRoute = (
     }
 
     return draft;
+  });
+
+  const validLabels = new Set(['favourite', 'later', 'dismissed']);
+
+  app.patch('/v1/theses/:key/label', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: { key: { type: 'string', minLength: 1, maxLength: 200 } },
+        required: ['key']
+      },
+      body: {
+        type: 'object',
+        properties: {
+          label: { type: ['string', 'null'] }
+        },
+        required: ['label']
+      }
+    }
+  }, async (request, reply) => {
+    const { key } = request.params as { key: string };
+    const { label } = request.body as { label: string | null };
+
+    if (label !== null && !validLabels.has(label)) {
+      reply.code(400);
+      return { error: `Invalid label. Must be one of: ${[...validLabels].join(', ')} or null` };
+    }
+
+    if (!deps.store.setLabel) {
+      reply.code(503);
+      return { error: 'Label updates not supported' };
+    }
+
+    const result = await deps.store.setLabel(key, label as any);
+    if (!result) {
+      reply.code(404);
+      return { error: 'Thesis not found' };
+    }
+
+    return result;
   });
 
   app.post('/v1/theses/synthesize', {
@@ -160,23 +201,38 @@ export const registerThesesRoute = (
     }
 
     // Generate via AI
-    const { result, provider } = await generateDeepDive({
-      title: thesis.title,
-      problemStatement: thesis.problemStatement,
-      targetBuyer: thesis.targetBuyer,
-      proposedSolution: thesis.proposedSolution,
-      confidence: thesis.confidence,
-    }, { ...deps.deepDiveAi, logger: deps.logger });
+    await deps.logger?.info('deep_dive', 'deep-dive generation requested', { thesis: key, title: thesis.title });
+    const startMs = Date.now();
+    try {
+      const { result, provider } = await generateDeepDive({
+        title: thesis.title,
+        problemStatement: thesis.problemStatement,
+        targetBuyer: thesis.targetBuyer,
+        proposedSolution: thesis.proposedSolution,
+        confidence: thesis.confidence,
+      }, { ...deps.deepDiveAi, logger: deps.logger });
 
-    // Save and return
-    const saved = await deps.deepDiveStore.save(key, {
-      summary: result.summary,
-      howItWorks: result.howItWorks,
-      growthStrategy: result.growthStrategy,
-      buildSuggestions: result.buildSuggestions,
-      generatedBy: provider,
-    });
+      // Save and return
+      const saved = await deps.deepDiveStore.save(key, {
+        summary: result.summary,
+        howItWorks: result.howItWorks,
+        growthStrategy: result.growthStrategy,
+        buildSuggestions: result.buildSuggestions,
+        generatedBy: provider,
+      });
 
-    return saved;
+      await deps.logger?.info('deep_dive', 'deep-dive saved', {
+        thesis: key, provider, duration_ms: Date.now() - startMs
+      });
+
+      return saved;
+    } catch (err) {
+      await deps.logger?.error('deep_dive', 'deep-dive generation failed', {
+        thesis: key,
+        error: err instanceof Error ? err.message : String(err),
+        duration_ms: Date.now() - startMs
+      });
+      throw err;
+    }
   });
 };

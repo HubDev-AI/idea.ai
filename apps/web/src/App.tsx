@@ -25,7 +25,12 @@ import {
   type ThesisSortField,
   type ThesisStats,
   triggerAgentRun,
-  triggerConnectorRefresh
+  triggerConnectorRefresh,
+  fetchThesisDeepDive,
+  generateThesisDeepDive,
+  type ThesisDeepDive,
+  setThesisLabel,
+  type ThesisLabel,
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
@@ -98,6 +103,10 @@ const App = () => {
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
   const [deepDiveThesis, setDeepDiveThesis] = useState<ThesisListItem | null>(null);
+  const [generatingKeys, setGeneratingKeys] = useState<Set<string>>(new Set());
+  const deepDiveCache = useRef(new Map<string, ThesisDeepDive>());
+  const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' }[]>([]);
+  const toastIdRef = useRef(0);
   const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
@@ -113,8 +122,11 @@ const App = () => {
   });
   const [profiles, setProfiles] = useState<ProfileDisplay[]>([]);
   const [activeProfile, setActiveProfile] = useState('all');
+  const [labelFilter, setLabelFilter] = useState<string>('all');
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
+  const [logComponentFilter, setLogComponentFilter] = useState('all');
+  const [logLevelFilter, setLogLevelFilter] = useState<Set<ExecutionLogRecord['level']>>(new Set(['info', 'warn', 'error']));
   const [splitPct, setSplitPct] = useState(50);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pageInfo, setPageInfo] = useState({
@@ -126,7 +138,22 @@ const App = () => {
     hasPrev: false
   });
   const [latestSignalAt, setLatestSignalAt] = useState<string | null>(null);
-  const renderedLogs = useMemo(() => logs.slice().reverse(), [logs]);
+  const logComponents = useMemo(() => {
+    const set = new Set<string>();
+    for (const entry of logs) set.add(entry.component);
+    return Array.from(set).sort();
+  }, [logs]);
+
+  const renderedLogs = useMemo(() => {
+    let filtered = logs;
+    if (logLevelFilter.size < 4) {
+      filtered = filtered.filter((entry) => logLevelFilter.has(entry.level));
+    }
+    if (logComponentFilter !== 'all') {
+      filtered = filtered.filter((entry) => entry.component === logComponentFilter);
+    }
+    return filtered.slice().reverse();
+  }, [logs, logLevelFilter, logComponentFilter]);
   const logListRef = useRef<HTMLUListElement | null>(null);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -225,7 +252,7 @@ const App = () => {
           setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
           // Refresh theses and signals to reflect agent changes
           Promise.allSettled([
-            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField, profile: activeProfile }),
+            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField, profile: activeProfile, ...(labelFilter !== 'all' ? { label: labelFilter } : {}) }),
             fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
             fetchSignalCounts()
           ]).then(([thesesRes, signalsRes, countsRes]) => {
@@ -294,6 +321,7 @@ const App = () => {
           pageSize: 10,
           sort: thesisSortField,
           profile: activeProfile,
+          ...(labelFilter !== 'all' ? { label: labelFilter } : {}),
         });
         if (isCancelled) return;
         setTheses(tp.items);
@@ -310,7 +338,7 @@ const App = () => {
     };
     void loadTheses();
     return () => { isCancelled = true; };
-  }, [requestedThesisPage, thesisSortField, activeProfile]);
+  }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -407,6 +435,18 @@ const App = () => {
     list.scrollTop = list.scrollHeight;
   }, [renderedLogs, logDrawerOpen]);
 
+  const toggleLogLevel = useCallback((level: ExecutionLogRecord['level']) => {
+    setLogLevelFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(level)) {
+        if (next.size > 1) next.delete(level);
+      } else {
+        next.add(level);
+      }
+      return next;
+    });
+  }, []);
+
   const handleLogScroll = useCallback(() => {
     const list = logListRef.current;
     if (!list) return;
@@ -435,6 +475,77 @@ const App = () => {
     }
   };
 
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+  }, []);
+
+  const handleExploreThesis = useCallback((thesis: ThesisListItem) => {
+    const key = thesis.canonicalKey;
+    if (generatingKeys.has(key)) return;
+
+    setGeneratingKeys((prev) => new Set(prev).add(key));
+
+    (async () => {
+      try {
+        // Check if already generated server-side
+        let data = await fetchThesisDeepDive(key);
+        if (!data) {
+          data = await generateThesisDeepDive(key);
+        }
+        deepDiveCache.current.set(key, data);
+        // Update hasDeepDive on the thesis in local state
+        setTheses((prev) => prev.map((t) =>
+          t.canonicalKey === key ? { ...t, hasDeepDive: true } : t
+        ));
+        showToast(`Deep dive ready: ${thesis.title.slice(0, 50)}`);
+      } catch (err) {
+        showToast(
+          `Failed to generate deep dive: ${err instanceof Error ? err.message : 'unknown error'}`,
+          'error'
+        );
+      } finally {
+        setGeneratingKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    })();
+  }, [generatingKeys, showToast]);
+
+  const handleViewThesis = useCallback((thesis: ThesisListItem) => {
+    const cached = deepDiveCache.current.get(thesis.canonicalKey);
+    if (cached) {
+      setDeepDiveThesis(thesis);
+      return;
+    }
+    // Data exists server-side but not in local cache — fetch first then open
+    (async () => {
+      try {
+        const data = await fetchThesisDeepDive(thesis.canonicalKey);
+        if (data) {
+          deepDiveCache.current.set(thesis.canonicalKey, data);
+        }
+      } catch {
+        // Modal will handle loading
+      }
+      setDeepDiveThesis(thesis);
+    })();
+  }, []);
+
+  const handleLabelChange = useCallback(async (canonicalKey: string, label: ThesisLabel) => {
+    try {
+      await setThesisLabel(canonicalKey, label);
+      setTheses((prev) => prev.map((t) =>
+        t.canonicalKey === canonicalKey ? { ...t, label } : t
+      ));
+    } catch {
+      showToast('Failed to update label', 'error');
+    }
+  }, [showToast]);
+
   const handleRunAgent = async () => {
     setAgentRunning(true);
     setAgentRunResult(null);
@@ -459,7 +570,7 @@ const App = () => {
         thesisStats={thesisStats}
         thesisFilter={thesisFilter}
         onThesisFilter={handleThesisFilter}
-        signalCount={pageInfo.totalItems}
+        signalCount={Object.values(signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
         latestSignalAt={latestSignalAt}
         signalCounts={signalCounts}
         onRunAgent={handleRunAgent}
@@ -486,59 +597,71 @@ const App = () => {
           <section className="pane pane-left" style={{ width: `${splitPct}%` }}>
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
-              <div className="profile-tabs">
-                <button
-                  type="button"
-                  className={`profile-tab ${activeProfile === 'all' ? 'active' : ''}`}
-                  onClick={() => { setActiveProfile('all'); setRequestedThesisPage(1); }}
-                >
-                  All
-                </button>
-                {profiles.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`profile-tab ${activeProfile === p.id ? 'active' : ''}`}
-                    onClick={() => { setActiveProfile(p.id); setRequestedThesisPage(1); }}
-                    style={{ '--tab-color': p.display.badgeColor } as React.CSSProperties}
-                  >
-                    {p.display.badge}
-                  </button>
-                ))}
-              </div>
-              <select
-                className="source-filter"
-                value={thesisSortField}
-                onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
-              >
-                <option value="newest">Newest</option>
-                <option value="score">By Score</option>
-                <option value="latest">Latest Activity</option>
-                <option value="evidence">Most Evidence</option>
-              </select>
-              {thesisPageInfo.totalPages > 1 && (
-                <div className="pane-header-right">
+              <div className="pane-header-right">
+                <div className="profile-tabs">
                   <button
                     type="button"
-                    className="page-btn"
-                    onClick={() => setRequestedThesisPage((v) => Math.max(1, v - 1))}
-                    disabled={!thesisPageInfo.hasPrev || isLoading}
+                    className={`profile-tab ${activeProfile === 'all' ? 'active' : ''}`}
+                    onClick={() => { setActiveProfile('all'); setRequestedThesisPage(1); }}
                   >
-                    Prev
+                    All
                   </button>
-                  <span className="page-info">
-                    {thesisPageInfo.page} / {thesisPageInfo.totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    className="page-btn"
-                    onClick={() => setRequestedThesisPage((v) => v + 1)}
-                    disabled={!thesisPageInfo.hasNext || isLoading}
-                  >
-                    Next
-                  </button>
+                  {profiles.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`profile-tab ${activeProfile === p.id ? 'active' : ''}`}
+                      onClick={() => { setActiveProfile(p.id); setRequestedThesisPage(1); }}
+                      style={{ '--tab-color': p.display.badgeColor } as React.CSSProperties}
+                    >
+                      {p.display.badge}
+                    </button>
+                  ))}
                 </div>
-              )}
+                <select
+                  className="source-filter"
+                  value={labelFilter}
+                  onChange={(e) => { setLabelFilter(e.target.value); setRequestedThesisPage(1); }}
+                >
+                  <option value="all">All Labels</option>
+                  <option value="favourite">Favourites</option>
+                  <option value="later">Later</option>
+                  <option value="dismissed">Dismissed</option>
+                </select>
+                <select
+                  className="source-filter"
+                  value={thesisSortField}
+                  onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="score">By Score</option>
+                  <option value="latest">Latest Activity</option>
+                  <option value="evidence">Most Evidence</option>
+                </select>
+                {thesisPageInfo.totalPages > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => setRequestedThesisPage((v) => Math.max(1, v - 1))}
+                      disabled={!thesisPageInfo.hasPrev || isLoading}
+                    >
+                      Prev
+                    </button>
+                    <span className="page-info">
+                      {thesisPageInfo.page} / {thesisPageInfo.totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => setRequestedThesisPage((v) => v + 1)}
+                      disabled={!thesisPageInfo.hasNext || isLoading}
+                    >
+                      Next
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="pane-scroll">
               {theses.map((t) => (
@@ -551,7 +674,10 @@ const App = () => {
                     thesisFilter === t.canonicalKey ? null : t.canonicalKey,
                     thesisFilter === t.canonicalKey ? '' : t.title
                   )}
-                  onExplore={() => setDeepDiveThesis(t)}
+                  isGenerating={generatingKeys.has(t.canonicalKey)}
+                  onExplore={() => handleExploreThesis(t)}
+                  onView={() => handleViewThesis(t)}
+                  onLabelChange={(label) => handleLabelChange(t.canonicalKey, label)}
                 />
               ))}
               {theses.length === 0 && (
@@ -570,8 +696,8 @@ const App = () => {
           {/* Right pane — Signal Feed */}
           <section className="pane pane-right" style={{ width: `${100 - splitPct}%` }}>
             <div className="pane-header">
-              <div className="pane-header-left">
-                <h2 className="pane-title">Signals</h2>
+              <h2 className="pane-title">Signals</h2>
+              <div className="pane-header-right">
                 <select
                   className="source-filter"
                   value={sourceFilter}
@@ -602,8 +728,6 @@ const App = () => {
                     </button>
                   </div>
                 )}
-              </div>
-              <div className="pane-header-right">
                 <button
                   type="button"
                   className="page-btn"
@@ -703,6 +827,31 @@ const App = () => {
           </button>
           {logDrawerOpen && (
             <div className="log-scroll-wrapper">
+              <div className="log-filters">
+                <select
+                  className="log-filter-select"
+                  value={logComponentFilter}
+                  onChange={(e) => setLogComponentFilter(e.target.value)}
+                >
+                  <option value="all">All components</option>
+                  {logComponents.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <span className="log-level-toggles">
+                  {(['info', 'warn', 'error', 'debug'] as const).map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      className={`log-level-toggle ${lvl} ${logLevelFilter.has(lvl) ? 'active' : ''}`}
+                      onClick={() => toggleLogLevel(lvl)}
+                    >
+                      {logLevelIcons[lvl]} {lvl}
+                    </button>
+                  ))}
+                </span>
+                <span className="log-filter-count">{renderedLogs.length} entries</span>
+              </div>
               <ul ref={logListRef} className="log-list terminal-list" onScroll={handleLogScroll}>
                 {renderedLogs.map((entry, index) => (
                   <li
@@ -731,8 +880,18 @@ const App = () => {
       {deepDiveThesis && (
         <ThesisDeepDiveModal
           thesis={deepDiveThesis}
+          cachedData={deepDiveCache.current.get(deepDiveThesis.canonicalKey) ?? null}
           onClose={() => setDeepDiveThesis(null)}
         />
+      )}
+      {toasts.length > 0 && (
+        <div className="toast-container">
+          {toasts.map((t) => (
+            <div key={t.id} className={`toast toast-${t.type}`}>
+              {t.message}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

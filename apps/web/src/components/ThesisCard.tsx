@@ -14,11 +14,15 @@ export type ThesisCardProps = {
     lastSeenAt?: string;
     hasDeepDive?: boolean;
     profileId?: string;
+    label?: 'favourite' | 'later' | 'dismissed' | null;
   };
   profileDisplay?: { badge: string; badgeColor: string } | null;
   isActive?: boolean;
+  isGenerating?: boolean;
   onClick?: () => void;
   onExplore?: () => void;
+  onView?: () => void;
+  onLabelChange?: (label: 'favourite' | 'later' | 'dismissed' | null) => void;
 };
 
 const confidenceColor = (confidence: number): string => {
@@ -33,12 +37,23 @@ const scopeLabel: Record<string, { text: string; color: string }> = {
   large: { text: 'L', color: 'var(--err)' }
 };
 
-export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, isActive, onClick, onExplore }) => {
+export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, isActive, isGenerating, onClick, onExplore, onView, onLabelChange }) => {
   const statusClass = thesis.status === 'promoted' ? 'promoted' : thesis.status === 'watching' ? 'watching' : '';
+  const hasData = thesis.hasDeepDive === true;
+
+  const handleExploreClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isGenerating) return;
+    if (hasData && onView) {
+      onView();
+    } else if (onExplore) {
+      onExplore();
+    }
+  };
 
   return (
     <div
-      className={`thesis-card ${statusClass} ${isActive ? 'thesis-active' : ''}`}
+      className={`thesis-card ${statusClass} ${isActive ? 'thesis-active' : ''} ${thesis.label === 'dismissed' ? 'thesis-dismissed' : ''}`}
       onClick={onClick}
       role="button"
       tabIndex={onClick ? 0 : undefined}
@@ -46,15 +61,15 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
     >
       <div className="thesis-header">
         <h3 className="thesis-title">{thesis.title}</h3>
-        {profileDisplay && (
-          <span
-            className="thesis-profile-badge"
-            style={{ background: profileDisplay.badgeColor }}
-          >
-            {profileDisplay.badge}
-          </span>
-        )}
         <div className="thesis-header-right">
+          {profileDisplay && (
+            <span
+              className="thesis-profile-badge"
+              style={{ background: profileDisplay.badgeColor }}
+            >
+              {profileDisplay.badge}
+            </span>
+          )}
           {thesis.estimatedScope && scopeLabel[thesis.estimatedScope] && (
             <span
               className="thesis-scope-badge"
@@ -81,13 +96,42 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
         <span>{thesis.evidenceCount} evidence</span>
         <span>{thesis.sourceCount} sources</span>
         {thesis.lastSeenAt && <span>{relativeTime(thesis.lastSeenAt)}</span>}
-        {onExplore && (
+        {onLabelChange && (
+          <span className="thesis-label-btns">
+            <button
+              type="button"
+              className={`thesis-label-btn ${thesis.label === 'favourite' ? 'active favourite' : ''}`}
+              title="Favourite"
+              onClick={(e) => { e.stopPropagation(); onLabelChange(thesis.label === 'favourite' ? null : 'favourite'); }}
+            >
+              {thesis.label === 'favourite' ? '\u2605' : '\u2606'}
+            </button>
+            <button
+              type="button"
+              className={`thesis-label-btn ${thesis.label === 'later' ? 'active later' : ''}`}
+              title="Later"
+              onClick={(e) => { e.stopPropagation(); onLabelChange(thesis.label === 'later' ? null : 'later'); }}
+            >
+              {'\u23F0'}
+            </button>
+            <button
+              type="button"
+              className={`thesis-label-btn ${thesis.label === 'dismissed' ? 'active dismissed' : ''}`}
+              title="Dismiss"
+              onClick={(e) => { e.stopPropagation(); onLabelChange(thesis.label === 'dismissed' ? null : 'dismissed'); }}
+            >
+              {'\u2715'}
+            </button>
+          </span>
+        )}
+        {(onExplore || onView) && (
           <button
             type="button"
-            className={`thesis-explore-btn ${thesis.hasDeepDive ? 'has-data' : ''}`}
-            onClick={(e) => { e.stopPropagation(); onExplore(); }}
+            className={`thesis-explore-btn ${hasData ? 'has-data' : ''} ${isGenerating ? 'generating' : ''}`}
+            onClick={handleExploreClick}
+            disabled={isGenerating}
           >
-            Explore
+            {isGenerating ? 'Generating\u2026' : hasData ? 'View' : 'Explore'}
           </button>
         )}
       </div>

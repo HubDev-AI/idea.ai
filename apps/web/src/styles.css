@@ -869,7 +869,6 @@ h1, h2, h3, p {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-radius: 3px;
-  margin-left: auto;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -886,6 +885,70 @@ h1, h2, h3, p {
 .thesis-explore-btn.has-data:hover {
   background: #8e44ad;
   border-color: #8e44ad;
+}
+
+.thesis-explore-btn.generating {
+  opacity: 0.7;
+  cursor: wait;
+  border-color: #e67e22;
+  color: #e67e22;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: #e67e22; opacity: 0.6; }
+  50% { border-color: #f39c12; opacity: 1; }
+}
+
+/* Thesis label buttons */
+.thesis-label-btns {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.thesis-label-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--muted);
+  opacity: 0.4;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+  line-height: 1;
+}
+
+.thesis-card:hover .thesis-label-btn,
+.thesis-label-btn.active {
+  opacity: 1;
+}
+
+.thesis-label-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+}
+
+.thesis-label-btn.active.favourite {
+  color: #fbbf24;
+}
+
+.thesis-label-btn.active.later {
+  color: var(--accent);
+}
+
+.thesis-label-btn.active.dismissed {
+  color: var(--err);
+}
+
+/* Dismissed thesis card muted */
+.thesis-card.thesis-dismissed {
+  opacity: 0.45;
+}
+
+.thesis-card.thesis-dismissed:hover {
+  opacity: 0.7;
 }
 
 .thesis-card.thesis-active {
@@ -1199,6 +1262,80 @@ a.signal-idea-link:hover {
   flex-direction: column;
 }
 
+.log-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 1rem;
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--surface-2);
+  flex-shrink: 0;
+}
+
+.log-filter-select {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.65rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  cursor: pointer;
+}
+
+.log-level-toggles {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.log-level-toggle {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.6rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  cursor: pointer;
+  color: var(--muted);
+  opacity: 0.5;
+  transition: opacity 0.12s, border-color 0.12s;
+}
+
+.log-level-toggle.active {
+  opacity: 1;
+}
+
+.log-level-toggle.info.active {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.log-level-toggle.warn.active {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.log-level-toggle.error.active {
+  color: var(--err);
+  border-color: var(--err);
+}
+
+.log-level-toggle.debug.active {
+  color: var(--muted);
+  border-color: var(--muted);
+}
+
+.log-level-toggle:hover {
+  opacity: 0.85;
+}
+
+.log-filter-count {
+  margin-left: auto;
+  font-size: 0.6rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  color: var(--muted);
+}
+
 .log-drawer .log-list {
   flex: 1;
   overflow-y: auto;
@@ -1243,6 +1380,23 @@ a.signal-idea-link:hover {
 .terminal-row {
   margin: 0;
   padding: 0.05rem 0;
+  border-left: 2px solid transparent;
+  padding-left: 0.4rem;
+  animation: log-fade-in 0.4s ease;
+}
+
+.terminal-row.warn {
+  border-left-color: var(--warn);
+}
+
+.terminal-row.error {
+  border-left-color: var(--err);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+@keyframes log-fade-in {
+  from { background: rgba(59, 130, 246, 0.08); }
+  to { background: transparent; }
 }
 
 .terminal-line {
@@ -1277,7 +1431,6 @@ a.signal-idea-link:hover {
 .profile-tabs {
   display: flex;
   gap: 4px;
-  margin-right: 8px;
 }
 
 .profile-tab {
@@ -1419,6 +1572,33 @@ a.signal-idea-link:hover {
   color: var(--text);
 }
 
+.deep-dive-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.deep-dive-copy-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  color: var(--muted);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.deep-dive-copy-btn:hover {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
 .deep-dive-meta {
   display: flex;
   gap: 0.75rem;
@@ -1509,4 +1689,48 @@ a.signal-idea-link:hover {
   margin-top: 0.5rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--glass-border);
+}
+
+/* Toast notifications */
+.toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--card);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 0.65rem 1rem;
+  font-size: 0.78rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  color: var(--text);
+  max-width: 380px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: toast-in 0.3s ease, toast-out 0.3s ease 3.7s forwards;
+  pointer-events: auto;
+}
+
+.toast-success {
+  border-left: 3px solid var(--ok);
+}
+
+.toast-error {
+  border-left: 3px solid var(--err);
+}
+
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }

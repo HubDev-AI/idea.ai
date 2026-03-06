@@ -129,4 +129,86 @@ describe('GET /v1/theses', () => {
 
     expect(response.statusCode).toBe(404);
   });
+
+  it('PATCH /v1/theses/:key/label sets label', async () => {
+    const store = new InMemoryThesisStore();
+    await store.upsert({
+      canonicalKey: 'label-test',
+      title: 'Label Test',
+      topic: 't',
+      status: 'candidate',
+      confidence: 50,
+      scoreTotal: 50,
+      problemStatement: 'p',
+      targetBuyer: 'b',
+      proposedSolution: 's',
+      evidenceCount: 1,
+      avgDemand: 50,
+      avgTiming: 50,
+      avgBuildability: 50,
+      avgVirality: 0,
+      latestObservedAt: '2026-02-25T10:00:00Z',
+      evidence: []
+    });
+
+    const app = await buildServer({ thesisStore: store });
+    servers.push(app);
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/v1/theses/label-test/label',
+      payload: { label: 'favourite' }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().label).toBe('favourite');
+  });
+
+  it('PATCH /v1/theses/:key/label with null removes label', async () => {
+    const store = new InMemoryThesisStore();
+    await store.upsert({
+      canonicalKey: 'label-test2',
+      title: 'Label Test 2',
+      topic: 't',
+      status: 'candidate',
+      confidence: 50,
+      scoreTotal: 50,
+      problemStatement: 'p',
+      targetBuyer: 'b',
+      proposedSolution: 's',
+      evidenceCount: 1,
+      avgDemand: 50,
+      avgTiming: 50,
+      avgBuildability: 50,
+      avgVirality: 0,
+      latestObservedAt: '2026-02-25T10:00:00Z',
+      evidence: []
+    });
+
+    const app = await buildServer({ thesisStore: store });
+    servers.push(app);
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/v1/theses/label-test2/label',
+      payload: { label: null }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().label).toBeNull();
+  });
+
+  it('PATCH /v1/theses/:key/label rejects invalid label', async () => {
+    const store = new InMemoryThesisStore();
+    const app = await buildServer({ thesisStore: store });
+    servers.push(app);
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/v1/theses/any-key/label',
+      payload: { label: 'invalid' }
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
 });

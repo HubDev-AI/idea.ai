@@ -22,6 +22,7 @@ type ThesisRow = {
   avg_buildability: number | string;
   avg_virality: number | string;
   profile_id: string;
+  label: string | null;
 };
 
 const toNumber = (v: unknown): number => {
@@ -54,13 +55,14 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   latestObservedAt: new Date(row.last_seen_at).toISOString(),
   evidence: [],
   estimatedScope: toScope(row.estimated_scope),
-  profileId: row.profile_id ?? 'consumer'
+  profileId: row.profile_id ?? 'consumer',
+  label: row.label ?? null
 });
 
 export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
 
 export type PaginatedThesisStore = ThesisStore & {
-  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string }): Promise<ThesisPage>;
+  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string; label?: string }): Promise<ThesisPage>;
   close: () => Promise<void>;
 };
 
@@ -148,7 +150,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     }
   },
 
-  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score', profile }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string } = {}): Promise<ThesisPage> {
+  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score', profile, label }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string; label?: string } = {}): Promise<ThesisPage> {
     const whereClauses: string[] = [];
     const countParams: (string | number)[] = [];
     if (status) {
@@ -158,6 +160,10 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     if (profile) {
       countParams.push(profile);
       whereClauses.push(`profile_id = $${countParams.length}`);
+    }
+    if (label) {
+      countParams.push(label);
+      whereClauses.push(`label = $${countParams.length}`);
     }
     const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
@@ -233,7 +239,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         estimatedScope: d.estimatedScope ?? null,
         lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
         hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
-        profileId: (d as any).profileId ?? 'consumer'
+        profileId: (d as any).profileId ?? 'consumer',
+        label: (d as any).label ?? null
       })),
       page: safePage,
       page_size: pageSize,
@@ -243,6 +250,16 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       has_prev: safePage > 1,
       stats
     };
+  },
+
+  async setLabel(canonicalKey: string, label: 'favourite' | 'later' | 'dismissed' | null): Promise<{ label: string | null } | null> {
+    const result = await pool.query<{ label: string | null }>(
+      `UPDATE thesis_candidates SET label = $1, updated_at = NOW()
+       WHERE canonical_key = $2
+       RETURNING label`,
+      [label, canonicalKey]
+    );
+    return result.rows[0] ?? null;
   },
 
   async close(): Promise<void> {}
