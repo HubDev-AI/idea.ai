@@ -118,17 +118,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.postgres ?? 'idle')}`} />
           <span className="sidebar-row-name">Postgres</span>
+          {infraStatus?.diskUsage && (
+            <span className="sidebar-row-detail detail-count">
+              {infraStatus.diskUsage.dbSizeMb >= 1024
+                ? `${(infraStatus.diskUsage.dbSizeMb / 1024).toFixed(1)} GB`
+                : `${Math.round(infraStatus.diskUsage.dbSizeMb)} MB`}
+            </span>
+          )}
         </div>
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.ollama ?? 'idle')}`} />
           <span className="sidebar-row-name">Ollama</span>
+          {infraStatus?.ollamaSizeMb != null && (
+            <span className="sidebar-row-detail detail-count">
+              {infraStatus.ollamaSizeMb >= 1024
+                ? `${(infraStatus.ollamaSizeMb / 1024).toFixed(1)} GB`
+                : `${infraStatus.ollamaSizeMb} MB`}
+            </span>
+          )}
         </div>
         <div className="sidebar-row">
-          <span className={`status-dot ${infraStatus && infraStatus.embeddings.withEmbedding > 0 ? 'dot-ok' : 'dot-warn'}`} />
+          <span className={`status-dot ${
+            !infraStatus ? 'dot-idle'
+              : infraStatus.embeddings.total === 0 ? 'dot-idle'
+              : infraStatus.embeddings.withEmbedding === infraStatus.embeddings.total ? 'dot-ok'
+              : infraStatus.embeddings.withEmbedding > 0 ? 'dot-warn'
+              : 'dot-err'
+          }`} />
           <span className="sidebar-row-name">Embeddings</span>
           {infraStatus && (
             <span className="sidebar-row-detail detail-count">
               {infraStatus.embeddings.withEmbedding}/{infraStatus.embeddings.total}
+              {infraStatus.embeddings.total > 0 && infraStatus.embeddings.withEmbedding < infraStatus.embeddings.total
+                ? ` (${Math.round(infraStatus.embeddings.withEmbedding / infraStatus.embeddings.total * 100)}%)`
+                : ''}
             </span>
           )}
         </div>

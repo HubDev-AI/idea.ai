@@ -227,13 +227,43 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
       return true;
     },
     checkOllama: async () => {
-      const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
-      return res.ok;
+      const embedModel = process.env.OLLAMA_EMBED_MODEL ?? 'nomic-embed-text';
+      try {
+        const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+        if (!res.ok) return { ok: false, reason: `ollama returned ${res.status}` };
+        const data = await res.json() as { models?: { name: string; size?: number }[] };
+        const hasModel = data.models?.some((m) => m.name.startsWith(embedModel)) ?? false;
+        const totalBytes = data.models?.reduce((sum, m) => sum + (m.size ?? 0), 0) ?? 0;
+        const sizeMb = Math.round(totalBytes / 1024 / 1024);
+        if (!hasModel) return { ok: false, reason: `model '${embedModel}' not installed — run: ollama pull ${embedModel}`, sizeMb };
+        return { ok: true, sizeMb };
+      } catch (err) {
+        return { ok: false, reason: err instanceof Error ? err.message : 'connection failed' };
+      }
     },
     getEmbeddingStats: async () => {
       if (!memoryStore) return { total: 0, withEmbedding: 0, fallbackModel: 'none' };
       return memoryStore.getEmbeddingStats();
-    }
+    },
+    getDiskStats: pool ? async () => {
+      const dbSize = await pool.query<{ size_mb: number }>(
+        `SELECT (pg_database_size(current_database()) / 1024 / 1024)::int AS size_mb`
+      );
+      const tables = await pool.query<{ name: string; size_mb: number; rows: number }>(
+        `SELECT
+           relname AS name,
+           (pg_total_relation_size(c.oid) / 1024 / 1024)::int AS size_mb,
+           reltuples::int AS rows
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relkind = 'r'
+         ORDER BY pg_total_relation_size(c.oid) DESC`
+      );
+      return {
+        dbSizeMb: Number(dbSize.rows[0]?.size_mb ?? 0),
+        tableSizes: tables.rows.map((r) => ({ name: r.name, sizeMb: Number(r.size_mb), rows: Math.max(0, Number(r.rows)) }))
+      };
+    } : undefined
   }
 };
 if (apiKey !== undefined) serverDeps.apiKey = apiKey;

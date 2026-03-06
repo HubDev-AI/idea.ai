@@ -261,6 +261,8 @@ export type PostgresMemoryStore = {
   getEmbeddingStats: () => Promise<EmbeddingStats>;
   findConvergentSignals: (signalId: string, embedding: number[], source: string) => Promise<ConvergentMatch[]>;
   boostViralityScore: (signalId: string, boost: number) => Promise<void>;
+  listSignalsWithoutEmbeddings: (limit: number) => Promise<{ signal_id: string; canonical_text: string }[]>;
+  saveEmbedding: (signalId: string, embedding: number[], model: string) => Promise<void>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -551,6 +553,34 @@ export const createPostgresMemoryStore = ({
     );
   };
 
+  const listSignalsWithoutEmbeddings = async (limit: number): Promise<{ signal_id: string; canonical_text: string }[]> => {
+    const result = await pool.query<{ signal_id: string; canonical_text: string }>(
+      `SELECT sm.signal_id, sm.canonical_text
+       FROM signal_memory sm
+       LEFT JOIN signal_embeddings se ON se.signal_id = sm.signal_id
+       WHERE se.signal_id IS NULL
+       ORDER BY sm.observed_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return result.rows;
+  };
+
+  const saveEmbedding = async (signalId: string, embedding: number[], model: string): Promise<void> => {
+    const client = await pool.connect();
+    try {
+      await client.query(
+        `INSERT INTO signal_embeddings (signal_id, embedding, model, created_at)
+         VALUES ($1, $2::vector, $3, NOW())
+         ON CONFLICT (signal_id)
+         DO UPDATE SET embedding = EXCLUDED.embedding, model = EXCLUDED.model, created_at = NOW()`,
+        [signalId, toVectorLiteral(embedding), model]
+      );
+    } finally {
+      client.release();
+    }
+  };
+
   return {
     retriever,
     save,
@@ -561,6 +591,8 @@ export const createPostgresMemoryStore = ({
     getEmbeddingStats,
     findConvergentSignals,
     boostViralityScore,
+    listSignalsWithoutEmbeddings,
+    saveEmbedding,
     ping,
     close: async () => {
       await pool.end();

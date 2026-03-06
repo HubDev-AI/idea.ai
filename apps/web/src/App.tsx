@@ -40,7 +40,7 @@ import { connectorDisplayName, connectorSourceKey } from './connectorNames';
 
 const PAGE_SIZE = 8;
 const LOG_POLL_INTERVAL_MS = 3_000;
-const LOG_LIMIT = 120;
+const LOG_LIMIT = 500;
 const DATA_POLL_INTERVAL_MS = 15_000;
 const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
@@ -186,19 +186,49 @@ const App = () => {
     fetchProfiles().then(setProfiles).catch(() => {});
   }, []);
 
+  // Fetch signals when page/filter changes (signals only — no sidebar flicker)
   useEffect(() => {
-    const load = async (showLoading = false) => {
-      if (showLoading) {
-        setIsLoading(true);
-      }
-      const [signalResult, connectorResult, aiHealthResult, agentResult, countsResult, infraResult, refreshMetaResult] = await Promise.allSettled([
-        fetchSignals({
+    let cancelled = false;
+    const loadSignals = async () => {
+      setIsLoading(true);
+      try {
+        const result = await fetchSignals({
           page: requestedPage,
           pageSize: PAGE_SIZE,
           ...(sourceFilter !== 'all' ? { source: sourceFilter } : {}),
           ...(thesisFilter !== null ? { thesisKey: thesisFilter } : {}),
           sort: sortField,
-        }),
+        });
+        if (cancelled) return;
+        setSignals(result.items);
+        setPageInfo({
+          page: result.page,
+          pageSize: result.page_size,
+          totalItems: result.total_items,
+          totalPages: result.total_pages,
+          hasNext: result.has_next,
+          hasPrev: result.has_prev
+        });
+        if (result.page === 1 && result.items.length > 0) {
+          setLatestSignalAt(result.items[0].updated_at);
+        }
+        if (result.page !== requestedPage) {
+          setRequestedPage(result.page);
+        }
+      } catch {
+        if (!cancelled) setLoadWarning('Could not load signals');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    void loadSignals();
+    return () => { cancelled = true; };
+  }, [requestedPage, sourceFilter, thesisFilter, sortField]);
+
+  // Background polling for status data (connectors, agent, infra, counts)
+  useEffect(() => {
+    const pollStatus = async () => {
+      const [connectorResult, aiHealthResult, agentResult, countsResult, infraResult, refreshMetaResult] = await Promise.allSettled([
         fetchConnectors(),
         fetchAiHealth(),
         fetchAgentStatus(),
@@ -207,26 +237,6 @@ const App = () => {
         fetchRefreshMeta()
       ]);
       const warnings: string[] = [];
-
-      if (signalResult.status === 'fulfilled') {
-        setSignals(signalResult.value.items);
-        setPageInfo({
-          page: signalResult.value.page,
-          pageSize: signalResult.value.page_size,
-          totalItems: signalResult.value.total_items,
-          totalPages: signalResult.value.total_pages,
-          hasNext: signalResult.value.has_next,
-          hasPrev: signalResult.value.has_prev
-        });
-        if (signalResult.value.page === 1 && signalResult.value.items.length > 0) {
-          setLatestSignalAt(signalResult.value.items[0].updated_at);
-        }
-        if (signalResult.value.page !== requestedPage) {
-          setRequestedPage(signalResult.value.page);
-        }
-      } else {
-        warnings.push('signals');
-      }
 
       if (connectorResult.status === 'fulfilled') {
         setConnectors(connectorResult.value);
@@ -287,29 +297,24 @@ const App = () => {
 
       if (warnings.length > 0) {
         failCountRef.current++;
-        // Show warning immediately on initial load, after 2+ consecutive on background polls
-        if (showLoading || failCountRef.current >= 2) {
+        if (failCountRef.current >= 2) {
           setLoadWarning(`Some data could not be loaded (${warnings.join(', ')})`);
         }
       } else {
         failCountRef.current = 0;
         setLoadWarning(null);
       }
-
-      if (showLoading) {
-        setIsLoading(false);
-      }
     };
 
-    void load(true);
+    void pollStatus();
     const timer = setInterval(() => {
-      void load(false);
+      void pollStatus();
     }, DATA_POLL_INTERVAL_MS);
 
     return () => {
       clearInterval(timer);
     };
-  }, [requestedPage, sourceFilter, thesisFilter, sortField]);
+  }, []);
 
   // Separate thesis-only fetch (avoids 7-endpoint refresh on page change)
   useEffect(() => {
