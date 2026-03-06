@@ -29,6 +29,8 @@ import {
   fetchThesisDeepDive,
   generateThesisDeepDive,
   type ThesisDeepDive,
+  setThesisLabel,
+  type ThesisLabel,
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
@@ -120,6 +122,7 @@ const App = () => {
   });
   const [profiles, setProfiles] = useState<ProfileDisplay[]>([]);
   const [activeProfile, setActiveProfile] = useState('all');
+  const [labelFilter, setLabelFilter] = useState<string>('all');
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [logComponentFilter, setLogComponentFilter] = useState('all');
@@ -249,7 +252,7 @@ const App = () => {
           setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
           // Refresh theses and signals to reflect agent changes
           Promise.allSettled([
-            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField, profile: activeProfile }),
+            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField, profile: activeProfile, ...(labelFilter !== 'all' ? { label: labelFilter } : {}) }),
             fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
             fetchSignalCounts()
           ]).then(([thesesRes, signalsRes, countsRes]) => {
@@ -318,6 +321,7 @@ const App = () => {
           pageSize: 10,
           sort: thesisSortField,
           profile: activeProfile,
+          ...(labelFilter !== 'all' ? { label: labelFilter } : {}),
         });
         if (isCancelled) return;
         setTheses(tp.items);
@@ -334,7 +338,7 @@ const App = () => {
     };
     void loadTheses();
     return () => { isCancelled = true; };
-  }, [requestedThesisPage, thesisSortField, activeProfile]);
+  }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -531,6 +535,17 @@ const App = () => {
     })();
   }, []);
 
+  const handleLabelChange = useCallback(async (canonicalKey: string, label: ThesisLabel) => {
+    try {
+      await setThesisLabel(canonicalKey, label);
+      setTheses((prev) => prev.map((t) =>
+        t.canonicalKey === canonicalKey ? { ...t, label } : t
+      ));
+    } catch {
+      showToast('Failed to update label', 'error');
+    }
+  }, [showToast]);
+
   const handleRunAgent = async () => {
     setAgentRunning(true);
     setAgentRunResult(null);
@@ -604,6 +619,16 @@ const App = () => {
               </div>
               <select
                 className="source-filter"
+                value={labelFilter}
+                onChange={(e) => { setLabelFilter(e.target.value); setRequestedThesisPage(1); }}
+              >
+                <option value="all">All Labels</option>
+                <option value="favourite">Favourites</option>
+                <option value="later">Later</option>
+                <option value="dismissed">Dismissed</option>
+              </select>
+              <select
+                className="source-filter"
                 value={thesisSortField}
                 onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
               >
@@ -650,6 +675,7 @@ const App = () => {
                   isGenerating={generatingKeys.has(t.canonicalKey)}
                   onExplore={() => handleExploreThesis(t)}
                   onView={() => handleViewThesis(t)}
+                  onLabelChange={(label) => handleLabelChange(t.canonicalKey, label)}
                 />
               ))}
               {theses.length === 0 && (
