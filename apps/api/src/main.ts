@@ -214,6 +214,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getAiHealth: readModel.getAiHealth,
   getRefreshMeta: readModel.getRefreshMeta,
   triggerRefresh: async (cadence) => {
+    stateHub.pushRefreshMeta();
     await readModel.refresh(cadence);
     void stateHub.broadcastAll();
   },
@@ -404,6 +405,8 @@ app
 
     // Trigger initial data refresh and broadcast
     void readModel.refresh().then(() => stateHub.broadcastAll()).catch(() => {});
+    // Push refreshMeta immediately so clients see the "refreshing" state
+    setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
     // If overdue from a previous session, run immediately then start the regular interval
     const lastRunTs = agentStatus.lastRun?.timestamp;
@@ -423,6 +426,7 @@ app
     // Periodic connector refresh (was driven by client polling before WebSocket migration)
     const REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
     refreshTimer = setInterval(() => {
+      stateHub.pushRefreshMeta();
       void readModel.refresh().then(() => stateHub.broadcastAll()).catch((err) => {
         console.error('periodic refresh failed:', err);
       });

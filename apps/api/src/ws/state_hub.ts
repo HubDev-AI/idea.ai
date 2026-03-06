@@ -124,6 +124,13 @@ export class StateHub {
     this.io.emit('signalsUpdated');
   }
 
+  /** Push current refreshMeta to all clients (call when refresh starts/ends) */
+  pushRefreshMeta(): void {
+    const meta = this.deps.getRefreshMeta();
+    this.state.refreshMeta = meta;
+    this.io.emit('refreshMeta', meta);
+  }
+
   /** Start background polling for infra stats (10s) and logs (3s) */
   startPolling(): void {
     this.infraTimer = setInterval(() => void this.pollInfra(), 10_000);

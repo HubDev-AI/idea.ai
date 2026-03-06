@@ -173,8 +173,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div key={cadence} className="sidebar-cadence-group">
               <div className="sidebar-cadence-header">
                 <span className="sidebar-cadence-label">{cadence}</span>
-                <span className={`sidebar-countdown ${countdown === 'now' || isRefreshing ? 'refreshing' : ''}`}>
-                  {isRefreshing ? 'refreshing\u2026' : countdown === null ? 'pending' : countdown === 'now' ? 'refreshing\u2026' : countdown}
+                <span className={`sidebar-countdown ${isRefreshing ? 'refreshing' : ''}`}>
+                  {isRefreshing ? 'refreshing\u2026' : countdown === null ? 'pending' : countdown === 'now' ? 'due' : countdown}
                 </span>
                 {onForceRefresh && (
                   <button
