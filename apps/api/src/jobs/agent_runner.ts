@@ -20,6 +20,8 @@ import { corroborationScore } from '@idea/pipeline/src/scoring/correlation';
 import { computeVelocity, velocityMultiplier } from '@idea/pipeline/src/scoring/velocity';
 import { type ClusterableSignal, clusterSignals } from './signal_clusterer';
 import type { ThesisEvidenceDraft } from './thesis_synthesizer';
+import { runDebate, verdictToLikelihoodRatio, type DebateResult } from './thesis_debate';
+import { bayesianUpdate } from '@idea/pipeline/src/scoring/bayesian';
 
 export type { AgentRunResult };
 
@@ -36,6 +38,9 @@ export type AgentRunnerDeps = {
   timeoutMs?: number;
   maxClusters?: number;
   profile?: AgentProfile;
+  pool?: import('pg').Pool;
+  debateConfidenceThreshold?: number;
+  debateMaxPerRun?: number;
 };
 
 const MAX_DEEP_DIVES = 2;
@@ -290,6 +295,65 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     }
   }
 
+  // === Phase 1.5: Adversarial Debate on top theses ===
+  const debateThreshold = deps.debateConfidenceThreshold ?? 40;
+  const debateMax = deps.debateMaxPerRun ?? 5;
+  const debateCandidates = (await deps.thesisStore.list())
+    .filter(t => t.confidence >= debateThreshold)
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, debateMax);
+
+  const debateResults: Array<{ thesisKey: string; result: DebateResult }> = [];
+
+  for (const thesis of debateCandidates) {
+    try {
+      const evidence = thesis.evidence.map(e => e.snippet).filter(Boolean);
+      const useClaude = Date.now() % 2 === 0;
+      const result = await runDebate({
+        thesisTitle: thesis.title,
+        thesisKey: thesis.canonicalKey,
+        problemStatement: thesis.problemStatement,
+        evidence,
+        runBull: useClaude ? deps.runClaude : deps.runCodex,
+        runBear: useClaude ? deps.runCodex : deps.runClaude,
+        runModerator: deps.runClaude,
+      });
+
+      if (result) {
+        debateResults.push({ thesisKey: thesis.canonicalKey, result });
+
+        // Apply Bayesian update based on verdict
+        const lr = verdictToLikelihoodRatio(result.verdict.verdict);
+        const evidenceType = lr >= 1.5 ? 'multi_source_convergence' as const
+          : lr >= 1.0 ? 'single_high_quality' as const
+          : 'weak_noisy' as const;
+        const newConf = bayesianUpdate(thesis.confidence, { type: evidenceType, confirming: lr >= 1.0, sourceCount: 1 });
+        const delta = newConf - thesis.confidence;
+        if (deps.thesisStore.bayesianUpdate && Math.abs(delta) > 0.1) {
+          await deps.thesisStore.bayesianUpdate(thesis.canonicalKey, delta);
+        }
+
+        // Store debate transcript
+        if (deps.pool) {
+          await deps.pool.query(
+            `INSERT INTO thesis_debates (thesis_key, run_id, bull_provider, bear_provider, bull_case, bear_case, moderator_verdict)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [thesis.canonicalKey, deps.runId ?? 'unknown', result.bullProvider, result.bearProvider,
+             result.bullCase, result.bearCase, JSON.stringify(result.verdict)]
+          );
+        }
+
+        await log.info('agent_runner', 'debate completed', {
+          thesis: thesis.canonicalKey,
+          verdict: result.verdict.verdict,
+          delta: Math.round(delta * 10) / 10,
+        });
+      }
+    } catch (err) {
+      await log.warn('agent_runner', 'debate failed', { thesis: thesis.canonicalKey, error: String(err) });
+    }
+  }
+
   // === Phase 2: Deep Dives ===
   const digTopics = broadOutput?.dig_deeper?.slice(0, MAX_DEEP_DIVES) ?? [];
   let deepDivesPerformed = 0;
@@ -539,7 +603,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     run_id: runId,
     entry_type: 'run_summary',
     topic: 'general',
-    insight: `Analyzed ${clusters.length} clusters (${clusterableSignals.length} signals), updated ${thesesUpdated} theses, created ${newCandidates} new candidates, performed ${deepDivesPerformed} deep dives.`,
+    insight: `Analyzed ${clusters.length} clusters (${clusterableSignals.length} signals), updated ${thesesUpdated} theses, created ${newCandidates} new candidates, performed ${deepDivesPerformed} deep dives, ${debateResults.length} debates.`,
     narrative: investigateNext ? `Next investigation: ${investigateNext}` : null,
     confidence: 50,
     thesis_keys: [],
@@ -568,6 +632,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     journalEntriesWritten: allJournalEntries.length,
     clustersAnalyzed: clusters.length,
     deepDivesPerformed,
+    debatesPerformed: debateResults.length,
     provider
   };
 };

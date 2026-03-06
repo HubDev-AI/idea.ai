@@ -164,6 +164,7 @@ export type AgentRunResult = {
   journalEntriesWritten: number;
   clustersAnalyzed: number;
   deepDivesPerformed: number;
+  debatesPerformed?: number;
   provider: string | null;
 };
 
