@@ -56,9 +56,17 @@ let agentRunInFlight: Promise<AgentRunResult> | null = null;
 
 // Load last run status from DB on startup (survives restarts)
 try {
-  if (agentRunStore) {
-    const row = await agentRunStore.latest();
-    if (row && row.status === 'completed') {
+  if (pool) {
+    // Mark stale running rows as failed (from previous crash/restart)
+    await pool.query(
+      `UPDATE agent_runs SET status = 'failed', finished_at = now(), error_message = 'interrupted by server restart' WHERE status = 'running'`
+    );
+    // Load last completed run for display
+    const { rows } = await pool.query(
+      `SELECT * FROM agent_runs WHERE status = 'completed' ORDER BY started_at DESC LIMIT 1`
+    );
+    const row = rows[0] as any;
+    if (row) {
       agentStatus = {
         isRunning: false,
         lastRun: {
