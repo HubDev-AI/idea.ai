@@ -117,6 +117,7 @@ export type ThesisListItem = {
   lastSeenAt: string;
   hasDeepDive: boolean;
   profileId?: string;
+  label: 'favourite' | 'later' | 'dismissed' | null;
 };
 
 export type ThesisStats = {
