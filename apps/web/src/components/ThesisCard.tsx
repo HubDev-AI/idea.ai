@@ -13,7 +13,9 @@ export type ThesisCardProps = {
     estimatedScope?: 'small' | 'medium' | 'large' | null;
     lastSeenAt?: string;
     hasDeepDive?: boolean;
+    profileId?: string;
   };
+  profileDisplay?: { badge: string; badgeColor: string } | null;
   isActive?: boolean;
   onClick?: () => void;
   onExplore?: () => void;
@@ -31,7 +33,7 @@ const scopeLabel: Record<string, { text: string; color: string }> = {
   large: { text: 'L', color: 'var(--err)' }
 };
 
-export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, isActive, onClick, onExplore }) => {
+export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, isActive, onClick, onExplore }) => {
   const statusClass = thesis.status === 'promoted' ? 'promoted' : thesis.status === 'watching' ? 'watching' : '';
 
   return (
@@ -44,6 +46,14 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, isActive, onClic
     >
       <div className="thesis-header">
         <h3 className="thesis-title">{thesis.title}</h3>
+        {profileDisplay && (
+          <span
+            className="thesis-profile-badge"
+            style={{ background: profileDisplay.badgeColor }}
+          >
+            {profileDisplay.badge}
+          </span>
+        )}
         <div className="thesis-header-right">
           {thesis.estimatedScope && scopeLabel[thesis.estimatedScope] && (
             <span

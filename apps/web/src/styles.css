@@ -1273,6 +1273,48 @@ a.signal-idea-link:hover {
   font-style: italic;
 }
 
+/* Profile filter tabs */
+.profile-tabs {
+  display: flex;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.profile-tab {
+  padding: 3px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.profile-tab:hover {
+  border-color: var(--text-secondary);
+}
+
+.profile-tab.active {
+  background: var(--tab-color, var(--accent));
+  color: #fff;
+  border-color: transparent;
+}
+
+/* Thesis profile badge */
+.thesis-profile-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #fff;
+  margin-left: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
 /* ── Responsive ─────────────────────────────────────── */
 
 @media (max-width: 768px) {
