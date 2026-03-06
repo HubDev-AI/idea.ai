@@ -84,11 +84,13 @@ export const fetchConnectors = async (): Promise<ConnectorRecord[]> => {
 export const fetchLogs = async ({
   limit = 200,
   level,
-  runId
+  runId,
+  component
 }: {
   limit?: number;
   level?: ExecutionLogRecord['level'];
   runId?: string;
+  component?: string;
 } = {}): Promise<ExecutionLogRecord[]> => {
   const params = new URLSearchParams({
     limit: String(Math.max(1, Math.floor(limit)))
@@ -100,6 +102,10 @@ export const fetchLogs = async ({
 
   if (runId) {
     params.set('run_id', runId);
+  }
+
+  if (component) {
+    params.set('component', component);
   }
 
   const response = await fetch(buildApiUrl(`/v1/logs?${params.toString()}`));

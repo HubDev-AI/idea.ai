@@ -160,23 +160,38 @@ export const registerThesesRoute = (
     }
 
     // Generate via AI
-    const { result, provider } = await generateDeepDive({
-      title: thesis.title,
-      problemStatement: thesis.problemStatement,
-      targetBuyer: thesis.targetBuyer,
-      proposedSolution: thesis.proposedSolution,
-      confidence: thesis.confidence,
-    }, { ...deps.deepDiveAi, logger: deps.logger });
+    await deps.logger?.info('deep_dive', 'deep-dive generation requested', { thesis: key, title: thesis.title });
+    const startMs = Date.now();
+    try {
+      const { result, provider } = await generateDeepDive({
+        title: thesis.title,
+        problemStatement: thesis.problemStatement,
+        targetBuyer: thesis.targetBuyer,
+        proposedSolution: thesis.proposedSolution,
+        confidence: thesis.confidence,
+      }, { ...deps.deepDiveAi, logger: deps.logger });
 
-    // Save and return
-    const saved = await deps.deepDiveStore.save(key, {
-      summary: result.summary,
-      howItWorks: result.howItWorks,
-      growthStrategy: result.growthStrategy,
-      buildSuggestions: result.buildSuggestions,
-      generatedBy: provider,
-    });
+      // Save and return
+      const saved = await deps.deepDiveStore.save(key, {
+        summary: result.summary,
+        howItWorks: result.howItWorks,
+        growthStrategy: result.growthStrategy,
+        buildSuggestions: result.buildSuggestions,
+        generatedBy: provider,
+      });
 
-    return saved;
+      await deps.logger?.info('deep_dive', 'deep-dive saved', {
+        thesis: key, provider, duration_ms: Date.now() - startMs
+      });
+
+      return saved;
+    } catch (err) {
+      await deps.logger?.error('deep_dive', 'deep-dive generation failed', {
+        thesis: key,
+        error: err instanceof Error ? err.message : String(err),
+        duration_ms: Date.now() - startMs
+      });
+      throw err;
+    }
   });
 };

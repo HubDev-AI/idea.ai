@@ -48,12 +48,14 @@ export const readExecutionLogs = async ({
   env = process.env,
   limit,
   level,
-  runId
+  runId,
+  component
 }: {
   env?: NodeJS.ProcessEnv;
   limit: number;
   level?: ExecutionLogLevel;
   runId?: string;
+  component?: string;
 }): Promise<ExecutionLogRecord[]> => {
   const logDir = env.LOG_DIR ?? defaultLogDir();
   const fileNames = await readdir(logDir).catch(() => []);
@@ -84,6 +86,10 @@ export const readExecutionLogs = async ({
     }
 
     if (runId && entry.run_id !== runId) {
+      return false;
+    }
+
+    if (component && entry.component !== component) {
       return false;
     }
 

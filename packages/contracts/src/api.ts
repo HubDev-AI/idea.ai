@@ -70,6 +70,7 @@ export type ListLogsQuery = {
   level?: ExecutionLogLevel;
   run_id?: string;
   scope?: 'session' | 'all';
+  component?: string;
 };
 
 // -- AI health ----------------------------------------------------- */

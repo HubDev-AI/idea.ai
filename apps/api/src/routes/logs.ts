@@ -36,15 +36,17 @@ export const registerLogsRoute = (
   app: FastifyInstance,
   deps: { listLogs: (query: ListLogsQuery) => Promise<ExecutionLogRecord[]> }
 ): void => {
-  const resolveQuery = (query: { limit?: string; level?: string; run_id?: string; scope?: string }): ListLogsQuery => {
+  const resolveQuery = (query: { limit?: string; level?: string; run_id?: string; scope?: string; component?: string }): ListLogsQuery => {
     const limit = Math.min(1000, parsePositiveInt(query.limit, 200));
     const level = parseLevel(query.level);
     const runId = query.run_id?.trim();
     const scope = parseScope(query.scope);
+    const component = query.component?.trim();
 
     const result: ListLogsQuery = { limit, scope };
     if (level !== undefined) result.level = level;
     if (runId) result.run_id = runId;
+    if (component) result.component = component;
     return result;
   };
 
@@ -54,11 +56,12 @@ export const registerLogsRoute = (
       limit: { type: 'string' as const, pattern: '^[0-9]+$' },
       level: { type: 'string' as const, enum: ['debug', 'info', 'warn', 'error'] },
       run_id: { type: 'string' as const },
-      scope: { type: 'string' as const, enum: ['all', 'session'] }
+      scope: { type: 'string' as const, enum: ['all', 'session'] },
+      component: { type: 'string' as const, maxLength: 100 }
     }
   };
 
-  app.get<{ Querystring: { limit?: string; level?: string; run_id?: string; scope?: string } }>(
+  app.get<{ Querystring: { limit?: string; level?: string; run_id?: string; scope?: string; component?: string } }>(
     '/v1/logs',
     {
       schema: { querystring: logsQuerySchema }
@@ -68,7 +71,7 @@ export const registerLogsRoute = (
     }
   );
 
-  app.get<{ Querystring: { limit?: string; level?: string; run_id?: string; scope?: string } }>(
+  app.get<{ Querystring: { limit?: string; level?: string; run_id?: string; scope?: string; component?: string } }>(
     '/v1/logs/stream',
     {
       schema: { querystring: logsQuerySchema }

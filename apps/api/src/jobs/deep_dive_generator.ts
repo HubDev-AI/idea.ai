@@ -125,11 +125,11 @@ export const generateDeepDive = async (
       });
       return { result: parsed, provider: primaryResult.provider };
     }
-    await log.debug('deep_dive', 'primary parse failed, trying fallback', {
+    await log.warn('deep_dive', 'primary parse failed, trying fallback', {
       thesis: input.title, provider: primaryName
     });
   } catch (err) {
-    await log.debug('deep_dive', 'primary provider failed, trying fallback', {
+    await log.warn('deep_dive', 'primary provider failed, trying fallback', {
       thesis: input.title, provider: primaryName,
       error: err instanceof Error ? err.message : String(err)
     });

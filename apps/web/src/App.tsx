@@ -122,6 +122,8 @@ const App = () => {
   const [activeProfile, setActiveProfile] = useState('all');
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
+  const [logComponentFilter, setLogComponentFilter] = useState('all');
+  const [logLevelFilter, setLogLevelFilter] = useState<Set<ExecutionLogRecord['level']>>(new Set(['info', 'warn', 'error']));
   const [splitPct, setSplitPct] = useState(50);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pageInfo, setPageInfo] = useState({
@@ -133,7 +135,22 @@ const App = () => {
     hasPrev: false
   });
   const [latestSignalAt, setLatestSignalAt] = useState<string | null>(null);
-  const renderedLogs = useMemo(() => logs.slice().reverse(), [logs]);
+  const logComponents = useMemo(() => {
+    const set = new Set<string>();
+    for (const entry of logs) set.add(entry.component);
+    return Array.from(set).sort();
+  }, [logs]);
+
+  const renderedLogs = useMemo(() => {
+    let filtered = logs;
+    if (logLevelFilter.size < 4) {
+      filtered = filtered.filter((entry) => logLevelFilter.has(entry.level));
+    }
+    if (logComponentFilter !== 'all') {
+      filtered = filtered.filter((entry) => entry.component === logComponentFilter);
+    }
+    return filtered.slice().reverse();
+  }, [logs, logLevelFilter, logComponentFilter]);
   const logListRef = useRef<HTMLUListElement | null>(null);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -413,6 +430,18 @@ const App = () => {
 
     list.scrollTop = list.scrollHeight;
   }, [renderedLogs, logDrawerOpen]);
+
+  const toggleLogLevel = useCallback((level: ExecutionLogRecord['level']) => {
+    setLogLevelFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(level)) {
+        if (next.size > 1) next.delete(level);
+      } else {
+        next.add(level);
+      }
+      return next;
+    });
+  }, []);
 
   const handleLogScroll = useCallback(() => {
     const list = logListRef.current;
@@ -772,6 +801,31 @@ const App = () => {
           </button>
           {logDrawerOpen && (
             <div className="log-scroll-wrapper">
+              <div className="log-filters">
+                <select
+                  className="log-filter-select"
+                  value={logComponentFilter}
+                  onChange={(e) => setLogComponentFilter(e.target.value)}
+                >
+                  <option value="all">All components</option>
+                  {logComponents.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <span className="log-level-toggles">
+                  {(['info', 'warn', 'error', 'debug'] as const).map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      className={`log-level-toggle ${lvl} ${logLevelFilter.has(lvl) ? 'active' : ''}`}
+                      onClick={() => toggleLogLevel(lvl)}
+                    >
+                      {logLevelIcons[lvl]} {lvl}
+                    </button>
+                  ))}
+                </span>
+                <span className="log-filter-count">{renderedLogs.length} entries</span>
+              </div>
               <ul ref={logListRef} className="log-list terminal-list" onScroll={handleLogScroll}>
                 {renderedLogs.map((entry, index) => (
                   <li
