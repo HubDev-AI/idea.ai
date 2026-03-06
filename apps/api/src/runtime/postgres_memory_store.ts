@@ -251,6 +251,12 @@ export type ConvergentMatch = {
   distance: number;
 };
 
+export type RefreshState = {
+  lastHourlyRunAt: number;
+  lastDailyRunAt: number;
+  refreshedAt: number;
+};
+
 export type PostgresMemoryStore = {
   retriever: MemoryRetriever;
   save: (entry: IndexedMemoryEntry) => Promise<void>;
@@ -263,6 +269,8 @@ export type PostgresMemoryStore = {
   boostViralityScore: (signalId: string, boost: number) => Promise<void>;
   listSignalsWithoutEmbeddings: (limit: number) => Promise<{ signal_id: string; canonical_text: string }[]>;
   saveEmbedding: (signalId: string, embedding: number[], model: string) => Promise<void>;
+  loadRefreshState: () => Promise<RefreshState>;
+  saveRefreshState: (state: RefreshState) => Promise<void>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -581,6 +589,38 @@ export const createPostgresMemoryStore = ({
     }
   };
 
+  const loadRefreshState = async (): Promise<RefreshState> => {
+    const result = await pool.query<{
+      last_hourly_run_at: Date | null;
+      last_daily_run_at: Date | null;
+      refreshed_at: Date | null;
+    }>('SELECT last_hourly_run_at, last_daily_run_at, refreshed_at FROM refresh_state WHERE id = 1');
+    const row = result.rows[0];
+    if (!row) return { lastHourlyRunAt: 0, lastDailyRunAt: 0, refreshedAt: 0 };
+    return {
+      lastHourlyRunAt: row.last_hourly_run_at ? row.last_hourly_run_at.getTime() : 0,
+      lastDailyRunAt: row.last_daily_run_at ? row.last_daily_run_at.getTime() : 0,
+      refreshedAt: row.refreshed_at ? row.refreshed_at.getTime() : 0,
+    };
+  };
+
+  const saveRefreshState = async (state: RefreshState): Promise<void> => {
+    await pool.query(
+      `INSERT INTO refresh_state (id, last_hourly_run_at, last_daily_run_at, refreshed_at, updated_at)
+       VALUES (1, $1, $2, $3, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         last_hourly_run_at = EXCLUDED.last_hourly_run_at,
+         last_daily_run_at = EXCLUDED.last_daily_run_at,
+         refreshed_at = EXCLUDED.refreshed_at,
+         updated_at = NOW()`,
+      [
+        state.lastHourlyRunAt > 0 ? new Date(state.lastHourlyRunAt).toISOString() : null,
+        state.lastDailyRunAt > 0 ? new Date(state.lastDailyRunAt).toISOString() : null,
+        state.refreshedAt > 0 ? new Date(state.refreshedAt).toISOString() : null,
+      ]
+    );
+  };
+
   return {
     retriever,
     save,
@@ -593,6 +633,8 @@ export const createPostgresMemoryStore = ({
     boostViralityScore,
     listSignalsWithoutEmbeddings,
     saveEmbedding,
+    loadRefreshState,
+    saveRefreshState,
     ping,
     close: async () => {
       await pool.end();

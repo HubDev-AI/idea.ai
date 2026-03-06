@@ -1,5 +1,3 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
 import { type Cadence, OPEN_CONNECTOR_CADENCE, type RawEventInput } from '@idea/connectors/src/common/http';
 import { blendedScore } from '@idea/pipeline/src/scoring/blend';
 import type { RuntimeEnv } from '../config/env';
@@ -44,7 +42,6 @@ import {
 } from './signal_quality';
 
 const DEFAULT_REFRESH_MS = 60 * 60 * 1000;
-const DEFAULT_SNAPSHOT_FILE = (): string => join(process.cwd(), 'logs', 'state', 'latest_snapshot.json');
 const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews', 'npm_trends', 'semantic_scholar'];
 
 type Snapshot = {
@@ -380,105 +377,6 @@ const toErrorFirstSnapshot = (env: RuntimeEnv, refreshedAtIso: string): Connecto
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');
 
-const resolveSnapshotFile = (env: NodeJS.ProcessEnv): string | null => {
-  if (!env.SNAPSHOT_FILE && (env.NODE_ENV === 'test' || env.VITEST === 'true')) {
-    return null;
-  }
-
-  return env.SNAPSHOT_FILE ?? DEFAULT_SNAPSHOT_FILE();
-};
-
-const toNumber = (value: unknown, fallback = 0): number => {
-  const parsed = Number(value ?? fallback);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const parseSnapshotPayload = (raw: string): Snapshot | null => {
-  try {
-    const parsed = JSON.parse(raw) as Partial<Snapshot> & {
-      refreshedAt?: unknown;
-      signals?: unknown;
-      connectors?: unknown;
-    };
-
-    if (!parsed || !Array.isArray(parsed.signals) || !Array.isArray(parsed.connectors)) {
-      return null;
-    }
-
-    const signals: FeedRecord[] = parsed.signals
-      .map((entry) => {
-        if (!isObject(entry)) {
-          return null;
-        }
-
-        if (
-          typeof entry.idea !== 'string' ||
-          typeof entry.score !== 'number' ||
-          typeof entry.top_source !== 'string' ||
-          typeof entry.snippet !== 'string' ||
-          (entry.source_url !== null && typeof entry.source_url !== 'string') ||
-          (entry.next_action !== 'validate_demand' &&
-            entry.next_action !== 'validate_pricing' &&
-            entry.next_action !== 'validate_channel') ||
-          typeof entry.updated_at !== 'string'
-        ) {
-          return null;
-        }
-
-        return {
-          idea: entry.idea,
-          score: entry.score,
-          top_source: entry.top_source,
-          snippet: entry.snippet,
-          source_url: entry.source_url,
-          next_action: entry.next_action,
-          updated_at: entry.updated_at,
-          ...(typeof entry.demand === 'number' ? { demand: entry.demand } : {}),
-          ...(typeof entry.timing === 'number' ? { timing: entry.timing } : {}),
-          ...(typeof entry.buildability === 'number' ? { buildability: entry.buildability } : {}),
-          ...(typeof entry.virality === 'number' ? { virality: entry.virality } : {})
-        } satisfies FeedRecord;
-      })
-      .filter((entry): entry is FeedRecord => entry !== null);
-
-    const connectors: ConnectorStatusRecord[] = parsed.connectors
-      .map((entry) => {
-        if (!isObject(entry)) {
-          return null;
-        }
-
-        if (
-          typeof entry.name !== 'string' ||
-          (entry.status !== 'active' && entry.status !== 'disabled' && entry.status !== 'error') ||
-          (entry.last_run !== null && typeof entry.last_run !== 'string')
-        ) {
-          return null;
-        }
-
-        const cadence = entry.cadence === 'hourly' || entry.cadence === 'daily' ? entry.cadence : null;
-        return {
-          name: entry.name,
-          status: entry.status,
-          last_run: entry.last_run,
-          cadence
-        } satisfies ConnectorStatusRecord;
-      })
-      .filter((entry): entry is ConnectorStatusRecord => entry !== null);
-
-    return {
-      refreshedAt: toNumber(parsed.refreshedAt, 0),
-      signals,
-      connectors,
-      lastHourlyRunAt: toNumber(parsed.lastHourlyRunAt, 0),
-      lastDailyRunAt: toNumber(parsed.lastDailyRunAt, 0)
-    };
-  } catch {
-    return null;
-  }
-};
 
 const buildInitialConnectors = (env: RuntimeEnv): ConnectorStatusRecord[] => {
   const openRecords: ConnectorStatusRecord[] = OPEN_CONNECTORS.map((connector) => {
@@ -524,8 +422,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
     lastDailyRunAt: 0
   };
 
-  const hydrateSnapshotFromDisk = async (
-    env: NodeJS.ProcessEnv,
+  const hydrateRefreshState = async (
+    env: RuntimeEnv,
     logger: ReturnType<typeof createExecutionLogger>
   ): Promise<void> => {
     if (snapshotHydrated) {
@@ -533,57 +431,43 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
     }
 
     snapshotHydrated = true;
-    const snapshotFile = resolveSnapshotFile(env);
-    if (!snapshotFile) {
+
+    const store = await resolvePostgresMemoryStore(env, logger);
+    if (!store) {
       return;
     }
 
     try {
-      const raw = await readFile(snapshotFile, 'utf8');
-      const parsed = parseSnapshotPayload(raw);
-
-      if (!parsed) {
-        await logger.warn('live_read_model', 'snapshot file is invalid, ignoring persisted snapshot', {
-          snapshot_file: snapshotFile
-        });
-        return;
-      }
-
-      // Reset last_run so connectors show as pending until they actually refresh in this session
-      parsed.connectors = parsed.connectors.map((c) => ({ ...c, last_run: null }));
-      snapshot = parsed;
-      await logger.info('live_read_model', 'loaded persisted snapshot', {
-        snapshot_file: snapshotFile,
-        refreshed_at: snapshot.refreshedAt > 0 ? new Date(snapshot.refreshedAt).toISOString() : null,
-        signals: snapshot.signals.length,
-        connectors: snapshot.connectors.length
+      const state = await store.loadRefreshState();
+      snapshot.lastHourlyRunAt = state.lastHourlyRunAt;
+      snapshot.lastDailyRunAt = state.lastDailyRunAt;
+      snapshot.refreshedAt = state.refreshedAt;
+      await logger.info('live_read_model', 'loaded refresh state from database', {
+        refreshed_at: state.refreshedAt > 0 ? new Date(state.refreshedAt).toISOString() : null,
+        last_hourly: state.lastHourlyRunAt > 0 ? new Date(state.lastHourlyRunAt).toISOString() : null,
+        last_daily: state.lastDailyRunAt > 0 ? new Date(state.lastDailyRunAt).toISOString() : null,
       });
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        await logger.warn('live_read_model', 'failed to load persisted snapshot', {
-          snapshot_file: snapshotFile,
-          error: toErrorMessage(error)
-        });
-      }
+      await logger.warn('live_read_model', 'failed to load refresh state from database', {
+        error: toErrorMessage(error)
+      });
     }
   };
 
-  const persistSnapshotToDisk = async (
-    env: NodeJS.ProcessEnv,
+  const persistRefreshState = async (
+    env: RuntimeEnv,
     logger: ReturnType<typeof createExecutionLogger>,
-    nextSnapshot: Snapshot
+    state: { lastHourlyRunAt: number; lastDailyRunAt: number; refreshedAt: number }
   ): Promise<void> => {
-    const snapshotFile = resolveSnapshotFile(env);
-    if (!snapshotFile) {
+    const store = await resolvePostgresMemoryStore(env, logger);
+    if (!store) {
       return;
     }
 
     try {
-      await mkdir(dirname(snapshotFile), { recursive: true });
-      await writeFile(snapshotFile, JSON.stringify(nextSnapshot), 'utf8');
+      await store.saveRefreshState(state);
     } catch (error) {
-      await logger.warn('live_read_model', 'failed to persist snapshot', {
-        snapshot_file: snapshotFile,
+      await logger.warn('live_read_model', 'failed to persist refresh state to database', {
         error: toErrorMessage(error)
       });
     }
@@ -637,7 +521,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       aiPostScrapeSettings
     });
 
-    await hydrateSnapshotFromDisk(process.env, logger);
+    await hydrateRefreshState(env, logger);
 
     const persistentStore = await resolvePostgresMemoryStore(env, logger);
     const DAILY_CADENCE_MS = 24 * 60 * 60 * 1000;
@@ -1004,7 +888,11 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
           retries: 0
         }))
       };
-      await persistSnapshotToDisk(process.env, logger, snapshot);
+      await persistRefreshState(env, logger, {
+        lastHourlyRunAt: snapshot.lastHourlyRunAt,
+        lastDailyRunAt: snapshot.lastDailyRunAt,
+        refreshedAt: snapshot.refreshedAt,
+      });
 
       await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH COMPLETE ===`, {
         run_id: logger.runId,
@@ -1064,10 +952,11 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
 
   const ensureFresh = async (): Promise<Snapshot> => {
     if (!snapshotHydrated) {
+      const env = loadRuntimeEnv(process.env);
       const runId = process.env.RUN_ID ?? createRunId('read_model_boot');
       const logger = createExecutionLogger({ env: process.env, runId });
       sessionRunIds.add(logger.runId);
-      await hydrateSnapshotFromDisk(process.env, logger);
+      await hydrateRefreshState(env, logger);
     }
 
     const stale = Date.now() - snapshot.refreshedAt > refreshMs;
