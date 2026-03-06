@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchG2Trending } from '../src/g2_reviews.js';
 
 describe('g2 connector', () => {

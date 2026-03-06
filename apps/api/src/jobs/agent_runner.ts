@@ -2,11 +2,11 @@ import { dualAnalystRun } from '@idea/ai-runtime/src/dual_analyst';
 import type { RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
 import type { AgentProfile } from '@idea/contracts/src/agent_profile.js';
 import type { AgentRunResult } from '@idea/contracts/src/api';
+import { consumerProfile } from '../profiles/consumer.js';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { JournalEntry, JournalStore } from '../runtime/journal_store';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { ThesisStore } from '../runtime/thesis_store';
-import { consumerProfile } from '../profiles/consumer.js';
 import {
   type AgentThesisSummary,
   type BroadScanOutput,

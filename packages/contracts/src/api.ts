@@ -162,6 +162,7 @@ export type AgentRunResult = {
 
 export type AgentStatusRecord = {
   isRunning: boolean;
+  intervalMs: number;
   lastRun: {
     timestamp: string;
     thesesUpdated: number;

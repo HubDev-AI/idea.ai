@@ -14,9 +14,9 @@ const defaultLoader: ProductHuntLoaderFn = async (limit) => {
   const results: RawEventInput[] = [];
   // PH feed is Atom format (<entry> not <item>)
   const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
-  let match: RegExpExecArray | null;
+  let match: RegExpExecArray | null = entryRegex.exec(response);
 
-  while ((match = entryRegex.exec(response)) !== null && results.length < limit) {
+  while (match !== null && results.length < limit) {
     const entry = match[1];
     const title = entry.match(/<title>(.*?)<\/title>/)?.[1] ?? '';
     const link = entry.match(/<link[^>]+href="([^"]+)"/)?.[1] ?? '';
@@ -36,6 +36,7 @@ const defaultLoader: ProductHuntLoaderFn = async (limit) => {
         url: link
       });
     }
+    match = entryRegex.exec(response);
   }
 
   return results;

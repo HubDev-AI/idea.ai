@@ -3,7 +3,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 
 const mockSignals = [
@@ -95,6 +95,8 @@ const mockTheses = [
 ];
 
 const mockAgentStatus = {
+  isRunning: false,
+  intervalMs: 3600000,
   lastRun: {
     timestamp: '2026-02-24T03:00:00.000Z',
     thesesUpdated: 2,
@@ -115,11 +117,56 @@ const mockInfraStatus = {
 
 const mockSignalCounts = { hacker_news: 1 };
 
-const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolean; failAgent?: boolean }) =>
+const mockRefreshMeta = {
+  last_hourly_run: '2026-02-24T01:00:00.000Z',
+  last_daily_run: '2026-02-24T00:00:00.000Z',
+  hourly_interval_ms: 3600000,
+  daily_interval_ms: 86400000,
+  refreshing: null
+};
+
+const mockSnapshot = {
+  connectors: mockConnectors,
+  aiHealth: mockAiHealth,
+  agentStatus: mockAgentStatus,
+  infraStatus: mockInfraStatus,
+  refreshMeta: mockRefreshMeta,
+  signalCounts: mockSignalCounts,
+  thesisStats: { total: 2, promoted: 1, watching: 1, totalEvidence: 8, totalSources: 5 },
+  logs: mockLogs,
+};
+
+// Mock socket.io-client
+const createMockSocket = () => {
+  const listeners = new Map<string, Set<(...args: any[]) => void>>();
+  const socket = {
+    on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event)!.add(handler);
+      return socket;
+    }),
+    emit: vi.fn(),
+    disconnect: vi.fn(),
+    connected: true,
+  };
+
+  // Trigger connect + snapshot on next tick
+  setTimeout(() => {
+    for (const h of listeners.get('connect') ?? []) h();
+    for (const h of listeners.get('snapshot') ?? []) h(mockSnapshot);
+  }, 0);
+
+  return socket;
+};
+
+vi.mock('socket.io-client', () => ({
+  io: () => createMockSocket(),
+}));
+
+const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolean }) =>
   vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
 
-    // Must come before /v1/signals to avoid prefix match
     if (url.includes('/v1/signals/counts')) {
       return Promise.resolve(new Response(JSON.stringify(mockSignalCounts), { status: 200 }));
     }
@@ -144,15 +191,6 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       );
     }
 
-    if (url.includes('/v1/ai-health')) {
-      return Promise.resolve(new Response(JSON.stringify(mockAiHealth), { status: 200 }));
-    }
-
-    if (url.includes('/v1/logs')) {
-      return Promise.resolve(new Response(JSON.stringify(mockLogs), { status: 200 }));
-    }
-
-    // Must come before /v1/theses to avoid prefix match
     if (url.includes('/deep-dive')) {
       if (url.includes('soc2-automation')) {
         return Promise.resolve(new Response(JSON.stringify({
@@ -183,15 +221,8 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       }), { status: 200 }));
     }
 
-    if (url.includes('/v1/agent/status')) {
-      if (overrides?.failAgent) {
-        return Promise.resolve(new Response('not found', { status: 404 }));
-      }
-      return Promise.resolve(new Response(JSON.stringify(mockAgentStatus), { status: 200 }));
-    }
-
-    if (url.includes('/v1/infra/status')) {
-      return Promise.resolve(new Response(JSON.stringify(mockInfraStatus), { status: 200 }));
+    if (url.includes('/v1/agent/run')) {
+      return Promise.resolve(new Response(JSON.stringify({ thesesUpdated: 1, newCandidates: 0 }), { status: 202 }));
     }
 
     if (url.includes('/v1/profiles')) {
@@ -201,28 +232,19 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       ]), { status: 200 }));
     }
 
-    if (url.includes('/v1/connectors/refresh-meta')) {
-      return Promise.resolve(new Response(JSON.stringify({
-        last_hourly_run: '2026-02-24T01:00:00.000Z',
-        last_daily_run: '2026-02-24T00:00:00.000Z',
-        hourly_interval_ms: 3600000,
-        daily_interval_ms: 86400000
-      }), { status: 200 }));
-    }
-
-    // Default: connectors
-    return Promise.resolve(new Response(JSON.stringify(mockConnectors), { status: 200 }));
+    return Promise.resolve(new Response('{}', { status: 200 }));
   });
 
 describe('web app', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', buildMockFetch());
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it('renders feed rows with idea, score, source/snippet, and next action', async () => {
-    vi.stubGlobal('EventSource', undefined);
-    vi.stubGlobal('fetch', buildMockFetch());
-
     render(<App />);
 
     expect(await screen.findByText('SOC2 prep copilot')).toBeDefined();
@@ -248,36 +270,27 @@ describe('web app', () => {
     expect(screen.getByText('Updated')).toBeDefined();
   });
 
-  it('shows partial data and error hint when one API request fails', async () => {
-    vi.stubGlobal('EventSource', undefined);
+  it('shows error hint when signal fetch fails', async () => {
     vi.stubGlobal('fetch', buildMockFetch({ failSignals: true }));
 
     render(<App />);
 
-    // Connector display name appears in source filter dropdown
-    expect((await screen.findAllByText('Hacker News')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Top Ideas/i)).toBeDefined();
-    expect(screen.getByText(/Some data could not be loaded/i)).toBeDefined();
+    // Error message from signal fetch failure
+    expect(await screen.findByText(/Could not load signals/i)).toBeDefined();
   });
 
-  it('degrades gracefully when thesis and agent APIs fail', async () => {
-    vi.stubGlobal('EventSource', undefined);
-    vi.stubGlobal('fetch', buildMockFetch({ failTheses: true, failAgent: true }));
+  it('degrades gracefully when thesis APIs fail', async () => {
+    vi.stubGlobal('fetch', buildMockFetch({ failTheses: true }));
 
     render(<App />);
 
-    // Core data still loads
+    // Core signal data still loads
     expect(await screen.findByText('SOC2 prep copilot')).toBeDefined();
     // Thesis section shows empty state
     expect(screen.getByText(/No theses yet/i)).toBeDefined();
-    // Agent sidebar shows fallback
-    expect(screen.getByText(/No runs yet/i)).toBeDefined();
   });
 
   it('clicking thesis card shows filter chip', async () => {
-    vi.stubGlobal('EventSource', undefined);
-    vi.stubGlobal('fetch', buildMockFetch());
-
     render(<App />);
 
     // Wait for thesis to load in main pane
@@ -292,9 +305,6 @@ describe('web app', () => {
   });
 
   it('renders sidebar with connector, AI, and agent info', async () => {
-    vi.stubGlobal('EventSource', undefined);
-    vi.stubGlobal('fetch', buildMockFetch());
-
     render(<App />);
 
     expect(await screen.findByText(/Connectors/i)).toBeTruthy();
@@ -303,10 +313,6 @@ describe('web app', () => {
   });
 
   it('triggers agent run and shows running state', async () => {
-    vi.stubGlobal('EventSource', undefined);
-    const mockFetch = buildMockFetch();
-    vi.stubGlobal('fetch', mockFetch);
-
     render(<App />);
 
     // Wait for initial data load
@@ -322,9 +328,6 @@ describe('web app', () => {
   });
 
   it('opens log drawer and shows log entries', async () => {
-    vi.stubGlobal('EventSource', undefined);
-    vi.stubGlobal('fetch', buildMockFetch());
-
     render(<App />);
 
     // Wait for app to load
@@ -335,7 +338,15 @@ describe('web app', () => {
     expect(logsButton).toBeDefined();
     fireEvent.click(logsButton);
 
-    // Verify log entries are visible
+    // Verify log entries are visible (logs come from WebSocket snapshot)
     expect(await screen.findByText(/ai judge call failed/i)).toBeTruthy();
+  });
+
+  it('shows LIVE connection status', async () => {
+    render(<App />);
+
+    // Wait for connection — multiple LIVE indicators (sidebar + log drawer)
+    const liveElements = await screen.findAllByText('LIVE');
+    expect(liveElements.length).toBeGreaterThan(0);
   });
 });

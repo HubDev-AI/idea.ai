@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fetchGoogleTrends } from '../src/google_trends';
 
 describe('google_trends connector', () => {

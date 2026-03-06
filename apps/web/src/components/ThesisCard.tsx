@@ -52,12 +52,11 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
   };
 
   return (
-    <div
+    <article
       className={`thesis-card ${statusClass} ${isActive ? 'thesis-active' : ''} ${thesis.label === 'dismissed' ? 'thesis-dismissed' : ''}`}
       onClick={onClick}
-      role="button"
-      tabIndex={onClick ? 0 : undefined}
       onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && onClick) { e.preventDefault(); onClick(); } }}
+      tabIndex={onClick ? 0 : undefined}
     >
       <div className="thesis-header">
         <h3 className="thesis-title">{thesis.title}</h3>
@@ -135,6 +134,6 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
           </button>
         )}
       </div>
-    </div>
+    </article>
   );
 };

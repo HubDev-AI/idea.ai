@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { OPEN_CONNECTOR_CADENCE, type Cadence, type RawEventInput } from '@idea/connectors/src/common/http';
+import { type Cadence, OPEN_CONNECTOR_CADENCE, type RawEventInput } from '@idea/connectors/src/common/http';
+import { blendedScore } from '@idea/pipeline/src/scoring/blend';
 import type { RuntimeEnv } from '../config/env';
 import { loadRuntimeEnv } from '../config/env';
 import {
@@ -26,7 +27,6 @@ import { indexSignalMemory } from '../jobs/memory_index';
 import { buildRetrieverQueryText, createInMemoryRetriever, type IndexedMemoryEntry } from '../jobs/memory_retriever';
 import { rankAndPreparePublish } from '../jobs/rank_publish';
 import { scoreSignalWithRetriever } from '../jobs/score';
-import { blendedScore } from '@idea/pipeline/src/scoring/blend';
 import type { AiHealthRecord, AiProviderHealthRecord } from '../routes/ai_health';
 import type { ConnectorStatusRecord } from '../routes/connectors';
 import type { FeedRecord } from '../routes/feed';
