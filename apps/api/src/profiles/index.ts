@@ -1,6 +1,6 @@
 import type { AgentProfile } from '@idea/contracts/src/agent_profile.js';
-import { consumerProfile } from './consumer.js';
 import { b2bProfile } from './b2b.js';
+import { consumerProfile } from './consumer.js';
 
 const ALL_PROFILES: AgentProfile[] = [consumerProfile, b2bProfile];
 

@@ -2,6 +2,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { AgentStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AgentRunResult } from './jobs/agent_runner';
+import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
 import { registerAgentStatusRoute } from './routes/agent_status';
 import { type AiHealthRecord, registerAiHealthRoute } from './routes/ai_health';
 import { type ConnectorStatusRecord, registerConnectorRoute } from './routes/connectors';
@@ -13,10 +14,9 @@ import { registerProfilesRoute } from './routes/profiles.js';
 import { registerThesesRoute } from './routes/theses';
 import type { AgentRunStore } from './runtime/agent_run_store';
 import type { DeepDiveStore } from './runtime/deep_dive_store';
+import type { ExecutionLogger } from './runtime/execution_logger';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
-import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
-import type { ExecutionLogger } from './runtime/execution_logger';
 
 export type ServerDeps = {
   listSignals: () => Promise<FeedRecord[]>;

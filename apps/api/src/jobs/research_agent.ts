@@ -148,15 +148,15 @@ Your primary focus: ${profile.prompts.focusAreas.join(', ')}.
 Your observations from previous runs are shown below — use them to build on your prior reasoning.
 
 CRITICAL BIAS:
-${profile.prompts.antiPatterns.map(p => '- ' + p).join('\n')}
+${profile.prompts.antiPatterns.map(p => `- ${p}`).join('\n')}
 
 IMPORTANT GUIDELINES:
 - Each thesis must be a CONCRETE product idea, not an abstract market observation.
-${profile.prompts.exampleBad.map(e => '- BAD: "' + e + '"').join('\n')}
-${profile.prompts.exampleGood.map(e => '- GOOD: "' + e + '"').join('\n')}
+${profile.prompts.exampleBad.map(e => `- BAD: "${e}"`).join('\n')}
+${profile.prompts.exampleGood.map(e => `- GOOD: "${e}"`).join('\n')}
 - Focus on specific pain points felt by real people
 - Target specific buyer personas
-${profile.prompts.scopeConstraint ? '- ' + profile.prompts.scopeConstraint : ''}
+${profile.prompts.scopeConstraint ? `- ${profile.prompts.scopeConstraint}` : ''}
 
 YOUR RECENT OBSERVATIONS:
 ${journalBlock}
@@ -221,15 +221,15 @@ ${thesesBlock}
 
 IMPORTANT GUIDELINES FOR NEW THESES:
 - Each thesis must be a CONCRETE product idea, not an abstract market observation
-${profile.prompts.exampleBad.map(e => '- BAD: "' + e + '"').join('\n')}
-${profile.prompts.exampleGood.map(e => '- GOOD: "' + e + '"').join('\n')}
+${profile.prompts.exampleBad.map(e => `- BAD: "${e}"`).join('\n')}
+${profile.prompts.exampleGood.map(e => `- GOOD: "${e}"`).join('\n')}
 - The problem_statement should describe a real pain point a specific person has
 - The target_buyer should be a specific persona
 - The proposed_solution should describe a concrete software tool
 
 ${profile.prompts.identity}
-${profile.prompts.focusAreas.map(f => '- ' + f).join('\n')}
-${profile.prompts.antiPatterns.map(p => '- ' + p).join('\n')}
+${profile.prompts.focusAreas.map(f => `- ${f}`).join('\n')}
+${profile.prompts.antiPatterns.map(p => `- ${p}`).join('\n')}
 ${profile.prompts.scopeConstraint ? profile.prompts.scopeConstraint : ''}
 
 DEEP ANALYSIS:

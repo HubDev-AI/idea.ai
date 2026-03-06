@@ -1,23 +1,22 @@
-// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type ExecutionLogRecord,
   fetchProfiles,
   fetchSignals,
   fetchTheses,
+  fetchThesisDeepDive,
+  generateThesisDeepDive,
   type ProfileDisplay,
   type SignalRecord,
   type SortField,
+  setThesisLabel,
+  type ThesisDeepDive,
+  type ThesisLabel,
   type ThesisListItem,
   type ThesisSortField,
   type ThesisStats,
   triggerAgentRun,
   triggerConnectorRefresh,
-  fetchThesisDeepDive,
-  generateThesisDeepDive,
-  type ThesisDeepDive,
-  setThesisLabel,
-  type ThesisLabel,
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
@@ -228,7 +227,7 @@ const App = () => {
     };
     void loadSignals();
     return () => { cancelled = true; };
-  }, [requestedPage, sourceFilter, thesisFilter, sortField, ws.signalsUpdatedAt]);
+  }, [requestedPage, sourceFilter, thesisFilter, sortField]);
 
   // Fetch theses on page/sort/filter change or when server pushes thesesUpdated
   useEffect(() => {
@@ -257,7 +256,7 @@ const App = () => {
     };
     void loadTheses();
     return () => { isCancelled = true; };
-  }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter, ws.thesesUpdatedAt]);
+  }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderedLogs+logDrawerOpen trigger scroll-to-bottom
   useEffect(() => {
@@ -402,8 +401,6 @@ const App = () => {
         agentStatus={ws.agentStatus}
         infraStatus={ws.infraStatus}
         thesisStats={thesisStats}
-        thesisFilter={thesisFilter}
-        onThesisFilter={handleThesisFilter}
         signalCount={Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
         latestSignalAt={latestSignalAt}
         signalCounts={ws.signalCounts}
@@ -525,8 +522,22 @@ const App = () => {
           </section>
 
           {/* Resize handle */}
-          {/* biome-ignore lint/a11y/useKeyboardHandler: resize is mouse-only, keyboard users can use default 50/50 */}
-          <div className="resize-handle" onMouseDown={onResizeStart} role="separator" aria-orientation="vertical" />
+          {/* biome-ignore lint/a11y/useSemanticElements: separator needs to be a draggable div, not an hr */}
+          <div
+            className="resize-handle"
+            onMouseDown={onResizeStart}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft') { e.preventDefault(); setSplitPct((v) => Math.max(MIN_PANE_PCT, v - 2)); }
+              if (e.key === 'ArrowRight') { e.preventDefault(); setSplitPct((v) => Math.min(MAX_PANE_PCT, v + 2)); }
+            }}
+            role="separator"
+            tabIndex={0}
+            aria-orientation="vertical"
+            aria-valuenow={Math.round(splitPct)}
+            aria-valuemin={MIN_PANE_PCT}
+            aria-valuemax={MAX_PANE_PCT}
+            aria-label="Resize panes"
+          />
 
           {/* Right pane — Signal Feed */}
           <section className="pane pane-right" style={{ width: `${100 - splitPct}%` }}>

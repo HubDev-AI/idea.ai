@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { consumerProfile } from '../src/profiles/consumer.js';
+import { describe, expect, it } from 'vitest';
 import { b2bProfile } from '../src/profiles/b2b.js';
-import { loadProfiles, getProfile } from '../src/profiles/index.js';
+import { consumerProfile } from '../src/profiles/consumer.js';
+import { getProfile, loadProfiles } from '../src/profiles/index.js';
 
 describe('consumer profile', () => {
   it('has scoring dimensions that sum to 1', () => {

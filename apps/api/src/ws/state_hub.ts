@@ -1,4 +1,3 @@
-import { Server as SocketIOServer } from 'socket.io';
 import type {
   AgentStatusRecord,
   AiHealthRecord,
@@ -9,6 +8,7 @@ import type {
   ThesisStats,
 } from '@idea/contracts/src/api';
 import type { AppSnapshot, ClientToServerEvents, ServerToClientEvents } from '@idea/contracts/src/ws';
+import { Server as SocketIOServer } from 'socket.io';
 
 type IO = SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clusterSignals, type ClusterableSignal } from '../src/jobs/signal_clusterer';
+import { type ClusterableSignal, clusterSignals } from '../src/jobs/signal_clusterer';
 
 const makeSignal = (id: string, embedding: number[], blended = 50): ClusterableSignal => ({
   signal_id: id,

@@ -1,5 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { io, type Socket } from 'socket.io-client';
 import type {
   AgentStatusRecord,
   AiHealthRecord,
@@ -10,6 +8,8 @@ import type {
   ThesisStats,
 } from '@idea/contracts/src/api';
 import type { AppSnapshot, ClientToServerEvents, ServerToClientEvents } from '@idea/contracts/src/ws';
+import { useEffect, useRef, useState } from 'react';
+import { io, type Socket } from 'socket.io-client';
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 

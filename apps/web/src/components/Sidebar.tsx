@@ -1,4 +1,3 @@
-// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React, { useEffect, useState } from 'react';
 import type { AgentStatusRecord, AiHealthRecord, ConnectorRecord, InfraStatusRecord, RefreshMeta, ThesisStats } from '../api';
 import { connectorDisplayName, connectorSourceKey } from '../connectorNames';
@@ -9,8 +8,6 @@ type SidebarProps = {
   agentStatus: AgentStatusRecord | null;
   infraStatus: InfraStatusRecord | null;
   thesisStats: ThesisStats;
-  thesisFilter: string | null;
-  onThesisFilter: (key: string | null, title: string) => void;
   signalCount: number;
   latestSignalAt: string | null;
   signalCounts: Record<string, number>;
@@ -70,7 +67,7 @@ const useCountdown = (lastRunIso: string | null, intervalMs: number): string | n
 
 export const Sidebar: React.FC<SidebarProps> = ({
   connectors, aiHealth, agentStatus, infraStatus, thesisStats,
-  thesisFilter, onThesisFilter, signalCount, latestSignalAt, signalCounts,
+  signalCount, latestSignalAt, signalCounts,
   onRunAgent, agentRunning, agentRunResult, refreshMeta, onForceRefresh,
   connected = true,
 }) => {

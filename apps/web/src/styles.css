@@ -1519,7 +1519,7 @@ a.signal-idea-link:hover {
   }
 
   .pane {
-    width: 100% !important;
+    width: 100%;
   }
 
   .pane-left {

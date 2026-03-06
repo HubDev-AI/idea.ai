@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { generateDeepDive } from '../jobs/deep_dive_generator';
 import type { DeepDiveGeneratorDeps } from '../jobs/deep_dive_generator';
+import { generateDeepDive } from '../jobs/deep_dive_generator';
 import { buildThesisCandidates } from '../jobs/thesis_synthesizer';
+import type { DeepDiveStore } from '../runtime/deep_dive_store';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { PaginatedThesisStore } from '../runtime/postgres_thesis_store';
-import type { DeepDiveStore } from '../runtime/deep_dive_store';
 import type { ThesisStore } from '../runtime/thesis_store';
 
 export type ThesesRouteDeps = {
