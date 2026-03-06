@@ -17,6 +17,7 @@ import { createPostgresJournalStore } from './runtime/journal_store';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
 import { createPostgresThesisStore, type PaginatedThesisStore } from './runtime/postgres_thesis_store';
+import { createProviderCircuitBreaker } from './runtime/provider_circuit';
 import { InMemoryThesisStore } from './runtime/thesis_store';
 import { buildServer } from './server';
 import { StateHub } from './ws/state_hub';
@@ -33,6 +34,10 @@ const apiKey = process.env.API_KEY || undefined;
 const databaseUrl = process.env.DATABASE_URL;
 
 const startupEnv = loadRuntimeEnv(process.env);
+const providerCircuit = createProviderCircuitBreaker({
+  threshold: startupEnv.circuitBreakerThreshold,
+  cooldownMs: startupEnv.circuitBreakerCooldownMs,
+});
 const pool = databaseUrl ? new pg.Pool({ connectionString: databaseUrl, max: 4 }) : null;
 
 const thesisStore = pool
@@ -45,7 +50,10 @@ const memoryStore = databaseUrl
   ? createPostgresMemoryStore({ databaseUrl, embedText: embedTextFn })
   : null;
 
-const readModel = createLiveReadModel(undefined, memoryStore ? { persistentStore: memoryStore } : undefined);
+const readModel = createLiveReadModel(undefined, {
+  ...(memoryStore ? { persistentStore: memoryStore } : {}),
+  circuit: providerCircuit,
+});
 
 const journalStore = databaseUrl
   ? createPostgresJournalStore({ databaseUrl })

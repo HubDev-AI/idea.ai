@@ -34,6 +34,7 @@ import type { ExecutionLogRecord, ListLogsQuery } from '../routes/logs';
 import { readExecutionLogs } from './execution_log_reader';
 import { createExecutionLogger, createRunId } from './execution_logger';
 import { createPostgresMemoryStore, type PostgresMemoryStore } from './postgres_memory_store';
+import type { ProviderCircuitBreaker } from './provider_circuit';
 import {
   applySourceQualityPenalty,
   findIdeaCandidates,
@@ -496,11 +497,12 @@ const buildInitialConnectors = (env: RuntimeEnv): ConnectorStatusRecord[] => {
   ];
 };
 
-export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { persistentStore?: PostgresMemoryStore }) => {
+export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { persistentStore?: PostgresMemoryStore; circuit?: ProviderCircuitBreaker }) => {
   const startedAt = Date.now();
   const initialEnv = loadRuntimeEnv(process.env);
   const initialAiJudgeSettings = resolveAiJudgeSettings(process.env);
   const initialAiPostScrapeSettings = resolveAiPostScrapeSettings(process.env);
+  const circuit = opts?.circuit;
   const memoryEntries: IndexedMemoryEntry[] = [];
   let postgresMemoryStore: PostgresMemoryStore | null | undefined = opts?.persistentStore ?? undefined;
   let snapshotHydrated = false;
@@ -699,6 +701,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
       const aiPostScrapeBatch = await analyzePostScrapeBatchWithAi({
         settings: aiPostScrapeSettings,
         logger,
+        circuit,
         inputs: selectedSignalInputs.map((entry) => ({
           id: entry.signalId,
           source: entry.event.source,
@@ -791,7 +794,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
               topic,
               source: event.source,
               settings: aiJudgeSettings,
-              logger
+              logger,
+              circuit
             });
             judgeScores = aiJudgeResult.judgeScores;
 
@@ -1095,7 +1099,16 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
     }),
     getAiHealth: async (): Promise<AiHealthRecord> => {
       await ensureFresh();
-      return aiHealth;
+      if (!circuit) return aiHealth;
+      const circuitStatus = circuit.getStatus();
+      return {
+        ...aiHealth,
+        providers: aiHealth.providers.map((p) => ({
+          ...p,
+          circuit_state: circuitStatus[p.provider].state,
+          circuit_failures: circuitStatus[p.provider].consecutiveFailures,
+        }))
+      };
     },
     listLogs: async (query: ListLogsQuery): Promise<ExecutionLogRecord[]> =>
       (await (async () => {
