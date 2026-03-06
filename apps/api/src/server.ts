@@ -158,7 +158,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   }
 
   if (resolvedDeps.infraStatusDeps) {
-    registerInfraStatusRoute(app, resolvedDeps.infraStatusDeps);
+    registerInfraStatusRoute(app, {
+      ...resolvedDeps.infraStatusDeps,
+      ...(resolvedDeps.logger ? { logger: resolvedDeps.logger } : {})
+    });
   }
 
   return app;

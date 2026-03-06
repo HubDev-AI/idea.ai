@@ -227,8 +227,17 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
       return true;
     },
     checkOllama: async () => {
-      const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
-      return res.ok;
+      const embedModel = process.env.OLLAMA_EMBED_MODEL ?? 'nomic-embed-text';
+      try {
+        const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+        if (!res.ok) return { ok: false, reason: `ollama returned ${res.status}` };
+        const data = await res.json() as { models?: { name: string }[] };
+        const hasModel = data.models?.some((m) => m.name.startsWith(embedModel)) ?? false;
+        if (!hasModel) return { ok: false, reason: `model '${embedModel}' not installed — run: ollama pull ${embedModel}` };
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, reason: err instanceof Error ? err.message : 'connection failed' };
+      }
     },
     getEmbeddingStats: async () => {
       if (!memoryStore) return { total: 0, withEmbedding: 0, fallbackModel: 'none' };
