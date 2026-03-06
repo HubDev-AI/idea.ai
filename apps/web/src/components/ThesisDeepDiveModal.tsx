@@ -72,7 +72,15 @@ export const ThesisDeepDiveModal: React.FC<Props> = ({ thesis, cachedData, onClo
   };
 
   return (
-    <div className="deep-dive-backdrop" ref={backdropRef} onClick={handleBackdropClick}>
+    <div
+      className="deep-dive-backdrop"
+      ref={backdropRef}
+      onClick={handleBackdropClick}
+      onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Deep dive: ${thesis.title}`}
+    >
       <div className="deep-dive-modal">
         <div className="deep-dive-header">
           <h2 className="deep-dive-title">{thesis.title}</h2>

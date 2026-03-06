@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#0f1117"/>
+  <g transform="translate(16,14)" fill="none" stroke="url(#g)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <!-- bulb outline -->
+    <path d="M-5,0 A7,7 0 1,1 5,0 Q5,4 3,6 L3,8 -3,8 -3,6 Q-5,4 -5,0Z" fill="url(#g)" fill-opacity="0.15"/>
+    <!-- filament lines -->
+    <line x1="-2" y1="8" x2="2" y2="8"/>
+    <line x1="-1.5" y1="10" x2="1.5" y2="10"/>
+    <!-- rays -->
+    <line x1="0" y1="-10" x2="0" y2="-12.5" stroke-width="1.5"/>
+    <line x1="-8" y1="-5" x2="-10" y2="-6.5" stroke-width="1.5"/>
+    <line x1="8" y1="-5" x2="10" y2="-6.5" stroke-width="1.5"/>
+    <line x1="-9" y1="2" x2="-11" y2="2.5" stroke-width="1.2"/>
+    <line x1="9" y1="2" x2="11" y2="2.5" stroke-width="1.2"/>
+  </g>
+</svg>

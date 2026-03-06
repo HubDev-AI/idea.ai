@@ -28,6 +28,10 @@ export type RuntimeEnv = {
   agentIntervalMs: number;
   agentTimeoutMs: number;
   agentMaxClusters: number;
+  shutdownTimeoutMs: number;
+  wsInfraPollMs: number;
+  wsLogPollMs: number;
+  cleanupIntervalMs: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -52,7 +56,11 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     agentDualAnalyst: env.AGENT_DUAL_ANALYST === 'true',
     agentIntervalMs: parseNumber(env.AGENT_INTERVAL_MS, 60 * 60 * 1000),
     agentTimeoutMs: parseNumber(env.AGENT_TIMEOUT_MS, 180_000),
-    agentMaxClusters: parseNumber(env.AGENT_MAX_CLUSTERS, 50)
+    agentMaxClusters: parseNumber(env.AGENT_MAX_CLUSTERS, 50),
+    shutdownTimeoutMs: parseNumber(env.SHUTDOWN_TIMEOUT_MS, 15_000),
+    wsInfraPollMs: parseNumber(env.WS_INFRA_POLL_MS, 10_000),
+    wsLogPollMs: parseNumber(env.WS_LOG_POLL_MS, 3_000),
+    cleanupIntervalMs: parseNumber(env.CLEANUP_INTERVAL_MS, 6 * 60 * 60 * 1000)
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;

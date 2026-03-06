@@ -21,9 +21,9 @@ export const fetchGoogleTrends = async (
   const xml = await loadRss(limit);
   const results: RawEventInput[] = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-  let match: RegExpExecArray | null;
+  let match: RegExpExecArray | null = itemRegex.exec(xml);
 
-  while ((match = itemRegex.exec(xml)) !== null && results.length < limit) {
+  while (match !== null && results.length < limit) {
     const item = match[1];
     const title = item.match(/<title><!\[CDATA\[(.*?)\]\]>/)?.[1]
       ?? item.match(/<title>(.*?)<\/title>/)?.[1] ?? '';
@@ -41,6 +41,7 @@ export const fetchGoogleTrends = async (
         url: link || `https://trends.google.com/trending?q=${encodeURIComponent(title)}`,
       });
     }
+    match = itemRegex.exec(xml);
   }
 
   return results.slice(0, limit);

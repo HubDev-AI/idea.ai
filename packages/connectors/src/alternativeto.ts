@@ -24,9 +24,9 @@ export const fetchAlternativeTo = async (
   const xml = await loadRss(limit);
   const results: RawEventInput[] = [];
   const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-  let match: RegExpExecArray | null;
+  let match: RegExpExecArray | null = itemRegex.exec(xml);
 
-  while ((match = itemRegex.exec(xml)) !== null && results.length < limit) {
+  while (match !== null && results.length < limit) {
     const item = match[1];
     const title = item.match(/<title><!\[CDATA\[(.*?)\]\]>/)?.[1]
       ?? item.match(/<title>(.*?)<\/title>/)?.[1] ?? '';
@@ -45,6 +45,7 @@ export const fetchAlternativeTo = async (
         url: link || 'https://alternativeto.net/',
       });
     }
+    match = itemRegex.exec(xml);
   }
 
   return results.slice(0, limit);

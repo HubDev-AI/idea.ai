@@ -1,47 +1,31 @@
-// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  type AgentStatusRecord,
-  type AiHealthRecord,
-  buildApiUrl,
-  type ConnectorRecord,
   type ExecutionLogRecord,
-  fetchAgentStatus,
-  fetchAiHealth,
-  fetchConnectors,
-  fetchInfraStatus,
-  fetchLogs,
   fetchProfiles,
-  fetchRefreshMeta,
-  fetchSignalCounts,
   fetchSignals,
   fetchTheses,
-  type InfraStatusRecord,
+  fetchThesisDeepDive,
+  generateThesisDeepDive,
   type ProfileDisplay,
-  type RefreshMeta,
   type SignalRecord,
   type SortField,
+  setThesisLabel,
+  type ThesisDeepDive,
+  type ThesisLabel,
   type ThesisListItem,
   type ThesisSortField,
   type ThesisStats,
   triggerAgentRun,
   triggerConnectorRefresh,
-  fetchThesisDeepDive,
-  generateThesisDeepDive,
-  type ThesisDeepDive,
-  setThesisLabel,
-  type ThesisLabel,
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
 import { ThesisCard } from './components/ThesisCard';
 import { ThesisDeepDiveModal } from './components/ThesisDeepDiveModal';
 import { connectorDisplayName, connectorSourceKey } from './connectorNames';
+import { useSocket } from './useSocket';
 
 const PAGE_SIZE = 8;
-const LOG_POLL_INTERVAL_MS = 3_000;
-const LOG_LIMIT = 500;
-const DATA_POLL_INTERVAL_MS = 15_000;
 const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
 
@@ -83,19 +67,12 @@ const logLevelIcons: Record<ExecutionLogRecord['level'], string> = {
 };
 
 const App = () => {
+  const ws = useSocket();
   const [signals, setSignals] = useState<SignalRecord[]>([]);
-  const [connectors, setConnectors] = useState<ConnectorRecord[]>([]);
-  const [aiHealth, setAiHealth] = useState<AiHealthRecord | null>(null);
   const [theses, setTheses] = useState<ThesisListItem[]>([]);
-  const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentRunResult, setAgentRunResult] = useState<string | null>(null);
-  const [infraStatus, setInfraStatus] = useState<InfraStatusRecord | null>(null);
-  const [signalCounts, setSignalCounts] = useState<Record<string, number>>({});
-  const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
-  const [logsRealtime, setLogsRealtime] = useState(false);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
-  const failCountRef = useRef(0);
   const prevRunningRef = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -107,11 +84,9 @@ const App = () => {
   const deepDiveCache = useRef(new Map<string, ThesisDeepDive>());
   const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' }[]>([]);
   const toastIdRef = useRef(0);
-  const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
   const [thesisSortField, setThesisSortField] = useState<ThesisSortField>('newest');
-  const [thesisStats, setThesisStats] = useState<ThesisStats>({ total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 });
   const [thesisPageInfo, setThesisPageInfo] = useState({
     page: 1,
     pageSize: 10,
@@ -127,6 +102,7 @@ const App = () => {
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [logComponentFilter, setLogComponentFilter] = useState('all');
   const [logLevelFilter, setLogLevelFilter] = useState<Set<ExecutionLogRecord['level']>>(new Set(['info', 'warn', 'error']));
+  const [thesisStats, setThesisStats] = useState<ThesisStats>({ total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 });
   const [splitPct, setSplitPct] = useState(50);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pageInfo, setPageInfo] = useState({
@@ -140,12 +116,12 @@ const App = () => {
   const [latestSignalAt, setLatestSignalAt] = useState<string | null>(null);
   const logComponents = useMemo(() => {
     const set = new Set<string>();
-    for (const entry of logs) set.add(entry.component);
+    for (const entry of ws.logs) set.add(entry.component);
     return Array.from(set).sort();
-  }, [logs]);
+  }, [ws.logs]);
 
   const renderedLogs = useMemo(() => {
-    let filtered = logs;
+    let filtered = ws.logs;
     if (logLevelFilter.size < 4) {
       filtered = filtered.filter((entry) => logLevelFilter.has(entry.level));
     }
@@ -153,7 +129,7 @@ const App = () => {
       filtered = filtered.filter((entry) => entry.component === logComponentFilter);
     }
     return filtered.slice().reverse();
-  }, [logs, logLevelFilter, logComponentFilter]);
+  }, [ws.logs, logLevelFilter, logComponentFilter]);
   const logListRef = useRef<HTMLUListElement | null>(null);
   const splitContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -186,7 +162,35 @@ const App = () => {
     fetchProfiles().then(setProfiles).catch(() => {});
   }, []);
 
-  // Fetch signals when page/filter changes (signals only — no sidebar flicker)
+  // Sync thesis stats from WebSocket
+  useEffect(() => {
+    if (ws.thesisStats.total > 0) setThesisStats(ws.thesisStats);
+  }, [ws.thesisStats]);
+
+  // Track agent running state from WebSocket
+  useEffect(() => {
+    if (!ws.agentStatus) return;
+    const wasRunning = prevRunningRef.current;
+    const nowRunning = ws.agentStatus.isRunning;
+    prevRunningRef.current = nowRunning;
+    setAgentRunning(nowRunning);
+
+    if (wasRunning && !nowRunning && ws.agentStatus.lastRun) {
+      const lr = ws.agentStatus.lastRun;
+      setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
+    }
+  }, [ws.agentStatus]);
+
+  // Connection lost warning
+  useEffect(() => {
+    if (!ws.connected) {
+      setLoadWarning('Connection lost \u2014 reconnecting\u2026');
+    } else {
+      setLoadWarning(null);
+    }
+  }, [ws.connected]);
+
+  // Fetch signals on page/filter change or when server pushes signalsUpdated
   useEffect(() => {
     let cancelled = false;
     const loadSignals = async () => {
@@ -225,98 +229,7 @@ const App = () => {
     return () => { cancelled = true; };
   }, [requestedPage, sourceFilter, thesisFilter, sortField]);
 
-  // Background polling for status data (connectors, agent, infra, counts)
-  useEffect(() => {
-    const pollStatus = async () => {
-      const [connectorResult, aiHealthResult, agentResult, countsResult, infraResult, refreshMetaResult] = await Promise.allSettled([
-        fetchConnectors(),
-        fetchAiHealth(),
-        fetchAgentStatus(),
-        fetchSignalCounts(),
-        fetchInfraStatus(),
-        fetchRefreshMeta()
-      ]);
-      const warnings: string[] = [];
-
-      if (connectorResult.status === 'fulfilled') {
-        setConnectors(connectorResult.value);
-      } else {
-        warnings.push('connectors');
-      }
-
-      if (aiHealthResult.status === 'fulfilled') {
-        setAiHealth(aiHealthResult.value);
-      } else {
-        warnings.push('ai_health');
-      }
-
-      if (agentResult.status === 'fulfilled') {
-        const wasRunning = prevRunningRef.current;
-        const nowRunning = agentResult.value.isRunning;
-        prevRunningRef.current = nowRunning;
-        setAgentStatus(agentResult.value);
-        setAgentRunning(nowRunning);
-        // Agent just finished — show result and refresh theses/signals
-        if (wasRunning && !nowRunning && agentResult.value.lastRun) {
-          const lr = agentResult.value.lastRun;
-          setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
-          // Refresh theses and signals to reflect agent changes
-          Promise.allSettled([
-            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField, profile: activeProfile, ...(labelFilter !== 'all' ? { label: labelFilter } : {}) }),
-            fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
-            fetchSignalCounts()
-          ]).then(([thesesRes, signalsRes, countsRes]) => {
-            if (thesesRes.status === 'fulfilled') {
-              const tp = thesesRes.value;
-              setTheses(tp.items);
-              setRequestedThesisPage(1);
-              setThesisPageInfo({ page: tp.page, pageSize: tp.page_size, totalItems: tp.total_items, totalPages: tp.total_pages, hasNext: tp.has_next, hasPrev: tp.has_prev });
-              if (tp.stats) setThesisStats(tp.stats);
-            }
-            if (signalsRes.status === 'fulfilled') {
-              setSignals(signalsRes.value.items);
-              setPageInfo({ page: signalsRes.value.page, pageSize: signalsRes.value.page_size, totalItems: signalsRes.value.total_items, totalPages: signalsRes.value.total_pages, hasNext: signalsRes.value.has_next, hasPrev: signalsRes.value.has_prev });
-              if (signalsRes.value.items.length > 0) setLatestSignalAt(signalsRes.value.items[0].updated_at);
-            }
-            if (countsRes.status === 'fulfilled') setSignalCounts(countsRes.value);
-          });
-        }
-      }
-
-      if (countsResult.status === 'fulfilled') {
-        setSignalCounts(countsResult.value);
-      }
-
-      if (infraResult.status === 'fulfilled') {
-        setInfraStatus(infraResult.value);
-      }
-
-      if (refreshMetaResult.status === 'fulfilled') {
-        setRefreshMeta(refreshMetaResult.value);
-      }
-
-      if (warnings.length > 0) {
-        failCountRef.current++;
-        if (failCountRef.current >= 2) {
-          setLoadWarning(`Some data could not be loaded (${warnings.join(', ')})`);
-        }
-      } else {
-        failCountRef.current = 0;
-        setLoadWarning(null);
-      }
-    };
-
-    void pollStatus();
-    const timer = setInterval(() => {
-      void pollStatus();
-    }, DATA_POLL_INTERVAL_MS);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, []);
-
-  // Separate thesis-only fetch (avoids 7-endpoint refresh on page change)
+  // Fetch theses on page/sort/filter change or when server pushes thesesUpdated
   useEffect(() => {
     let isCancelled = false;
     const loadTheses = async () => {
@@ -339,96 +252,11 @@ const App = () => {
           hasPrev: tp.has_prev
         });
         if (tp.stats) setThesisStats(tp.stats);
-      } catch { /* handled by bulk fetch warning */ }
+      } catch { /* handled by connection warning */ }
     };
     void loadTheses();
     return () => { isCancelled = true; };
   }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter]);
-
-  useEffect(() => {
-    let isCancelled = false;
-    let fallbackTimer: ReturnType<typeof setInterval> | null = null;
-    let eventSource: EventSource | null = null;
-
-    const loadLogs = async () => {
-      try {
-        const data = await fetchLogs({ limit: LOG_LIMIT });
-        if (!isCancelled) {
-          setLogs(data);
-        }
-      } catch {
-        if (!isCancelled) {
-          setLoadWarning((current) => current ?? 'Some data could not be loaded (logs)');
-        }
-      }
-    };
-
-    const startFallbackPolling = () => {
-      if (fallbackTimer) {
-        return;
-      }
-
-      void loadLogs();
-      fallbackTimer = setInterval(() => {
-        void loadLogs();
-      }, LOG_POLL_INTERVAL_MS);
-    };
-
-    if (typeof EventSource !== 'undefined') {
-      eventSource = new EventSource(buildApiUrl(`/v1/logs/stream?limit=${LOG_LIMIT}`));
-      eventSource.addEventListener('open', () => {
-        if (!isCancelled) {
-          setLogsRealtime(true);
-        }
-      });
-      eventSource.addEventListener('logs', (event) => {
-        if (isCancelled) {
-          return;
-        }
-
-        try {
-          const parsed = JSON.parse((event as MessageEvent<string>).data) as ExecutionLogRecord[];
-          setLogs(parsed);
-          setLogsRealtime(true);
-        } catch {
-          setLogsRealtime(false);
-        }
-      });
-      eventSource.addEventListener('heartbeat', () => {
-        if (!isCancelled) {
-          setLogsRealtime(true);
-        }
-      });
-      eventSource.addEventListener('stream_error', () => {
-        if (!isCancelled) {
-          setLogsRealtime(false);
-          setLoadWarning((current) => current ?? 'Log stream reported an error. Falling back to polling when needed.');
-        }
-      });
-      eventSource.onerror = () => {
-        if (isCancelled) {
-          return;
-        }
-
-        setLogsRealtime(false);
-        eventSource?.close();
-        eventSource = null;
-        startFallbackPolling();
-      };
-    } else {
-      startFallbackPolling();
-    }
-
-    return () => {
-      isCancelled = true;
-      if (fallbackTimer) {
-        clearInterval(fallbackTimer);
-      }
-      if (eventSource) {
-        eventSource.close();
-      }
-    };
-  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderedLogs+logDrawerOpen trigger scroll-to-bottom
   useEffect(() => {
@@ -568,21 +396,20 @@ const App = () => {
   return (
     <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
       <Sidebar
-        connectors={connectors}
-        aiHealth={aiHealth}
-        agentStatus={agentStatus}
-        infraStatus={infraStatus}
+        connectors={ws.connectors}
+        aiHealth={ws.aiHealth}
+        agentStatus={ws.agentStatus}
+        infraStatus={ws.infraStatus}
         thesisStats={thesisStats}
-        thesisFilter={thesisFilter}
-        onThesisFilter={handleThesisFilter}
-        signalCount={Object.values(signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
+        signalCount={Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
         latestSignalAt={latestSignalAt}
-        signalCounts={signalCounts}
+        signalCounts={ws.signalCounts}
         onRunAgent={handleRunAgent}
         agentRunning={agentRunning}
         agentRunResult={agentRunResult}
-        refreshMeta={refreshMeta}
+        refreshMeta={ws.refreshMeta}
         onForceRefresh={handleForceRefresh}
+        connected={ws.connected}
       />
       <button
         type="button"
@@ -695,8 +522,22 @@ const App = () => {
           </section>
 
           {/* Resize handle */}
-          {/* biome-ignore lint/a11y/useKeyboardHandler: resize is mouse-only, keyboard users can use default 50/50 */}
-          <div className="resize-handle" onMouseDown={onResizeStart} role="separator" aria-orientation="vertical" />
+          {/* biome-ignore lint/a11y/useSemanticElements: separator needs to be a draggable div, not an hr */}
+          <div
+            className="resize-handle"
+            onMouseDown={onResizeStart}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft') { e.preventDefault(); setSplitPct((v) => Math.max(MIN_PANE_PCT, v - 2)); }
+              if (e.key === 'ArrowRight') { e.preventDefault(); setSplitPct((v) => Math.min(MAX_PANE_PCT, v + 2)); }
+            }}
+            role="separator"
+            tabIndex={0}
+            aria-orientation="vertical"
+            aria-valuenow={Math.round(splitPct)}
+            aria-valuemin={MIN_PANE_PCT}
+            aria-valuemax={MAX_PANE_PCT}
+            aria-label="Resize panes"
+          />
 
           {/* Right pane — Signal Feed */}
           <section className="pane pane-right" style={{ width: `${100 - splitPct}%` }}>
@@ -709,7 +550,7 @@ const App = () => {
                   onChange={(e) => { setSourceFilter(e.target.value); setRequestedPage(1); }}
                 >
                   <option value="all">All Sources</option>
-                  {connectors.filter((c) => c.status === 'active').map((c) => (
+                  {ws.connectors.filter((c) => c.status === 'active').map((c) => (
                     <option key={c.name} value={connectorSourceKey[c.name] ?? c.name}>
                       {connectorDisplayName[c.name] ?? c.name}
                     </option>
@@ -794,9 +635,9 @@ const App = () => {
           >
             <span className="log-drawer-title">
               Logs
-              <span className="log-drawer-count">{logs.length}</span>
-              <span className={`log-drawer-status ${logsRealtime ? 'live' : ''}`}>
-                {logsRealtime ? 'LIVE' : 'POLLING'}
+              <span className="log-drawer-count">{ws.logs.length}</span>
+              <span className={`log-drawer-status ${ws.connected ? 'live' : ''}`}>
+                {ws.connected ? 'LIVE' : 'DISCONNECTED'}
               </span>
             </span>
             <span className="log-drawer-right">
@@ -871,7 +712,7 @@ const App = () => {
                     </code>
                   </li>
                 ))}
-                {logs.length === 0 ? <li className="log-empty">No execution logs yet.</li> : null}
+                {ws.logs.length === 0 ? <li className="log-empty">No execution logs yet.</li> : null}
               </ul>
               {!logAtBottom && (
                 <button type="button" className="log-scroll-bottom" onClick={scrollLogsToBottom}>

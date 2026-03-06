@@ -2,11 +2,13 @@ import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
 import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import { embedText } from '@idea/ai-runtime/src/ollama';
 import type { AgentStatusRecord } from '@idea/contracts/src/api';
+import type { ClientToServerEvents, ServerToClientEvents } from '@idea/contracts/src/ws';
 import pg from 'pg';
+import { Server as SocketIOServer } from 'socket.io';
 import { loadEnvFile } from './config/dotenv';
 import { loadRuntimeEnv } from './config/env';
-import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
+import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { loadProfiles } from './profiles/index.js';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
 import { createDeepDiveStore } from './runtime/deep_dive_store';
@@ -14,9 +16,10 @@ import { createExecutionLogger } from './runtime/execution_logger';
 import { createPostgresJournalStore } from './runtime/journal_store';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
-import { createPostgresThesisStore } from './runtime/postgres_thesis_store';
+import { createPostgresThesisStore, type PaginatedThesisStore } from './runtime/postgres_thesis_store';
 import { InMemoryThesisStore } from './runtime/thesis_store';
 import { buildServer } from './server';
+import { StateHub } from './ws/state_hub';
 
 loadEnvFile();
 
@@ -29,6 +32,7 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? '')
 const apiKey = process.env.API_KEY || undefined;
 const databaseUrl = process.env.DATABASE_URL;
 
+const startupEnv = loadRuntimeEnv(process.env);
 const pool = databaseUrl ? new pg.Pool({ connectionString: databaseUrl, max: 4 }) : null;
 
 const thesisStore = pool
@@ -51,7 +55,7 @@ const agentRunStore: AgentRunStore | null = pool
   ? createAgentRunStore({ pool })
   : null;
 
-let agentStatus: AgentStatusRecord = { isRunning: false, lastRun: null, investigateNext: null };
+let agentStatus: AgentStatusRecord = { isRunning: false, intervalMs: startupEnv.agentIntervalMs, lastRun: null, investigateNext: null };
 let agentRunInFlight: Promise<AgentRunResult> | null = null;
 
 // Load last run status from DB on startup (survives restarts)
@@ -69,6 +73,7 @@ try {
     if (row) {
       agentStatus = {
         isRunning: false,
+        intervalMs: startupEnv.agentIntervalMs,
         lastRun: {
           timestamp: row.started_at,
           thesesUpdated: row.theses_updated,
@@ -94,6 +99,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
   agentRunInFlight = (async () => {
     await agentRunStore?.create(runId);
     await logger.info('agent_runner', 'run started', { run_id: runId });
+    stateHub.emitAgentStatus({ ...agentStatus, isRunning: true });
 
     try {
       const agentEnv = loadRuntimeEnv(process.env);
@@ -172,6 +178,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
 
       agentStatus = {
         isRunning: false,
+        intervalMs: startupEnv.agentIntervalMs,
         lastRun: {
           timestamp: new Date().toISOString(),
           thesesUpdated: aggregated.thesesUpdated,
@@ -183,6 +190,9 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         },
         investigateNext: aggregated.investigateNext || null,
       };
+      // Push updates via WebSocket after agent run
+      void stateHub.broadcastAll();
+      stateHub.emitThesesUpdated();
       return aggregated;
     } catch (err) {
       await agentRunStore?.fail(runId, err);
@@ -198,7 +208,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
   return agentRunInFlight;
 };
 
-const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
+const ollamaBaseUrl = startupEnv.ollamaBaseUrl;
 
 const serverDeps: Parameters<typeof buildServer>[0] = {
   listSignals: readModel.listSignals,
@@ -206,7 +216,11 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   listLogs: readModel.listLogs,
   getAiHealth: readModel.getAiHealth,
   getRefreshMeta: readModel.getRefreshMeta,
-  triggerRefresh: async (cadence) => { await readModel.refresh(cadence); },
+  triggerRefresh: async (cadence) => {
+    stateHub.pushRefreshMeta();
+    await readModel.refresh(cadence);
+    void stateHub.broadcastAll();
+  },
   thesisStore,
   memoryStore,
   deepDiveStore: pool ? createDeepDiveStore({ pool }) : null,
@@ -227,7 +241,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
       return true;
     },
     checkOllama: async () => {
-      const embedModel = process.env.OLLAMA_EMBED_MODEL ?? 'nomic-embed-text';
+      const embedModel = startupEnv.ollamaEmbedModel;
       try {
         const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
         if (!res.ok) return { ok: false, reason: `ollama returned ${res.status}` };
@@ -269,11 +283,62 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
 if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
+// -- Socket.IO + StateHub -----------------------------------------------
+const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(app.server, {
+  cors: {
+    origin: corsOrigins.length > 0 ? corsOrigins : '*',
+    methods: ['GET', 'POST'],
+  },
+  path: '/socket.io/',
+});
+
+const infraCheckDeps = serverDeps.infraStatusDeps!;
+const stateHub = new StateHub(io, {
+  getConnectors: readModel.listConnectors,
+  getAiHealth: readModel.getAiHealth,
+  getAgentStatus: () => ({ ...agentStatus, isRunning: agentRunInFlight !== null }),
+  getInfraStatus: async () => {
+    const [pgResult, ollamaResult, embStats, diskResult] = await Promise.allSettled([
+      infraCheckDeps.checkPostgres(),
+      infraCheckDeps.checkOllama(),
+      infraCheckDeps.getEmbeddingStats(),
+      infraCheckDeps.getDiskStats?.() ?? Promise.resolve(null),
+    ]);
+    const pgOk = pgResult.status === 'fulfilled' && pgResult.value;
+    const ollamaCheck = ollamaResult.status === 'fulfilled' ? ollamaResult.value : { ok: false };
+    const emb = embStats.status === 'fulfilled' ? embStats.value : { total: 0, withEmbedding: 0, fallbackModel: 'unknown' };
+    const disk = diskResult.status === 'fulfilled' && diskResult.value ? diskResult.value : undefined;
+    return {
+      postgres: pgOk ? 'ok' as const : 'error' as const,
+      ollama: ollamaCheck.ok ? 'ok' as const : 'error' as const,
+      ...(ollamaCheck.sizeMb != null ? { ollamaSizeMb: ollamaCheck.sizeMb } : {}),
+      embeddings: emb,
+      ...(disk ? { diskUsage: disk } : {}),
+    };
+  },
+  getRefreshMeta: readModel.getRefreshMeta,
+  getSignalCounts: async () => {
+    if (!memoryStore) return {};
+    return memoryStore.countSignalsBySource();
+  },
+  getThesisStats: async () => {
+    if ('listPaginated' in thesisStore) {
+      const page = await (thesisStore as PaginatedThesisStore).listPaginated({ page: 1, pageSize: 1 });
+      return page.stats;
+    }
+    return { total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 };
+  },
+  getLogs: async () => readModel.listLogs({ limit: 500, scope: 'session' }),
+}, {
+  infraPollMs: startupEnv.wsInfraPollMs,
+  logPollMs: startupEnv.wsLogPollMs,
+});
+
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
 const RETENTION_DAYS = 90;
-const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 const runRetentionCleanup = async () => {
   if (!pool) return;
@@ -287,11 +352,20 @@ const runRetentionCleanup = async () => {
   }
 };
 
-const SHUTDOWN_TIMEOUT_MS = 15_000;
+const SHUTDOWN_TIMEOUT_MS = startupEnv.shutdownTimeoutMs;
+const CLEANUP_INTERVAL_MS = startupEnv.cleanupIntervalMs;
+
+let shuttingDown = false;
 
 const shutdown = async () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   clearInterval(agentTimer);
   clearInterval(cleanupTimer);
+  clearInterval(refreshTimer);
+  stateHub.stopPolling();
+  io.close();
 
   // Wait for in-flight agent run, mark as failed if still running
   if (agentRunInFlight) {
@@ -306,10 +380,8 @@ const shutdown = async () => {
     agentRunInFlight = null;
   }
 
+  // readModel.close() closes the shared memoryStore pool — don't close it again
   await readModel.close();
-  if (memoryStore) {
-    await memoryStore.close();
-  }
   if ('close' in thesisStore) {
     await (thesisStore as { close: () => Promise<void> }).close();
   }
@@ -333,9 +405,17 @@ process.on('SIGTERM', () => {
 
 app
   .listen({ host, port })
-  .then((address) => {
+  .then(async (address) => {
     console.log(`API ready on ${address}`);
+    // Collect initial state and start WebSocket polling
+    await stateHub.collectAll();
+    stateHub.startPolling();
     const runtimeEnv = loadRuntimeEnv(process.env);
+
+    // Trigger initial data refresh and broadcast
+    void readModel.refresh().then(() => stateHub.broadcastAll()).catch(() => {});
+    // Push refreshMeta immediately so clients see the "refreshing" state
+    setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
     // If overdue from a previous session, run immediately then start the regular interval
     const lastRunTs = agentStatus.lastRun?.timestamp;
@@ -351,6 +431,15 @@ app
         console.error('research agent cron failed:', err);
       });
     }, runtimeEnv.agentIntervalMs);
+
+    // Periodic connector refresh (was driven by client polling before WebSocket migration)
+    refreshTimer = setInterval(() => {
+      stateHub.pushRefreshMeta();
+      void readModel.refresh().then(() => stateHub.broadcastAll()).catch((err) => {
+        console.error('periodic refresh failed:', err);
+      });
+    }, runtimeEnv.agentIntervalMs);
+
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
     void runRetentionCleanup();
   })

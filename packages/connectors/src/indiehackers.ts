@@ -12,22 +12,24 @@ const parsePostsFromHtml = (html: string, limit: number): RawEventInput[] => {
   const results: RawEventInput[] = [];
 
   linkPattern.lastIndex = 0;
-  let match: RegExpExecArray | null;
+  let match: RegExpExecArray | null = linkPattern.exec(html);
 
-  while ((match = linkPattern.exec(html)) !== null && results.length < limit) {
+  while (match !== null && results.length < limit) {
     const path = match[1];
     const title = decodeEntities(match[3].replace(/<[^>]*>/g, '').trim());
 
-    if (!title || title.length < 5 || seen.has(path)) continue;
-    seen.add(path);
+    if (title && title.length >= 5 && !seen.has(path)) {
+      seen.add(path);
 
-    results.push({
-      source: 'indiehackers',
-      source_item_id: `ih:${path}`,
-      source_timestamp: new Date().toISOString(),
-      text: title,
-      url: `https://www.indiehackers.com${path}`
-    });
+      results.push({
+        source: 'indiehackers',
+        source_item_id: `ih:${path}`,
+        source_timestamp: new Date().toISOString(),
+        text: title,
+        url: `https://www.indiehackers.com${path}`
+      });
+    }
+    match = linkPattern.exec(html);
   }
 
   return results;
