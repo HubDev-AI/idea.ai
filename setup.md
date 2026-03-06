@@ -19,7 +19,6 @@ HOURLY_CONNECTORS=hn,github_issues
 DAILY_CONNECTORS=greenhouse,lever,yc_companies
 VITE_API_URL=http://127.0.0.1:3000
 LOG_DIR=./logs/executions
-SNAPSHOT_FILE=./logs/state/latest_snapshot.json
 REDIS_URL=redis://127.0.0.1:6391
 DATABASE_URL=postgresql://idea_ai:idea_ai_dev@127.0.0.1:5917/idea_ai
 EXA_DAILY_BUDGET_USD=0
