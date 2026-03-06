@@ -7,6 +7,7 @@ import { loadEnvFile } from './config/dotenv';
 import { loadRuntimeEnv } from './config/env';
 import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
+import { loadProfiles } from './profiles/index.js';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
 import { createDeepDiveStore } from './runtime/deep_dive_store';
 import { createExecutionLogger } from './runtime/execution_logger';
@@ -88,7 +89,14 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
 
     try {
       const agentEnv = loadRuntimeEnv(process.env);
-      const result = await runResearchAgent({
+      const profiles = loadProfiles();
+
+      await logger.info('agent_runner', 'running profiles', {
+        profiles: profiles.map(p => p.id),
+        count: profiles.length
+      });
+
+      const baseDeps = {
         thesisStore,
         memoryStore,
         journalStore,
@@ -99,32 +107,75 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         runId,
         preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider,
         timeoutMs: agentEnv.agentTimeoutMs,
-        maxClusters: agentEnv.agentMaxClusters
-      });
+        maxClusters: agentEnv.agentMaxClusters,
+      };
 
-      await agentRunStore?.complete(runId, result);
+      const results = await Promise.allSettled(
+        profiles.map(profile =>
+          runResearchAgent({ ...baseDeps, profile })
+        )
+      );
+
+      // Aggregate results across all profiles
+      const aggregated: AgentRunResult = {
+        thesesUpdated: 0,
+        newCandidates: 0,
+        alerts: [],
+        investigateNext: '',
+        journalEntriesWritten: 0,
+        clustersAnalyzed: 0,
+        deepDivesPerformed: 0,
+        provider: null,
+      };
+
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        const p = profiles[i];
+        if (r.status === 'fulfilled') {
+          aggregated.thesesUpdated += r.value.thesesUpdated;
+          aggregated.newCandidates += r.value.newCandidates;
+          aggregated.alerts.push(...r.value.alerts);
+          aggregated.journalEntriesWritten += r.value.journalEntriesWritten;
+          aggregated.clustersAnalyzed += r.value.clustersAnalyzed;
+          aggregated.deepDivesPerformed += r.value.deepDivesPerformed;
+          if (!aggregated.provider) aggregated.provider = r.value.provider;
+          if (!aggregated.investigateNext) aggregated.investigateNext = r.value.investigateNext;
+          await logger.info('agent_runner', `profile ${p.id} completed`, {
+            theses_updated: r.value.thesesUpdated,
+            new_candidates: r.value.newCandidates,
+          });
+        } else {
+          await logger.error('agent_runner', `profile ${p.id} failed`, {
+            error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+          });
+        }
+      }
+
+      await agentRunStore?.complete(runId, aggregated);
       await logger.info('agent_runner', 'run complete', {
-        theses_updated: result.thesesUpdated,
-        new_candidates: result.newCandidates,
-        clusters_analyzed: result.clustersAnalyzed,
-        deep_dives: result.deepDivesPerformed,
-        journal_entries: result.journalEntriesWritten
+        theses_updated: aggregated.thesesUpdated,
+        new_candidates: aggregated.newCandidates,
+        clusters_analyzed: aggregated.clustersAnalyzed,
+        deep_dives: aggregated.deepDivesPerformed,
+        journal_entries: aggregated.journalEntriesWritten,
+        profiles_succeeded: results.filter(r => r.status === 'fulfilled').length,
+        profiles_failed: results.filter(r => r.status === 'rejected').length,
       });
 
       agentStatus = {
         isRunning: false,
         lastRun: {
           timestamp: new Date().toISOString(),
-          thesesUpdated: result.thesesUpdated,
-          newCandidates: result.newCandidates,
-          clustersAnalyzed: result.clustersAnalyzed,
-          deepDivesPerformed: result.deepDivesPerformed,
-          journalEntriesWritten: result.journalEntriesWritten,
-          provider: result.provider
+          thesesUpdated: aggregated.thesesUpdated,
+          newCandidates: aggregated.newCandidates,
+          clustersAnalyzed: aggregated.clustersAnalyzed,
+          deepDivesPerformed: aggregated.deepDivesPerformed,
+          journalEntriesWritten: aggregated.journalEntriesWritten,
+          provider: aggregated.provider,
         },
-        investigateNext: result.investigateNext || null
+        investigateNext: aggregated.investigateNext || null,
       };
-      return result;
+      return aggregated;
     } catch (err) {
       await agentRunStore?.fail(runId, err);
       await logger.error('agent_runner', 'run failed', {
