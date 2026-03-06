@@ -869,7 +869,6 @@ h1, h2, h3, p {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-radius: 3px;
-  margin-left: auto;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -1432,7 +1431,6 @@ a.signal-idea-link:hover {
 .profile-tabs {
   display: flex;
   gap: 4px;
-  margin-right: 8px;
 }
 
 .profile-tab {

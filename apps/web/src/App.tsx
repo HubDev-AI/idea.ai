@@ -597,69 +597,71 @@ const App = () => {
           <section className="pane pane-left" style={{ width: `${splitPct}%` }}>
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
-              <div className="profile-tabs">
-                <button
-                  type="button"
-                  className={`profile-tab ${activeProfile === 'all' ? 'active' : ''}`}
-                  onClick={() => { setActiveProfile('all'); setRequestedThesisPage(1); }}
-                >
-                  All
-                </button>
-                {profiles.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`profile-tab ${activeProfile === p.id ? 'active' : ''}`}
-                    onClick={() => { setActiveProfile(p.id); setRequestedThesisPage(1); }}
-                    style={{ '--tab-color': p.display.badgeColor } as React.CSSProperties}
-                  >
-                    {p.display.badge}
-                  </button>
-                ))}
-              </div>
-              <select
-                className="source-filter"
-                value={labelFilter}
-                onChange={(e) => { setLabelFilter(e.target.value); setRequestedThesisPage(1); }}
-              >
-                <option value="all">All Labels</option>
-                <option value="favourite">Favourites</option>
-                <option value="later">Later</option>
-                <option value="dismissed">Dismissed</option>
-              </select>
-              <select
-                className="source-filter"
-                value={thesisSortField}
-                onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
-              >
-                <option value="newest">Newest</option>
-                <option value="score">By Score</option>
-                <option value="latest">Latest Activity</option>
-                <option value="evidence">Most Evidence</option>
-              </select>
-              {thesisPageInfo.totalPages > 1 && (
-                <div className="pane-header-right">
+              <div className="pane-header-right">
+                <div className="profile-tabs">
                   <button
                     type="button"
-                    className="page-btn"
-                    onClick={() => setRequestedThesisPage((v) => Math.max(1, v - 1))}
-                    disabled={!thesisPageInfo.hasPrev || isLoading}
+                    className={`profile-tab ${activeProfile === 'all' ? 'active' : ''}`}
+                    onClick={() => { setActiveProfile('all'); setRequestedThesisPage(1); }}
                   >
-                    Prev
+                    All
                   </button>
-                  <span className="page-info">
-                    {thesisPageInfo.page} / {thesisPageInfo.totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    className="page-btn"
-                    onClick={() => setRequestedThesisPage((v) => v + 1)}
-                    disabled={!thesisPageInfo.hasNext || isLoading}
-                  >
-                    Next
-                  </button>
+                  {profiles.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={`profile-tab ${activeProfile === p.id ? 'active' : ''}`}
+                      onClick={() => { setActiveProfile(p.id); setRequestedThesisPage(1); }}
+                      style={{ '--tab-color': p.display.badgeColor } as React.CSSProperties}
+                    >
+                      {p.display.badge}
+                    </button>
+                  ))}
                 </div>
-              )}
+                <select
+                  className="source-filter"
+                  value={labelFilter}
+                  onChange={(e) => { setLabelFilter(e.target.value); setRequestedThesisPage(1); }}
+                >
+                  <option value="all">All Labels</option>
+                  <option value="favourite">Favourites</option>
+                  <option value="later">Later</option>
+                  <option value="dismissed">Dismissed</option>
+                </select>
+                <select
+                  className="source-filter"
+                  value={thesisSortField}
+                  onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
+                >
+                  <option value="newest">Newest</option>
+                  <option value="score">By Score</option>
+                  <option value="latest">Latest Activity</option>
+                  <option value="evidence">Most Evidence</option>
+                </select>
+                {thesisPageInfo.totalPages > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => setRequestedThesisPage((v) => Math.max(1, v - 1))}
+                      disabled={!thesisPageInfo.hasPrev || isLoading}
+                    >
+                      Prev
+                    </button>
+                    <span className="page-info">
+                      {thesisPageInfo.page} / {thesisPageInfo.totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="page-btn"
+                      onClick={() => setRequestedThesisPage((v) => v + 1)}
+                      disabled={!thesisPageInfo.hasNext || isLoading}
+                    >
+                      Next
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="pane-scroll">
               {theses.map((t) => (
