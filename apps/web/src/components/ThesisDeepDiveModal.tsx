@@ -53,12 +53,44 @@ export const ThesisDeepDiveModal: React.FC<Props> = ({ thesis, cachedData, onClo
     [onClose]
   );
 
+  const buildMarkdown = (): string => {
+    const lines = [
+      `# ${thesis.title}`,
+      '',
+      `**Confidence:** ${thesis.confidence}%${thesis.estimatedScope ? ` | **Scope:** ${thesis.estimatedScope}` : ''} | **Evidence:** ${thesis.evidenceCount} | **Sources:** ${thesis.sourceCount}`,
+      '',
+      `## Problem`,
+      thesis.problemStatement,
+    ];
+    if (data) {
+      lines.push('', `## What is this?`, data.summary);
+      lines.push('', `## How it works`, data.howItWorks);
+      lines.push('', `## Growth strategy`, data.growthStrategy);
+      lines.push('', `## Build suggestions`, data.buildSuggestions);
+    }
+    return lines.join('\n');
+  };
+
   return (
     <div className="deep-dive-backdrop" ref={backdropRef} onClick={handleBackdropClick}>
       <div className="deep-dive-modal">
         <div className="deep-dive-header">
           <h2 className="deep-dive-title">{thesis.title}</h2>
-          <button className="deep-dive-close" onClick={onClose} type="button">&times;</button>
+          <div className="deep-dive-header-actions">
+            {data && (
+              <button
+                className="deep-dive-copy-btn"
+                onClick={() => {
+                  navigator.clipboard.writeText(buildMarkdown());
+                }}
+                type="button"
+                title="Copy as Markdown"
+              >
+                Copy MD
+              </button>
+            )}
+            <button className="deep-dive-close" onClick={onClose} type="button">&times;</button>
+          </div>
         </div>
 
         <div className="deep-dive-meta">
