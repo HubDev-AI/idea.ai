@@ -1,9 +1,20 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 
-const silenceProxyError = (err: Error, _req: unknown, _res: unknown) => {
-  if (['EPIPE', 'ECONNRESET', 'ECONNREFUSED'].includes((err as NodeJS.ErrnoException).code ?? '')) return;
-  console.error('[vite proxy]', err.message);
-};
+/** Vite logs EPIPE/ECONNRESET on the raw socket when the API isn't ready yet.
+ *  There's no way to prevent it via the proxy `configure` callback because Vite
+ *  attaches its own handler directly on the socket in the `upgrade` listener.
+ *  Filter these harmless messages at the logger level instead. */
+const silenceWsProxyErrors = (): Plugin => ({
+  name: 'silence-ws-proxy-errors',
+  configureServer(server) {
+    const { logger } = server.config;
+    const origError = logger.error.bind(logger);
+    logger.error = (msg, opts) => {
+      if (typeof msg === 'string' && msg.includes('ws proxy socket error')) return;
+      origError(msg, opts);
+    };
+  }
+});
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -12,6 +23,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: 'apps/web',
+    plugins: [silenceWsProxyErrors()],
     server: {
       port: 5173,
       proxy: {
@@ -23,10 +35,7 @@ export default defineConfig(({ mode }) => {
         '/socket.io': {
           target: proxyTarget,
           changeOrigin: true,
-          ws: true,
-          configure: (proxy) => {
-            proxy.on('error', silenceProxyError);
-          }
+          ws: true
         }
       }
     },
