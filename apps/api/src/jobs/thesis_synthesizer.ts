@@ -39,6 +39,7 @@ export type ThesisDraft = {
   latestObservedAt: string;
   evidence: ThesisEvidenceDraft[];
   estimatedScope?: 'small' | 'medium' | 'large' | null;
+  profileId?: string;
 };
 
 const stopWords = new Set([

@@ -21,6 +21,7 @@ type ThesisRow = {
   avg_timing: number | string;
   avg_buildability: number | string;
   avg_virality: number | string;
+  profile_id: string;
 };
 
 const toNumber = (v: unknown): number => {
@@ -52,7 +53,8 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   avgVirality: toNumber(row.avg_virality),
   latestObservedAt: new Date(row.last_seen_at).toISOString(),
   evidence: [],
-  estimatedScope: toScope(row.estimated_scope)
+  estimatedScope: toScope(row.estimated_scope),
+  profileId: row.profile_id ?? 'consumer'
 });
 
 export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
@@ -106,8 +108,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const result = await pool.query<{ id: string }>(
       `INSERT INTO thesis_candidates
         (canonical_key, title, topic, status, confidence, problem_statement,
-         target_buyer, proposed_solution, estimated_scope, first_seen_at, last_seen_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+         target_buyer, proposed_solution, estimated_scope, profile_id, first_seen_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
        ON CONFLICT (canonical_key) DO UPDATE SET
          title = EXCLUDED.title,
          status = EXCLUDED.status,
@@ -116,6 +118,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
          target_buyer = EXCLUDED.target_buyer,
          proposed_solution = EXCLUDED.proposed_solution,
          estimated_scope = COALESCE(EXCLUDED.estimated_scope, thesis_candidates.estimated_scope),
+         profile_id = EXCLUDED.profile_id,
          last_seen_at = NOW(),
          updated_at = NOW()
        RETURNING id`,
@@ -123,7 +126,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         draft.canonicalKey, draft.title, draft.topic, draft.status,
         draft.confidence, draft.problemStatement,
         draft.targetBuyer, draft.proposedSolution,
-        draft.estimatedScope ?? null
+        draft.estimatedScope ?? null,
+        draft.profileId ?? 'consumer'
       ]
     );
 
