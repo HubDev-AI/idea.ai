@@ -8,6 +8,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import { loadEnvFile } from './config/dotenv';
 import { loadRuntimeEnv } from './config/env';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
+import { snapshotPredictions } from './jobs/backtest_snapshot';
+import { validatePredictions } from './jobs/backtest_validate';
 import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { loadProfiles } from './profiles/index.js';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
@@ -130,6 +132,11 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider,
         timeoutMs: agentEnv.agentTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
+        pool: pool ?? undefined,
+        debateConfidenceThreshold: agentEnv.debateConfidenceThreshold,
+        debateMaxPerRun: agentEnv.debateMaxPerRun,
+        cusumThreshold: agentEnv.cusumThreshold,
+        cusumDrift: agentEnv.cusumDrift,
       };
 
       const results = await Promise.allSettled(
@@ -345,6 +352,7 @@ const stateHub = new StateHub(io, {
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
+let backtestTimer: ReturnType<typeof setInterval> | undefined;
 
 const RETENTION_DAYS = 90;
 
@@ -372,6 +380,7 @@ const shutdown = async () => {
   clearInterval(agentTimer);
   clearInterval(cleanupTimer);
   clearInterval(refreshTimer);
+  clearInterval(backtestTimer);
   stateHub.stopPolling();
   io.close();
 
@@ -450,6 +459,30 @@ app
 
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
     void runRetentionCleanup();
+
+    // Weekly backtesting: snapshot predictions + validate old ones
+    backtestTimer = setInterval(async () => {
+      try {
+        const snapResult = await snapshotPredictions({ pool: pool!, thesisStore, confidenceThreshold: 50 });
+        console.log(`[backtest] Snapshotted ${snapResult.snapshotted} predictions`);
+
+        const valResult = await validatePredictions({
+          pool: pool!,
+          searchRecentSignals: async (thesisKey: string) => {
+            const thesis = await thesisStore.getByKey(thesisKey);
+            if (!thesis) return [];
+            const signals = await memoryStore!.listAllSignals(100);
+            return signals
+              .filter(s => s.topic === thesis.topic)
+              .map(s => ({ source: s.source, canonical_text: s.canonical_text }));
+          },
+          validateAfterDays: runtimeEnv.backtestValidateAfterDays,
+        });
+        console.log(`[backtest] Validated ${valResult.validated}/${valResult.checked} predictions`);
+      } catch (err) {
+        console.error('[backtest] Error:', err);
+      }
+    }, runtimeEnv.backtestSnapshotIntervalMs);
   })
   .catch((error) => {
     console.error(error);
