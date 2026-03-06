@@ -24,7 +24,7 @@ export const registerThesesRoute = (
     'store' in storeOrDeps ? storeOrDeps : { store: storeOrDeps };
 
   app.get('/v1/theses', async (request) => {
-    const query = request.query as { page?: string; page_size?: string; status?: string; sort?: string };
+    const query = request.query as { page?: string; page_size?: string; status?: string; sort?: string; profile?: string };
     const validSorts = ['score', 'latest', 'evidence', 'newest'] as const;
     const sort = validSorts.includes(query.sort as typeof validSorts[number])
       ? (query.sort as typeof validSorts[number])
@@ -34,11 +34,13 @@ export const registerThesesRoute = (
     if ('listPaginated' in deps.store) {
       const page = Math.max(1, Number(query.page) || 1);
       const pageSize = Math.min(50, Math.max(1, Number(query.page_size) || 10));
+      const profile = (query as any).profile || 'all';
       return (deps.store as PaginatedThesisStore).listPaginated({
         page,
         pageSize,
         sort,
-        ...(query.status ? { status: query.status } : {})
+        ...(query.status ? { status: query.status } : {}),
+        ...(profile !== 'all' ? { profile } : {})
       });
     }
 

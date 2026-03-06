@@ -9,6 +9,7 @@ import { type FeedRecord, registerFeedRoute } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_status';
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
+import { registerProfilesRoute } from './routes/profiles.js';
 import { registerThesesRoute } from './routes/theses';
 import type { AgentRunStore } from './runtime/agent_run_store';
 import type { DeepDiveStore } from './runtime/deep_dive_store';
@@ -136,6 +137,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
   registerHealthRoute(app);
+  registerProfilesRoute(app);
 
   if (resolvedDeps.getAgentStatus && resolvedDeps.triggerAgentRun) {
     registerAgentStatusRoute(app, {

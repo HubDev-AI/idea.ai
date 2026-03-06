@@ -60,7 +60,7 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
 export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
 
 export type PaginatedThesisStore = ThesisStore & {
-  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField }): Promise<ThesisPage>;
+  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string }): Promise<ThesisPage>;
   close: () => Promise<void>;
 };
 
@@ -148,9 +148,18 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     }
   },
 
-  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score' }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField } = {}): Promise<ThesisPage> {
-    const where = status ? 'WHERE status = $1' : '';
-    const countParams = status ? [status] : [];
+  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score', profile }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string } = {}): Promise<ThesisPage> {
+    const whereClauses: string[] = [];
+    const countParams: (string | number)[] = [];
+    if (status) {
+      countParams.push(status);
+      whereClauses.push(`status = $${countParams.length}`);
+    }
+    if (profile) {
+      countParams.push(profile);
+      whereClauses.push(`profile_id = $${countParams.length}`);
+    }
+    const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     const [countResult, statsResult] = await Promise.all([
       pool.query<{ count: string }>(
@@ -188,7 +197,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const safePage = Math.min(Math.max(1, page), totalPages);
     const offset = (safePage - 1) * pageSize;
 
-    const params: (string | number)[] = status ? [status] : [];
+    const params: (string | number)[] = [...countParams];
     const limitIdx = params.length + 1;
     const offsetIdx = params.length + 2;
 
@@ -223,7 +232,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
         estimatedScope: d.estimatedScope ?? null,
         lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
-        hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true
+        hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
+        profileId: (d as any).profileId ?? 'consumer'
       })),
       page: safePage,
       page_size: pageSize,
