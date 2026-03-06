@@ -23,6 +23,7 @@ type ThesisRow = {
   avg_virality: number | string;
   profile_id: string;
   label: string | null;
+  posterior_confidence: number | string | null;
 };
 
 const toNumber = (v: unknown): number => {
@@ -56,7 +57,8 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   evidence: [],
   estimatedScope: toScope(row.estimated_scope),
   profileId: row.profile_id ?? 'consumer',
-  label: row.label ?? null
+  label: row.label ?? null,
+  posteriorConfidence: toNumber(row.posterior_confidence ?? row.confidence)
 });
 
 export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
@@ -240,7 +242,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
         hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
         profileId: (d as any).profileId ?? 'consumer',
-        label: (d as any).label ?? null
+        label: (d as any).label ?? null,
+        posteriorConfidence: (d as any).posteriorConfidence ?? d.confidence
       })),
       page: safePage,
       page_size: pageSize,
@@ -260,6 +263,22 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       [label, canonicalKey]
     );
     return result.rows[0] ?? null;
+  },
+
+  async bayesianUpdate(canonicalKey: string, confidenceDelta: number): Promise<void> {
+    await pool.query(
+      `UPDATE thesis_candidates
+       SET prior_confidence = posterior_confidence,
+           posterior_confidence = GREATEST(0, LEAST(100, posterior_confidence + $2)),
+           confidence = GREATEST(0, LEAST(100, posterior_confidence + $2)),
+           confidence_last_updated_at = NOW(),
+           evidence_count_bayes = evidence_count_bayes + 1,
+           confirming_signals = CASE WHEN $2 > 0 THEN confirming_signals + 1 ELSE confirming_signals END,
+           contradicting_signals = CASE WHEN $2 < 0 THEN contradicting_signals + 1 ELSE contradicting_signals END,
+           updated_at = NOW()
+       WHERE canonical_key = $1`,
+      [canonicalKey, confidenceDelta]
+    );
   },
 
   async close(): Promise<void> {}

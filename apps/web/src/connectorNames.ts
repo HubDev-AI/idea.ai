@@ -20,6 +20,8 @@ export const connectorDisplayName: Record<string, string> = {
   alternativeto: 'AlternativeTo',
   stackoverflow: 'StackOverflow',
   g2_reviews: 'G2 Reviews',
+  npm_trends: 'npm Trends',
+  semantic_scholar: 'Semantic Scholar',
   exa_byo: 'Exa',
   perigon_byo: 'Perigon',
   twitter_byo: 'Twitter/X',

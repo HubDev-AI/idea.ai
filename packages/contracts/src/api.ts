@@ -122,6 +122,9 @@ export type ThesisListItem = {
   hasDeepDive: boolean;
   profileId?: string;
   label: 'favourite' | 'later' | 'dismissed' | null;
+  posteriorConfidence?: number;
+  velocity?: number;
+  corroborationScore?: number;
 };
 
 export type ThesisStats = {

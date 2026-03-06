@@ -16,12 +16,14 @@ import { fetchMastodonEvents } from '@idea/connectors/src/mastodon';
 import { fetchProductHunt } from '@idea/connectors/src/producthunt';
 import { fetchReddit } from '@idea/connectors/src/reddit';
 import { fetchShowHnEvents } from '@idea/connectors/src/showhn';
+import { fetchNpmTrends } from '@idea/connectors/src/npm_trends';
+import { fetchSemanticScholar } from '@idea/connectors/src/semantic_scholar';
 import { fetchStackOverflow } from '@idea/connectors/src/stackoverflow';
 import { fetchTikTokCreative } from '@idea/connectors/src/tiktok_creative';
 import { fetchYcCompanyEvents } from '@idea/connectors/src/yc_companies';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 
-export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew' | 'google_trends' | 'tiktok_creative' | 'alternativeto' | 'stackoverflow' | 'g2_reviews';
+export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew' | 'google_trends' | 'tiktok_creative' | 'alternativeto' | 'stackoverflow' | 'g2_reviews' | 'npm_trends' | 'semantic_scholar';
 
 export type OpenConnectorStatus = {
   name: OpenConnectorName;
@@ -43,7 +45,7 @@ type OpenIngestionDeps = {
   loaders?: Partial<Record<OpenConnectorName, OpenConnectorLoader>>;
 };
 
-const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews'];
+const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews', 'npm_trends', 'semantic_scholar'];
 
 const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   hn: () => fetchHnEvents(),
@@ -71,7 +73,9 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   tiktok_creative: () => fetchTikTokCreative(),
   alternativeto: () => fetchAlternativeTo(),
   stackoverflow: () => fetchStackOverflow(),
-  g2_reviews: () => fetchG2Trending()
+  g2_reviews: () => fetchG2Trending(),
+  npm_trends: () => fetchNpmTrends(),
+  semantic_scholar: () => fetchSemanticScholar()
 };
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');
