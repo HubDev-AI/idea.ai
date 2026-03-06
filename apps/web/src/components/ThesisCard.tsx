@@ -15,6 +15,9 @@ export type ThesisCardProps = {
     hasDeepDive?: boolean;
     profileId?: string;
     label?: 'favourite' | 'later' | 'dismissed' | null;
+    posteriorConfidence?: number;
+    velocity?: number;
+    corroborationScore?: number;
   };
   profileDisplay?: { badge: string; badgeColor: string } | null;
   isActive?: boolean;
@@ -37,9 +40,24 @@ const scopeLabel: Record<string, { text: string; color: string }> = {
   large: { text: 'L', color: 'var(--err)' }
 };
 
+const velocityLabel = (v: number | undefined): { text: string; color: string } | null => {
+  if (v == null || v === 0) return null;
+  if (v >= 3) return { text: `\u2191${v.toFixed(1)}x`, color: 'var(--ok)' };
+  if (v >= 1.5) return { text: `\u2197${v.toFixed(1)}x`, color: 'var(--warn)' };
+  if (v > 0) return { text: `\u2192${v.toFixed(1)}x`, color: 'var(--muted)' };
+  return null;
+};
+
+const corroborationDots = (score: number | undefined): { filled: number; total: number } => {
+  if (score == null) return { filled: 0, total: 5 };
+  const filled = Math.min(5, Math.max(0, Math.round(score * 5)));
+  return { filled, total: 5 };
+};
+
 export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, isActive, isGenerating, onClick, onExplore, onView, onLabelChange }) => {
   const statusClass = thesis.status === 'promoted' ? 'promoted' : thesis.status === 'watching' ? 'watching' : '';
   const hasData = thesis.hasDeepDive === true;
+  const displayConfidence = thesis.posteriorConfidence ?? thesis.confidence;
 
   const handleExploreClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -78,15 +96,15 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
               {scopeLabel[thesis.estimatedScope].text}
             </span>
           )}
-          <span className="thesis-confidence" style={{ color: confidenceColor(thesis.confidence) }}>
-            {thesis.confidence}%
+          <span className="thesis-confidence" style={{ color: confidenceColor(displayConfidence) }}>
+            {displayConfidence}%
           </span>
         </div>
       </div>
       <div className="thesis-confidence-bar">
         <div
           className="thesis-confidence-fill"
-          style={{ width: `${Math.min(thesis.confidence, 100)}%`, background: confidenceColor(thesis.confidence) }}
+          style={{ width: `${Math.min(displayConfidence, 100)}%`, background: confidenceColor(displayConfidence) }}
         />
       </div>
       <p className="thesis-problem">{thesis.problemStatement}</p>
@@ -94,6 +112,24 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
         <span className={`thesis-status ${statusClass}`}>{thesis.status}</span>
         <span>{thesis.evidenceCount} evidence</span>
         <span>{thesis.sourceCount} sources</span>
+        {(() => {
+          const vel = velocityLabel(thesis.velocity);
+          return vel ? (
+            <span className="thesis-velocity" style={{ color: vel.color }} title={`Velocity: ${thesis.velocity?.toFixed(1)}x`}>
+              {vel.text}
+            </span>
+          ) : null;
+        })()}
+        {(() => {
+          const dots = corroborationDots(thesis.corroborationScore);
+          return dots.filled > 0 ? (
+            <span className="thesis-corroboration" title={`Corroboration: ${((thesis.corroborationScore ?? 0) * 100).toFixed(0)}% cross-source`}>
+              {Array.from({ length: dots.total }, (_, i) => (
+                <span key={i} className={i < dots.filled ? 'dot filled' : 'dot'}>{'\u25CF'}</span>
+              ))}
+            </span>
+          ) : null;
+        })()}
         {thesis.lastSeenAt && <span>{relativeTime(thesis.lastSeenAt)}</span>}
         {onLabelChange && (
           <span className="thesis-label-btns">

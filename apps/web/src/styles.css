@@ -988,6 +988,28 @@ h1, h2, h3, p {
   border-left-color: var(--accent);
 }
 
+/* ── Intelligence indicators ──────────────────────── */
+
+.thesis-velocity {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.thesis-corroboration {
+  display: inline-flex;
+  gap: 1px;
+  letter-spacing: -0.15em;
+  font-size: 0.5rem;
+}
+
+.thesis-corroboration .dot {
+  color: rgba(255, 255, 255, 0.15);
+}
+
+.thesis-corroboration .dot.filled {
+  color: var(--accent);
+}
+
 /* ── Signal Feed ────────────────────────────────────── */
 
 .signal-list {
