@@ -23,22 +23,29 @@ export type StateHubDeps = {
   getLogs: () => Promise<ExecutionLogRecord[]>;
 };
 
+export type StateHubConfig = {
+  infraPollMs: number;
+  logPollMs: number;
+};
+
 export class StateHub {
   private io: IO;
   private deps: StateHubDeps;
+  private config: StateHubConfig;
   private state: AppSnapshot;
   private infraTimer: ReturnType<typeof setInterval> | null = null;
   private logTimer: ReturnType<typeof setInterval> | null = null;
   private lastLogJson = '';
   private lastInfraJson = '';
 
-  constructor(io: IO, deps: StateHubDeps) {
+  constructor(io: IO, deps: StateHubDeps, config: StateHubConfig) {
     this.io = io;
     this.deps = deps;
+    this.config = config;
     this.state = {
       connectors: [],
       aiHealth: null,
-      agentStatus: { isRunning: false, lastRun: null, investigateNext: null },
+      agentStatus: { isRunning: false, intervalMs: 0, lastRun: null, investigateNext: null },
       infraStatus: null,
       refreshMeta: { last_hourly_run: null, last_daily_run: null, hourly_interval_ms: 3600000, daily_interval_ms: 86400000, refreshing: null },
       signalCounts: {},
@@ -131,10 +138,10 @@ export class StateHub {
     this.io.emit('refreshMeta', meta);
   }
 
-  /** Start background polling for infra stats (10s) and logs (3s) */
+  /** Start background polling for infra stats and logs */
   startPolling(): void {
-    this.infraTimer = setInterval(() => void this.pollInfra(), 10_000);
-    this.logTimer = setInterval(() => void this.pollLogs(), 3_000);
+    this.infraTimer = setInterval(() => void this.pollInfra(), this.config.infraPollMs);
+    this.logTimer = setInterval(() => void this.pollLogs(), this.config.logPollMs);
   }
 
   stopPolling(): void {

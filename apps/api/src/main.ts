@@ -32,6 +32,7 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? '')
 const apiKey = process.env.API_KEY || undefined;
 const databaseUrl = process.env.DATABASE_URL;
 
+const startupEnv = loadRuntimeEnv(process.env);
 const pool = databaseUrl ? new pg.Pool({ connectionString: databaseUrl, max: 4 }) : null;
 
 const thesisStore = pool
@@ -54,7 +55,7 @@ const agentRunStore: AgentRunStore | null = pool
   ? createAgentRunStore({ pool })
   : null;
 
-let agentStatus: AgentStatusRecord = { isRunning: false, lastRun: null, investigateNext: null };
+let agentStatus: AgentStatusRecord = { isRunning: false, intervalMs: startupEnv.agentIntervalMs, lastRun: null, investigateNext: null };
 let agentRunInFlight: Promise<AgentRunResult> | null = null;
 
 // Load last run status from DB on startup (survives restarts)
@@ -72,6 +73,7 @@ try {
     if (row) {
       agentStatus = {
         isRunning: false,
+        intervalMs: startupEnv.agentIntervalMs,
         lastRun: {
           timestamp: row.started_at,
           thesesUpdated: row.theses_updated,
@@ -176,6 +178,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
 
       agentStatus = {
         isRunning: false,
+        intervalMs: startupEnv.agentIntervalMs,
         lastRun: {
           timestamp: new Date().toISOString(),
           thesesUpdated: aggregated.thesesUpdated,
@@ -205,7 +208,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
   return agentRunInFlight;
 };
 
-const ollamaBaseUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
+const ollamaBaseUrl = startupEnv.ollamaBaseUrl;
 
 const serverDeps: Parameters<typeof buildServer>[0] = {
   listSignals: readModel.listSignals,
@@ -238,7 +241,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
       return true;
     },
     checkOllama: async () => {
-      const embedModel = process.env.OLLAMA_EMBED_MODEL ?? 'nomic-embed-text';
+      const embedModel = startupEnv.ollamaEmbedModel;
       try {
         const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
         if (!res.ok) return { ok: false, reason: `ollama returned ${res.status}` };
@@ -326,6 +329,9 @@ const stateHub = new StateHub(io, {
     return { total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 };
   },
   getLogs: async () => readModel.listLogs({ limit: 500, scope: 'session' }),
+}, {
+  infraPollMs: startupEnv.wsInfraPollMs,
+  logPollMs: startupEnv.wsLogPollMs,
 });
 
 let agentTimer: ReturnType<typeof setInterval> | undefined;
@@ -333,7 +339,6 @@ let cleanupTimer: ReturnType<typeof setInterval> | undefined;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
 const RETENTION_DAYS = 90;
-const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 const runRetentionCleanup = async () => {
   if (!pool) return;
@@ -347,9 +352,15 @@ const runRetentionCleanup = async () => {
   }
 };
 
-const SHUTDOWN_TIMEOUT_MS = 15_000;
+const SHUTDOWN_TIMEOUT_MS = startupEnv.shutdownTimeoutMs;
+const CLEANUP_INTERVAL_MS = startupEnv.cleanupIntervalMs;
+
+let shuttingDown = false;
 
 const shutdown = async () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   clearInterval(agentTimer);
   clearInterval(cleanupTimer);
   clearInterval(refreshTimer);
@@ -369,10 +380,8 @@ const shutdown = async () => {
     agentRunInFlight = null;
   }
 
+  // readModel.close() closes the shared memoryStore pool — don't close it again
   await readModel.close();
-  if (memoryStore) {
-    await memoryStore.close();
-  }
   if ('close' in thesisStore) {
     await (thesisStore as { close: () => Promise<void> }).close();
   }
@@ -424,13 +433,12 @@ app
     }, runtimeEnv.agentIntervalMs);
 
     // Periodic connector refresh (was driven by client polling before WebSocket migration)
-    const REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
     refreshTimer = setInterval(() => {
       stateHub.pushRefreshMeta();
       void readModel.refresh().then(() => stateHub.broadcastAll()).catch((err) => {
         console.error('periodic refresh failed:', err);
       });
-    }, REFRESH_INTERVAL_MS);
+    }, runtimeEnv.agentIntervalMs);
 
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
     void runRetentionCleanup();

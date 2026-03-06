@@ -96,6 +96,7 @@ const mockTheses = [
 
 const mockAgentStatus = {
   isRunning: false,
+  intervalMs: 3600000,
   lastRun: {
     timestamp: '2026-02-24T03:00:00.000Z',
     thesesUpdated: 2,

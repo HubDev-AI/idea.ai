@@ -67,7 +67,6 @@ const useCountdown = (lastRunIso: string | null, intervalMs: number): string | n
   return formatCountdown(remaining);
 };
 
-const AGENT_INTERVAL_MS = 1 * 60 * 60 * 1000;
 
 export const Sidebar: React.FC<SidebarProps> = ({
   connectors, aiHealth, agentStatus, infraStatus, thesisStats,
@@ -88,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   );
   const agentCountdown = useCountdown(
     agentStatus?.lastRun?.timestamp ?? null,
-    AGENT_INTERVAL_MS
+    agentStatus?.intervalMs ?? 3600000
   );
 
   return (
