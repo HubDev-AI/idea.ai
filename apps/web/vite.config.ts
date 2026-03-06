@@ -14,6 +14,11 @@ export default defineConfig(({ mode }) => {
           target: proxyTarget,
           changeOrigin: true,
           timeout: 300_000
+        },
+        '/socket.io': {
+          target: proxyTarget,
+          changeOrigin: true,
+          ws: true
         }
       }
     },

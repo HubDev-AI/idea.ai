@@ -3,6 +3,8 @@ import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import { embedText } from '@idea/ai-runtime/src/ollama';
 import type { AgentStatusRecord } from '@idea/contracts/src/api';
 import pg from 'pg';
+import { Server as SocketIOServer } from 'socket.io';
+import type { ClientToServerEvents, ServerToClientEvents } from '@idea/contracts/src/ws';
 import { loadEnvFile } from './config/dotenv';
 import { loadRuntimeEnv } from './config/env';
 import { resolveAiJudgeSettings } from './jobs/ai_judges';
@@ -14,9 +16,10 @@ import { createExecutionLogger } from './runtime/execution_logger';
 import { createPostgresJournalStore } from './runtime/journal_store';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
-import { createPostgresThesisStore } from './runtime/postgres_thesis_store';
+import { createPostgresThesisStore, type PaginatedThesisStore } from './runtime/postgres_thesis_store';
 import { InMemoryThesisStore } from './runtime/thesis_store';
 import { buildServer } from './server';
+import { StateHub } from './ws/state_hub';
 
 loadEnvFile();
 
@@ -94,6 +97,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
   agentRunInFlight = (async () => {
     await agentRunStore?.create(runId);
     await logger.info('agent_runner', 'run started', { run_id: runId });
+    stateHub.emitAgentStatus({ ...agentStatus, isRunning: true });
 
     try {
       const agentEnv = loadRuntimeEnv(process.env);
@@ -183,6 +187,9 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         },
         investigateNext: aggregated.investigateNext || null,
       };
+      // Push updates via WebSocket after agent run
+      void stateHub.broadcastAll();
+      stateHub.emitThesesUpdated();
       return aggregated;
     } catch (err) {
       await agentRunStore?.fail(runId, err);
@@ -206,7 +213,10 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   listLogs: readModel.listLogs,
   getAiHealth: readModel.getAiHealth,
   getRefreshMeta: readModel.getRefreshMeta,
-  triggerRefresh: async (cadence) => { await readModel.refresh(cadence); },
+  triggerRefresh: async (cadence) => {
+    await readModel.refresh(cadence);
+    void stateHub.broadcastAll();
+  },
   thesisStore,
   memoryStore,
   deepDiveStore: pool ? createDeepDiveStore({ pool }) : null,
@@ -269,8 +279,57 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
 if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
+// -- Socket.IO + StateHub -----------------------------------------------
+const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(app.server, {
+  cors: {
+    origin: corsOrigins.length > 0 ? corsOrigins : '*',
+    methods: ['GET', 'POST'],
+  },
+  path: '/socket.io/',
+});
+
+const infraCheckDeps = serverDeps.infraStatusDeps!;
+const stateHub = new StateHub(io, {
+  getConnectors: readModel.listConnectors,
+  getAiHealth: readModel.getAiHealth,
+  getAgentStatus: () => ({ ...agentStatus, isRunning: agentRunInFlight !== null }),
+  getInfraStatus: async () => {
+    const [pgResult, ollamaResult, embStats, diskResult] = await Promise.allSettled([
+      infraCheckDeps.checkPostgres(),
+      infraCheckDeps.checkOllama(),
+      infraCheckDeps.getEmbeddingStats(),
+      infraCheckDeps.getDiskStats?.() ?? Promise.resolve(null),
+    ]);
+    const pgOk = pgResult.status === 'fulfilled' && pgResult.value;
+    const ollamaCheck = ollamaResult.status === 'fulfilled' ? ollamaResult.value : { ok: false };
+    const emb = embStats.status === 'fulfilled' ? embStats.value : { total: 0, withEmbedding: 0, fallbackModel: 'unknown' };
+    const disk = diskResult.status === 'fulfilled' && diskResult.value ? diskResult.value : undefined;
+    return {
+      postgres: pgOk ? 'ok' as const : 'error' as const,
+      ollama: ollamaCheck.ok ? 'ok' as const : 'error' as const,
+      ...(ollamaCheck.sizeMb != null ? { ollamaSizeMb: ollamaCheck.sizeMb } : {}),
+      embeddings: emb,
+      ...(disk ? { diskUsage: disk } : {}),
+    };
+  },
+  getRefreshMeta: readModel.getRefreshMeta,
+  getSignalCounts: async () => {
+    if (!memoryStore) return {};
+    return memoryStore.countSignalsBySource();
+  },
+  getThesisStats: async () => {
+    if ('listPaginated' in thesisStore) {
+      const page = await (thesisStore as PaginatedThesisStore).listPaginated({ page: 1, pageSize: 1 });
+      return page.stats;
+    }
+    return { total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 };
+  },
+  getLogs: async () => readModel.listLogs({ limit: 500, scope: 'session' }),
+});
+
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
 const RETENTION_DAYS = 90;
 const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -292,6 +351,9 @@ const SHUTDOWN_TIMEOUT_MS = 15_000;
 const shutdown = async () => {
   clearInterval(agentTimer);
   clearInterval(cleanupTimer);
+  clearInterval(refreshTimer);
+  stateHub.stopPolling();
+  io.close();
 
   // Wait for in-flight agent run, mark as failed if still running
   if (agentRunInFlight) {
@@ -333,9 +395,15 @@ process.on('SIGTERM', () => {
 
 app
   .listen({ host, port })
-  .then((address) => {
+  .then(async (address) => {
     console.log(`API ready on ${address}`);
+    // Collect initial state and start WebSocket polling
+    await stateHub.collectAll();
+    stateHub.startPolling();
     const runtimeEnv = loadRuntimeEnv(process.env);
+
+    // Trigger initial data refresh and broadcast
+    void readModel.refresh().then(() => stateHub.broadcastAll()).catch(() => {});
 
     // If overdue from a previous session, run immediately then start the regular interval
     const lastRunTs = agentStatus.lastRun?.timestamp;
@@ -351,6 +419,15 @@ app
         console.error('research agent cron failed:', err);
       });
     }, runtimeEnv.agentIntervalMs);
+
+    // Periodic connector refresh (was driven by client polling before WebSocket migration)
+    const REFRESH_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+    refreshTimer = setInterval(() => {
+      void readModel.refresh().then(() => stateHub.broadcastAll()).catch((err) => {
+        console.error('periodic refresh failed:', err);
+      });
+    }, REFRESH_INTERVAL_MS);
+
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
     void runRetentionCleanup();
   })

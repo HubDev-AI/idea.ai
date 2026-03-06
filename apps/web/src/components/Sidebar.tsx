@@ -19,6 +19,7 @@ type SidebarProps = {
   agentRunResult?: string | null;
   refreshMeta: RefreshMeta | null;
   onForceRefresh?: (cadence?: 'hourly' | 'daily') => void;
+  connected?: boolean;
 };
 
 const dotClass = (status: string, opts?: { enabled?: boolean; lastRun?: string | null }): string => {
@@ -72,6 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   connectors, aiHealth, agentStatus, infraStatus, thesisStats,
   thesisFilter, onThesisFilter, signalCount, latestSignalAt, signalCounts,
   onRunAgent, agentRunning, agentRunResult, refreshMeta, onForceRefresh,
+  connected = true,
 }) => {
   const activeConnectors = connectors.filter((c) => c.status === 'active').length;
   const enabledProviders = aiHealth?.providers?.filter((p) => p.enabled) ?? [];
@@ -94,6 +96,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-header">
         <span className="sidebar-logo">Sixth Sense</span>
         <span className="sidebar-subtitle">Idea Engine</span>
+        <span className={`sidebar-connection ${connected ? 'connected' : 'disconnected'}`}>
+          {connected ? 'LIVE' : 'OFFLINE'}
+        </span>
       </div>
 
       <div className="sidebar-stats">
