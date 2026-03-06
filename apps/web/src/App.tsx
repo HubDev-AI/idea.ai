@@ -526,7 +526,7 @@ const App = () => {
         thesisStats={thesisStats}
         thesisFilter={thesisFilter}
         onThesisFilter={handleThesisFilter}
-        signalCount={pageInfo.totalItems}
+        signalCount={Object.values(signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
         latestSignalAt={latestSignalAt}
         signalCounts={signalCounts}
         onRunAgent={handleRunAgent}
