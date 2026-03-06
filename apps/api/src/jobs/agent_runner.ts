@@ -18,6 +18,9 @@ import {
 } from './research_agent';
 import { corroborationScore } from '@idea/pipeline/src/scoring/correlation';
 import { computeVelocity, velocityMultiplier } from '@idea/pipeline/src/scoring/velocity';
+import { computeToolFragmentation, computeInvestorAttention, categoryCreationScore } from '@idea/pipeline/src/scoring/category_detector';
+import { estimateSupply, classifyImbalance, imbalanceMultiplier } from '@idea/pipeline/src/scoring/supply_demand';
+import { detectChangePoints } from '@idea/pipeline/src/scoring/cusum';
 import { type ClusterableSignal, clusterSignals } from './signal_clusterer';
 import type { ThesisEvidenceDraft } from './thesis_synthesizer';
 import { runDebate, verdictToLikelihoodRatio, type DebateResult } from './thesis_debate';
@@ -41,6 +44,8 @@ export type AgentRunnerDeps = {
   pool?: import('pg').Pool;
   debateConfidenceThreshold?: number;
   debateMaxPerRun?: number;
+  cusumThreshold?: number;
+  cusumDrift?: number;
 };
 
 const MAX_DEEP_DIVES = 2;
@@ -149,6 +154,73 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     const vel = computeVelocity(week, avgWeekly);
     const corr = corroborationScore(cluster.sources);
     clusterMetrics.set(cluster.id, { velocity: vel, corroboration: corr });
+  }
+
+  // Category creation score per cluster
+  const clusterCategoryScores = new Map<number, number>();
+  for (const cluster of clusters) {
+    const toolsBySource = new Map<string, number>();
+    for (const src of cluster.sources) {
+      toolsBySource.set(src, (toolsBySource.get(src) ?? 0) + 1);
+    }
+    const tools = Array.from(toolsBySource.entries()).map(([id, engagement]) => ({ id, engagement }));
+    const fragmentation = computeToolFragmentation(tools);
+
+    const investorSources = ['yc_companies', 'producthunt', 'crunchbase'];
+    const investorCounts = new Map<string, number>();
+    for (const s of cluster.sources) {
+      if (investorSources.includes(s)) {
+        investorCounts.set(s, (investorCounts.get(s) ?? 0) + 1);
+      }
+    }
+    const attention = computeInvestorAttention(
+      Array.from(investorCounts.entries()).map(([source, count]) => ({ source, count }))
+    );
+
+    const catScore = categoryCreationScore({
+      vocabularyScore: cluster.totalCount > 5 ? 40 : 0,
+      fragmentationScore: fragmentation.score,
+      investorScore: attention.score,
+    });
+    clusterCategoryScores.set(cluster.id, catScore);
+  }
+
+  // Supply/demand imbalance per cluster
+  const clusterImbalance = new Map<number, string>();
+  const supplySources = new Set(['producthunt', 'alternativeto', 'github_issues', 'npm_trends']);
+  for (const cluster of clusters) {
+    const clusterSignalIds = new Set(cluster.representatives.map(r => r.signal_id));
+    const matchedSignals = recentSignals.filter(s => clusterSignalIds.has(s.signal_id));
+    const supplySignals = matchedSignals.filter(s => supplySources.has(s.source));
+    const supply = estimateSupply({
+      existingProducts: supplySignals.filter(s => s.source === 'producthunt' || s.source === 'alternativeto').length,
+      githubRepos: supplySignals.filter(s => s.source === 'github_issues').length,
+      fundedCompanies: supplySignals.filter(s => s.source === 'yc_companies').length,
+    });
+    const classification = classifyImbalance({ demandSignals: matchedSignals.length, totalSupply: supply.totalSupply });
+    clusterImbalance.set(cluster.id, classification);
+  }
+
+  // CUSUM change point detection on daily signal counts per topic
+  const cusumConfig = { threshold: deps.cusumThreshold ?? 5, drift: deps.cusumDrift ?? 1 };
+  const topicAccelerating = new Set<string>();
+  const topicDailyCounts = new Map<string, Map<string, number>>();
+  for (const signal of recentSignals) {
+    const day = signal.observed_at.slice(0, 10);
+    const topic = signal.topic;
+    if (!topicDailyCounts.has(topic)) topicDailyCounts.set(topic, new Map());
+    const dayCounts = topicDailyCounts.get(topic)!;
+    dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
+  }
+  for (const [topic, dayCounts] of topicDailyCounts) {
+    const sortedDays = Array.from(dayCounts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const values = sortedDays.map(([, count]) => count);
+    if (values.length >= 3) {
+      const changePoints = detectChangePoints(values, cusumConfig);
+      if (changePoints.some(cp => cp >= values.length - 2)) {
+        topicAccelerating.add(topic);
+      }
+    }
   }
 
   await log.info('agent_runner', 'clustering complete', {
@@ -583,6 +655,10 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       }
 
       if (bestMetrics) {
+        // Boost velocity if CUSUM detected acceleration
+        if (topicAccelerating.has(thesis.topic)) {
+          bestMetrics.velocity = Math.min(10, bestMetrics.velocity * 1.5);
+        }
         await deps.thesisStore.upsert({
           ...thesis,
           velocity: Math.round(bestMetrics.velocity * 100) / 100,
