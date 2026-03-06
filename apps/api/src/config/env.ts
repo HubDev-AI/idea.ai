@@ -17,6 +17,7 @@ export type RuntimeEnv = {
   ollamaBaseUrl: string;
   ollamaEmbedModel: string;
   redditSubreddits: string[];
+  b2bSubreddits: string[];
   phApiToken?: string;
   xBearerToken?: string;
   xDailyBudgetUsd: number;
@@ -43,6 +44,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     ollamaBaseUrl: env.OLLAMA_BASE_URL ?? 'http://localhost:11434',
     ollamaEmbedModel: env.OLLAMA_EMBED_MODEL ?? 'nomic-embed-text',
     redditSubreddits: parseCsv(env.REDDIT_SUBREDDITS, ['SaaS', 'startups', 'smallbusiness', 'Entrepreneur', 'apps', 'socialmedia', 'productivity', 'dating', 'sideproject', 'AppIdeas', 'InternetIsBeautiful']),
+    b2bSubreddits: parseCsv(env.B2B_SUBREDDITS, ['devops', 'sysadmin', 'ITManagers', 'msp', 'salesforce', 'aws', 'googlecloud', 'azure', 'ExperiencedDevs']),
     xDailyBudgetUsd: parseNumber(env.X_DAILY_BUDGET_USD, 0),
     enableJobConnectors: env.ENABLE_JOB_CONNECTORS === 'true',
     noiseGateBatchSize: parseNumber(env.NOISE_GATE_BATCH_SIZE, 20),
