@@ -17,9 +17,11 @@ import { fetchYcCompanyEvents } from '@idea/connectors/src/yc_companies';
 import { fetchGoogleTrends } from '@idea/connectors/src/google_trends';
 import { fetchTikTokCreative } from '@idea/connectors/src/tiktok_creative';
 import { fetchAlternativeTo } from '@idea/connectors/src/alternativeto';
+import { fetchStackOverflow } from '@idea/connectors/src/stackoverflow';
+import { fetchG2Trending } from '@idea/connectors/src/g2_reviews';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 
-export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew' | 'google_trends' | 'tiktok_creative' | 'alternativeto';
+export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew' | 'google_trends' | 'tiktok_creative' | 'alternativeto' | 'stackoverflow' | 'g2_reviews';
 
 export type OpenConnectorStatus = {
   name: OpenConnectorName;
@@ -41,7 +43,7 @@ type OpenIngestionDeps = {
   loaders?: Partial<Record<OpenConnectorName, OpenConnectorLoader>>;
 };
 
-const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto'];
+const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews'];
 
 const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   hn: () => fetchHnEvents(),
@@ -67,7 +69,9 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   homebrew: () => fetchHomebrewEvents(),
   google_trends: () => fetchGoogleTrends(),
   tiktok_creative: () => fetchTikTokCreative(),
-  alternativeto: () => fetchAlternativeTo()
+  alternativeto: () => fetchAlternativeTo(),
+  stackoverflow: () => fetchStackOverflow(),
+  g2_reviews: () => fetchG2Trending()
 };
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');

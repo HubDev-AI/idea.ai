@@ -177,6 +177,13 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       return Promise.resolve(new Response(JSON.stringify(mockInfraStatus), { status: 200 }));
     }
 
+    if (url.includes('/v1/profiles')) {
+      return Promise.resolve(new Response(JSON.stringify([
+        { id: 'consumer', name: 'Consumer / Social', display: { badge: 'Consumer', badgeColor: '#3b82f6' }, dimensions: [] },
+        { id: 'b2b', name: 'B2B / Enterprise', display: { badge: 'B2B', badgeColor: '#10b981' }, dimensions: [] }
+      ]), { status: 200 }));
+    }
+
     if (url.includes('/v1/connectors/refresh-meta')) {
       return Promise.resolve(new Response(JSON.stringify({
         last_hourly_run: '2026-02-24T01:00:00.000Z',

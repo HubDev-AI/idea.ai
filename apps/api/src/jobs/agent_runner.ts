@@ -1,10 +1,12 @@
 import { dualAnalystRun } from '@idea/ai-runtime/src/dual_analyst';
 import type { RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
+import type { AgentProfile } from '@idea/contracts/src/agent_profile.js';
 import type { AgentRunResult } from '@idea/contracts/src/api';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { JournalEntry, JournalStore } from '../runtime/journal_store';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
 import type { ThesisStore } from '../runtime/thesis_store';
+import { consumerProfile } from '../profiles/consumer.js';
 import {
   type AgentThesisSummary,
   type BroadScanOutput,
@@ -31,6 +33,7 @@ export type AgentRunnerDeps = {
   preferredProvider?: 'claude' | 'codex';
   timeoutMs?: number;
   maxClusters?: number;
+  profile?: AgentProfile;
 };
 
 const MAX_DEEP_DIVES = 2;
@@ -74,6 +77,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   const preferred = deps.preferredProvider ?? 'claude';
   const timeoutMs = deps.timeoutMs ?? 180_000;
   const maxClusters = deps.maxClusters ?? 50;
+  const profile = deps.profile ?? consumerProfile;
   let thesesUpdated = 0;
   let newCandidates = 0;
   const allAlerts: string[] = [];
@@ -189,7 +193,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     trendSummary
   };
 
-  const broadPrompt = buildBroadScanPrompt(broadCtx);
+  const broadPrompt = buildBroadScanPrompt(broadCtx, profile);
 
   await log.info('agent_runner', 'broad scan started', {
     cluster_count: clusters.length,
@@ -343,7 +347,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       relatedTheses
     };
 
-    const divePrompt = buildDeepDivePrompt(diveCtx);
+    const divePrompt = buildDeepDivePrompt(diveCtx, profile);
     await log.debug('agent_runner', 'deep dive prompt sent', {
       topic: dig.topic,
       provider: preferred,
@@ -413,7 +417,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           observed_at: new Date().toISOString()
         }));
 
-        const key = `agent:${proposal.title.toLowerCase().replace(/\s+/g, '_').slice(0, 40)}`;
+        const key = `${profile.id}:${proposal.title.toLowerCase().replace(/\s+/g, '_').slice(0, 40)}`;
         await deps.thesisStore.upsert({
           canonicalKey: key,
           title: proposal.title,
@@ -431,7 +435,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           avgVirality: 0,
           latestObservedAt: new Date().toISOString(),
           evidence,
-          estimatedScope: proposal.estimated_scope ?? null
+          estimatedScope: proposal.estimated_scope ?? null,
+          profileId: profile.id
         });
         newCandidates++;
         await log.info('agent_runner', 'thesis created', {

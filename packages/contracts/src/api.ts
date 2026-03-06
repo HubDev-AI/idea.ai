@@ -115,6 +115,7 @@ export type ThesisListItem = {
   estimatedScope: 'small' | 'medium' | 'large' | null;
   lastSeenAt: string;
   hasDeepDive: boolean;
+  profileId?: string;
 };
 
 export type ThesisStats = {

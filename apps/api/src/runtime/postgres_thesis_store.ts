@@ -21,6 +21,7 @@ type ThesisRow = {
   avg_timing: number | string;
   avg_buildability: number | string;
   avg_virality: number | string;
+  profile_id: string;
 };
 
 const toNumber = (v: unknown): number => {
@@ -52,13 +53,14 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   avgVirality: toNumber(row.avg_virality),
   latestObservedAt: new Date(row.last_seen_at).toISOString(),
   evidence: [],
-  estimatedScope: toScope(row.estimated_scope)
+  estimatedScope: toScope(row.estimated_scope),
+  profileId: row.profile_id ?? 'consumer'
 });
 
 export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
 
 export type PaginatedThesisStore = ThesisStore & {
-  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField }): Promise<ThesisPage>;
+  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string }): Promise<ThesisPage>;
   close: () => Promise<void>;
 };
 
@@ -106,8 +108,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const result = await pool.query<{ id: string }>(
       `INSERT INTO thesis_candidates
         (canonical_key, title, topic, status, confidence, problem_statement,
-         target_buyer, proposed_solution, estimated_scope, first_seen_at, last_seen_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+         target_buyer, proposed_solution, estimated_scope, profile_id, first_seen_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
        ON CONFLICT (canonical_key) DO UPDATE SET
          title = EXCLUDED.title,
          status = EXCLUDED.status,
@@ -116,6 +118,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
          target_buyer = EXCLUDED.target_buyer,
          proposed_solution = EXCLUDED.proposed_solution,
          estimated_scope = COALESCE(EXCLUDED.estimated_scope, thesis_candidates.estimated_scope),
+         profile_id = EXCLUDED.profile_id,
          last_seen_at = NOW(),
          updated_at = NOW()
        RETURNING id`,
@@ -123,7 +126,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         draft.canonicalKey, draft.title, draft.topic, draft.status,
         draft.confidence, draft.problemStatement,
         draft.targetBuyer, draft.proposedSolution,
-        draft.estimatedScope ?? null
+        draft.estimatedScope ?? null,
+        draft.profileId ?? 'consumer'
       ]
     );
 
@@ -144,9 +148,18 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     }
   },
 
-  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score' }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField } = {}): Promise<ThesisPage> {
-    const where = status ? 'WHERE status = $1' : '';
-    const countParams = status ? [status] : [];
+  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score', profile }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string } = {}): Promise<ThesisPage> {
+    const whereClauses: string[] = [];
+    const countParams: (string | number)[] = [];
+    if (status) {
+      countParams.push(status);
+      whereClauses.push(`status = $${countParams.length}`);
+    }
+    if (profile) {
+      countParams.push(profile);
+      whereClauses.push(`profile_id = $${countParams.length}`);
+    }
+    const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     const [countResult, statsResult] = await Promise.all([
       pool.query<{ count: string }>(
@@ -184,7 +197,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const safePage = Math.min(Math.max(1, page), totalPages);
     const offset = (safePage - 1) * pageSize;
 
-    const params: (string | number)[] = status ? [status] : [];
+    const params: (string | number)[] = [...countParams];
     const limitIdx = params.length + 1;
     const offsetIdx = params.length + 2;
 
@@ -219,7 +232,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
         estimatedScope: d.estimatedScope ?? null,
         lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
-        hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true
+        hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
+        profileId: (d as any).profileId ?? 'consumer'
       })),
       page: safePage,
       page_size: pageSize,

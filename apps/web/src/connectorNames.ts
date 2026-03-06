@@ -18,6 +18,8 @@ export const connectorDisplayName: Record<string, string> = {
   google_trends: 'Google Trends',
   tiktok_creative: 'TikTok',
   alternativeto: 'AlternativeTo',
+  stackoverflow: 'StackOverflow',
+  g2_reviews: 'G2 Reviews',
   exa_byo: 'Exa',
   perigon_byo: 'Perigon',
   twitter_byo: 'Twitter/X',

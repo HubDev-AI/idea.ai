@@ -11,11 +11,13 @@ import {
   fetchConnectors,
   fetchInfraStatus,
   fetchLogs,
+  fetchProfiles,
   fetchRefreshMeta,
   fetchSignalCounts,
   fetchSignals,
   fetchTheses,
   type InfraStatusRecord,
+  type ProfileDisplay,
   type RefreshMeta,
   type SignalRecord,
   type SortField,
@@ -109,6 +111,8 @@ const App = () => {
     hasNext: false,
     hasPrev: false
   });
+  const [profiles, setProfiles] = useState<ProfileDisplay[]>([]);
+  const [activeProfile, setActiveProfile] = useState('all');
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [splitPct, setSplitPct] = useState(50);
@@ -149,6 +153,10 @@ const App = () => {
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
+  }, []);
+
+  useEffect(() => {
+    fetchProfiles().then(setProfiles).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -217,7 +225,7 @@ const App = () => {
           setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
           // Refresh theses and signals to reflect agent changes
           Promise.allSettled([
-            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField }),
+            fetchTheses({ page: 1, pageSize: 10, sort: thesisSortField, profile: activeProfile }),
             fetchSignals({ page: requestedPage, pageSize: PAGE_SIZE }),
             fetchSignalCounts()
           ]).then(([thesesRes, signalsRes, countsRes]) => {
@@ -285,6 +293,7 @@ const App = () => {
           page: requestedThesisPage,
           pageSize: 10,
           sort: thesisSortField,
+          profile: activeProfile,
         });
         if (isCancelled) return;
         setTheses(tp.items);
@@ -301,7 +310,7 @@ const App = () => {
     };
     void loadTheses();
     return () => { isCancelled = true; };
-  }, [requestedThesisPage, thesisSortField]);
+  }, [requestedThesisPage, thesisSortField, activeProfile]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -477,6 +486,26 @@ const App = () => {
           <section className="pane pane-left" style={{ width: `${splitPct}%` }}>
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
+              <div className="profile-tabs">
+                <button
+                  type="button"
+                  className={`profile-tab ${activeProfile === 'all' ? 'active' : ''}`}
+                  onClick={() => { setActiveProfile('all'); setRequestedThesisPage(1); }}
+                >
+                  All
+                </button>
+                {profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`profile-tab ${activeProfile === p.id ? 'active' : ''}`}
+                    onClick={() => { setActiveProfile(p.id); setRequestedThesisPage(1); }}
+                    style={{ '--tab-color': p.display.badgeColor } as React.CSSProperties}
+                  >
+                    {p.display.badge}
+                  </button>
+                ))}
+              </div>
               <select
                 className="source-filter"
                 value={thesisSortField}
@@ -516,6 +545,7 @@ const App = () => {
                 <ThesisCard
                   key={t.canonicalKey}
                   thesis={t}
+                  profileDisplay={profiles.find(p => p.id === (t as any).profileId)?.display ?? null}
                   isActive={thesisFilter === t.canonicalKey}
                   onClick={() => handleThesisFilter(
                     thesisFilter === t.canonicalKey ? null : t.canonicalKey,
