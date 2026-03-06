@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blendedScore } from '../src/scoring/blend';
+import { blendedScore, blendedScoreWithVelocity } from '../src/scoring/blend';
 import { medianOfThree, scoreBuildability } from '../src/scoring/buildability';
 import { scorePain } from '../src/scoring/pain';
 import { scoreTiming } from '../src/scoring/timing';
@@ -28,5 +28,22 @@ describe('scoring pipeline', () => {
 
     // 80*0.25 + 70*0.20 + 60*0.20 + 90*0.35 = 20 + 14 + 12 + 31.5 = 77.5
     expect(score).toBe(77.5);
+  });
+
+  it('applies velocity multiplier to blended score', () => {
+    const scores = { demand: 80, timing: 70, buildability: 60, virality: 90 };
+    // Base = 77.5, velocity 2.0 → multiplier 1.5 → 77.5 * 1.5 = 116.25
+    expect(blendedScoreWithVelocity(scores, 2.0)).toBe(116.25);
+  });
+
+  it('penalizes declining topics', () => {
+    const scores = { demand: 80, timing: 70, buildability: 60, virality: 90 };
+    // velocity 0.5 → multiplier 0.75 → 77.5 * 0.75 = 58.13
+    expect(blendedScoreWithVelocity(scores, 0.5)).toBe(58.13);
+  });
+
+  it('leaves stable topics unchanged', () => {
+    const scores = { demand: 80, timing: 70, buildability: 60, virality: 90 };
+    expect(blendedScoreWithVelocity(scores, 1.0)).toBe(77.5);
   });
 });

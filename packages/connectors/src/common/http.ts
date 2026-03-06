@@ -29,7 +29,9 @@ export const OPEN_CONNECTOR_LIMITS = {
   tiktok_creative: 30,
   alternativeto: 30,
   stackoverflow: 25,
-  g2_reviews: 30
+  g2_reviews: 30,
+  npm_trends: 30,
+  semantic_scholar: 30
 } as const;
 
 export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
@@ -52,7 +54,9 @@ export const OPEN_CONNECTOR_CADENCE: Record<string, Cadence> = {
   tiktok_creative: 'daily',
   alternativeto: 'daily',
   stackoverflow: 'daily',
-  g2_reviews: 'daily'
+  g2_reviews: 'daily',
+  npm_trends: 'daily',
+  semantic_scholar: 'daily'
 };
 
 const sleep = async (ms: number): Promise<void> => {

@@ -34,6 +34,12 @@ export type RuntimeEnv = {
   cleanupIntervalMs: number;
   circuitBreakerThreshold: number;
   circuitBreakerCooldownMs: number;
+  bayesianPriorDefault: number;
+  bayesianDecayRate: number;
+  bayesianDecayAfterDays: number;
+  bayesianFloorConfidence: number;
+  temporalRagWeight: number;
+  temporalRagHalfLifeHours: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -64,7 +70,13 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     wsLogPollMs: parseNumber(env.WS_LOG_POLL_MS, 3_000),
     cleanupIntervalMs: parseNumber(env.CLEANUP_INTERVAL_MS, 6 * 60 * 60 * 1000),
     circuitBreakerThreshold: parseNumber(env.CIRCUIT_BREAKER_THRESHOLD, 3),
-    circuitBreakerCooldownMs: parseNumber(env.CIRCUIT_BREAKER_COOLDOWN_MS, 10 * 60 * 1000)
+    circuitBreakerCooldownMs: parseNumber(env.CIRCUIT_BREAKER_COOLDOWN_MS, 10 * 60 * 1000),
+    bayesianPriorDefault: parseNumber(env.BAYESIAN_PRIOR_DEFAULT, 20),
+    bayesianDecayRate: parseNumber(env.BAYESIAN_DECAY_RATE, 0.97),
+    bayesianDecayAfterDays: parseNumber(env.BAYESIAN_DECAY_AFTER_DAYS, 14),
+    bayesianFloorConfidence: parseNumber(env.BAYESIAN_FLOOR_CONFIDENCE, 5),
+    temporalRagWeight: parseNumber(env.TEMPORAL_RAG_WEIGHT, 0.3),
+    temporalRagHalfLifeHours: parseNumber(env.TEMPORAL_RAG_HALF_LIFE_HOURS, 72)
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;
