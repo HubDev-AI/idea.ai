@@ -2,12 +2,13 @@ import type { InfraStatusRecord } from '@idea/contracts/src/api';
 import type { FastifyInstance } from 'fastify';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 
-export type OllamaCheckResult = { ok: boolean; reason?: string };
+export type OllamaCheckResult = { ok: boolean; reason?: string; sizeMb?: number };
 
 export type InfraStatusDeps = {
   checkPostgres: () => Promise<boolean>;
   checkOllama: () => Promise<OllamaCheckResult>;
   getEmbeddingStats: () => Promise<{ total: number; withEmbedding: number; fallbackModel: string }>;
+  getDiskStats?: () => Promise<{ dbSizeMb: number; tableSizes: { name: string; sizeMb: number; rows: number }[] }>;
   logger?: Pick<ExecutionLogger, 'info' | 'warn' | 'error'>;
 };
 
@@ -19,10 +20,11 @@ export const registerInfraStatusRoute = (
   const LOG_INTERVAL_MS = 5 * 60 * 1000; // log at most every 5 minutes
 
   app.get('/v1/infra/status', async (): Promise<InfraStatusRecord> => {
-    const [pgResult, ollamaResult, embStats] = await Promise.allSettled([
+    const [pgResult, ollamaResult, embStats, diskResult] = await Promise.allSettled([
       deps.checkPostgres(),
       deps.checkOllama(),
-      deps.getEmbeddingStats()
+      deps.getEmbeddingStats(),
+      deps.getDiskStats?.() ?? Promise.resolve(null)
     ]);
 
     const pgOk = pgResult.status === 'fulfilled' && pgResult.value;
@@ -70,10 +72,14 @@ export const registerInfraStatusRoute = (
       }
     }
 
+    const disk = diskResult.status === 'fulfilled' && diskResult.value ? diskResult.value : undefined;
+
     return {
       postgres: pgOk ? 'ok' : 'error',
       ollama: ollamaOk ? 'ok' : 'error',
-      embeddings: emb
+      ...(ollamaCheck.sizeMb != null ? { ollamaSizeMb: ollamaCheck.sizeMb } : {}),
+      embeddings: emb,
+      ...(disk ? { diskUsage: disk } : {})
     };
   });
 };

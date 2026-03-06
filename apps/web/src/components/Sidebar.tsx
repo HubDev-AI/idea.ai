@@ -118,10 +118,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.postgres ?? 'idle')}`} />
           <span className="sidebar-row-name">Postgres</span>
+          {infraStatus?.diskUsage && (
+            <span className="sidebar-row-detail detail-count">
+              {infraStatus.diskUsage.dbSizeMb >= 1024
+                ? `${(infraStatus.diskUsage.dbSizeMb / 1024).toFixed(1)} GB`
+                : `${Math.round(infraStatus.diskUsage.dbSizeMb)} MB`}
+            </span>
+          )}
         </div>
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.ollama ?? 'idle')}`} />
           <span className="sidebar-row-name">Ollama</span>
+          {infraStatus?.ollamaSizeMb != null && (
+            <span className="sidebar-row-detail detail-count">
+              {infraStatus.ollamaSizeMb >= 1024
+                ? `${(infraStatus.ollamaSizeMb / 1024).toFixed(1)} GB`
+                : `${infraStatus.ollamaSizeMb} MB`}
+            </span>
+          )}
         </div>
         <div className="sidebar-row">
           <span className={`status-dot ${

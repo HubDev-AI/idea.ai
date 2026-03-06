@@ -177,9 +177,14 @@ export type AgentStatusRecord = {
 export type InfraStatusRecord = {
   postgres: 'ok' | 'error';
   ollama: 'ok' | 'error';
+  ollamaSizeMb?: number;
   embeddings: {
     total: number;
     withEmbedding: number;
     fallbackModel: string;
+  };
+  diskUsage?: {
+    dbSizeMb: number;
+    tableSizes: { name: string; sizeMb: number; rows: number }[];
   };
 };
