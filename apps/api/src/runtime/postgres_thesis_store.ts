@@ -24,6 +24,8 @@ type ThesisRow = {
   profile_id: string;
   label: string | null;
   posterior_confidence: number | string | null;
+  velocity: number | string | null;
+  corroboration_score: number | string | null;
 };
 
 const toNumber = (v: unknown): number => {
@@ -58,7 +60,9 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   estimatedScope: toScope(row.estimated_scope),
   profileId: row.profile_id ?? 'consumer',
   label: row.label ?? null,
-  posteriorConfidence: toNumber(row.posterior_confidence ?? row.confidence)
+  posteriorConfidence: toNumber(row.posterior_confidence ?? row.confidence),
+  velocity: row.velocity != null ? toNumber(row.velocity) : null,
+  corroborationScore: row.corroboration_score != null ? toNumber(row.corroboration_score) : null,
 });
 
 export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
@@ -112,8 +116,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const result = await pool.query<{ id: string }>(
       `INSERT INTO thesis_candidates
         (canonical_key, title, topic, status, confidence, problem_statement,
-         target_buyer, proposed_solution, estimated_scope, profile_id, first_seen_at, last_seen_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+         target_buyer, proposed_solution, estimated_scope, profile_id, velocity, corroboration_score, first_seen_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
        ON CONFLICT (canonical_key) DO UPDATE SET
          title = EXCLUDED.title,
          status = EXCLUDED.status,
@@ -123,6 +127,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
          proposed_solution = EXCLUDED.proposed_solution,
          estimated_scope = COALESCE(EXCLUDED.estimated_scope, thesis_candidates.estimated_scope),
          profile_id = EXCLUDED.profile_id,
+         velocity = COALESCE(EXCLUDED.velocity, thesis_candidates.velocity),
+         corroboration_score = COALESCE(EXCLUDED.corroboration_score, thesis_candidates.corroboration_score),
          last_seen_at = NOW(),
          updated_at = NOW()
        RETURNING id`,
@@ -131,7 +137,9 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         draft.confidence, draft.problemStatement,
         draft.targetBuyer, draft.proposedSolution,
         draft.estimatedScope ?? null,
-        draft.profileId ?? 'consumer'
+        draft.profileId ?? 'consumer',
+        draft.velocity ?? null,
+        draft.corroborationScore ?? null
       ]
     );
 
@@ -243,7 +251,9 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
         profileId: (d as any).profileId ?? 'consumer',
         label: (d as any).label ?? null,
-        posteriorConfidence: (d as any).posteriorConfidence ?? d.confidence
+        posteriorConfidence: (d as any).posteriorConfidence ?? d.confidence,
+        velocity: (d as any).velocity ?? undefined,
+        corroborationScore: (d as any).corroborationScore ?? undefined,
       })),
       page: safePage,
       page_size: pageSize,

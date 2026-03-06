@@ -40,6 +40,8 @@ export type ThesisDraft = {
   evidence: ThesisEvidenceDraft[];
   estimatedScope?: 'small' | 'medium' | 'large' | null;
   profileId?: string;
+  velocity?: number | null;
+  corroborationScore?: number | null;
 };
 
 const stopWords = new Set([
