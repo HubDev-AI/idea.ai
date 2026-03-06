@@ -17,8 +17,10 @@ export type ThesisCardProps = {
   };
   profileDisplay?: { badge: string; badgeColor: string } | null;
   isActive?: boolean;
+  isGenerating?: boolean;
   onClick?: () => void;
   onExplore?: () => void;
+  onView?: () => void;
 };
 
 const confidenceColor = (confidence: number): string => {
@@ -33,8 +35,19 @@ const scopeLabel: Record<string, { text: string; color: string }> = {
   large: { text: 'L', color: 'var(--err)' }
 };
 
-export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, isActive, onClick, onExplore }) => {
+export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, isActive, isGenerating, onClick, onExplore, onView }) => {
   const statusClass = thesis.status === 'promoted' ? 'promoted' : thesis.status === 'watching' ? 'watching' : '';
+  const hasData = thesis.hasDeepDive === true;
+
+  const handleExploreClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isGenerating) return;
+    if (hasData && onView) {
+      onView();
+    } else if (onExplore) {
+      onExplore();
+    }
+  };
 
   return (
     <div
@@ -81,13 +94,14 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
         <span>{thesis.evidenceCount} evidence</span>
         <span>{thesis.sourceCount} sources</span>
         {thesis.lastSeenAt && <span>{relativeTime(thesis.lastSeenAt)}</span>}
-        {onExplore && (
+        {(onExplore || onView) && (
           <button
             type="button"
-            className={`thesis-explore-btn ${thesis.hasDeepDive ? 'has-data' : ''}`}
-            onClick={(e) => { e.stopPropagation(); onExplore(); }}
+            className={`thesis-explore-btn ${hasData ? 'has-data' : ''} ${isGenerating ? 'generating' : ''}`}
+            onClick={handleExploreClick}
+            disabled={isGenerating}
           >
-            Explore
+            {isGenerating ? 'Generating\u2026' : hasData ? 'View' : 'Explore'}
           </button>
         )}
       </div>

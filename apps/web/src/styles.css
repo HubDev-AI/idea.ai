@@ -888,6 +888,19 @@ h1, h2, h3, p {
   border-color: #8e44ad;
 }
 
+.thesis-explore-btn.generating {
+  opacity: 0.7;
+  cursor: wait;
+  border-color: #e67e22;
+  color: #e67e22;
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: #e67e22; opacity: 0.6; }
+  50% { border-color: #f39c12; opacity: 1; }
+}
+
 .thesis-card.thesis-active {
   background: rgba(45, 212, 191, 0.06);
   border-left-color: var(--accent);
@@ -1509,4 +1522,48 @@ a.signal-idea-link:hover {
   margin-top: 0.5rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--glass-border);
+}
+
+/* Toast notifications */
+.toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--card);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 0.65rem 1rem;
+  font-size: 0.78rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  color: var(--text);
+  max-width: 380px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: toast-in 0.3s ease, toast-out 0.3s ease 3.7s forwards;
+  pointer-events: auto;
+}
+
+.toast-success {
+  border-left: 3px solid var(--ok);
+}
+
+.toast-error {
+  border-left: 3px solid var(--err);
+}
+
+@keyframes toast-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }

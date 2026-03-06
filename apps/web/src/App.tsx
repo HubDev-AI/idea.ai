@@ -25,7 +25,10 @@ import {
   type ThesisSortField,
   type ThesisStats,
   triggerAgentRun,
-  triggerConnectorRefresh
+  triggerConnectorRefresh,
+  fetchThesisDeepDive,
+  generateThesisDeepDive,
+  type ThesisDeepDive,
 } from './api';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
@@ -98,6 +101,10 @@ const App = () => {
   const [thesisFilter, setThesisFilter] = useState<string | null>(null);
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
   const [deepDiveThesis, setDeepDiveThesis] = useState<ThesisListItem | null>(null);
+  const [generatingKeys, setGeneratingKeys] = useState<Set<string>>(new Set());
+  const deepDiveCache = useRef(new Map<string, ThesisDeepDive>());
+  const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' }[]>([]);
+  const toastIdRef = useRef(0);
   const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
@@ -435,6 +442,66 @@ const App = () => {
     }
   };
 
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+  }, []);
+
+  const handleExploreThesis = useCallback((thesis: ThesisListItem) => {
+    const key = thesis.canonicalKey;
+    if (generatingKeys.has(key)) return;
+
+    setGeneratingKeys((prev) => new Set(prev).add(key));
+
+    (async () => {
+      try {
+        // Check if already generated server-side
+        let data = await fetchThesisDeepDive(key);
+        if (!data) {
+          data = await generateThesisDeepDive(key);
+        }
+        deepDiveCache.current.set(key, data);
+        // Update hasDeepDive on the thesis in local state
+        setTheses((prev) => prev.map((t) =>
+          t.canonicalKey === key ? { ...t, hasDeepDive: true } : t
+        ));
+        showToast(`Deep dive ready: ${thesis.title.slice(0, 50)}`);
+      } catch (err) {
+        showToast(
+          `Failed to generate deep dive: ${err instanceof Error ? err.message : 'unknown error'}`,
+          'error'
+        );
+      } finally {
+        setGeneratingKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    })();
+  }, [generatingKeys, showToast]);
+
+  const handleViewThesis = useCallback((thesis: ThesisListItem) => {
+    const cached = deepDiveCache.current.get(thesis.canonicalKey);
+    if (cached) {
+      setDeepDiveThesis(thesis);
+      return;
+    }
+    // Data exists server-side but not in local cache — fetch first then open
+    (async () => {
+      try {
+        const data = await fetchThesisDeepDive(thesis.canonicalKey);
+        if (data) {
+          deepDiveCache.current.set(thesis.canonicalKey, data);
+        }
+      } catch {
+        // Modal will handle loading
+      }
+      setDeepDiveThesis(thesis);
+    })();
+  }, []);
+
   const handleRunAgent = async () => {
     setAgentRunning(true);
     setAgentRunResult(null);
@@ -551,7 +618,9 @@ const App = () => {
                     thesisFilter === t.canonicalKey ? null : t.canonicalKey,
                     thesisFilter === t.canonicalKey ? '' : t.title
                   )}
-                  onExplore={() => setDeepDiveThesis(t)}
+                  isGenerating={generatingKeys.has(t.canonicalKey)}
+                  onExplore={() => handleExploreThesis(t)}
+                  onView={() => handleViewThesis(t)}
                 />
               ))}
               {theses.length === 0 && (
@@ -731,8 +800,18 @@ const App = () => {
       {deepDiveThesis && (
         <ThesisDeepDiveModal
           thesis={deepDiveThesis}
+          cachedData={deepDiveCache.current.get(deepDiveThesis.canonicalKey) ?? null}
           onClose={() => setDeepDiveThesis(null)}
         />
+      )}
+      {toasts.length > 0 && (
+        <div className="toast-container">
+          {toasts.map((t) => (
+            <div key={t.id} className={`toast toast-${t.type}`}>
+              {t.message}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
