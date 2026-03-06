@@ -9,6 +9,7 @@ export interface ThesisStore {
   list(filter?: ThesisStoreFilter): Promise<ThesisDraft[]>;
   getByKey(canonicalKey: string): Promise<ThesisDraft | null>;
   setLabel?(canonicalKey: string, label: 'favourite' | 'later' | 'dismissed' | null): Promise<{ label: string | null } | null>;
+  bayesianUpdate?(canonicalKey: string, confidenceDelta: number): Promise<void>;
 }
 
 export class InMemoryThesisStore implements ThesisStore {
