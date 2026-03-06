@@ -8,6 +8,7 @@ export interface ThesisStore {
   upsert(draft: ThesisDraft): Promise<void>;
   list(filter?: ThesisStoreFilter): Promise<ThesisDraft[]>;
   getByKey(canonicalKey: string): Promise<ThesisDraft | null>;
+  setLabel?(canonicalKey: string, label: 'favourite' | 'later' | 'dismissed' | null): Promise<{ label: string | null } | null>;
 }
 
 export class InMemoryThesisStore implements ThesisStore {
@@ -27,5 +28,12 @@ export class InMemoryThesisStore implements ThesisStore {
 
   async getByKey(canonicalKey: string): Promise<ThesisDraft | null> {
     return this.store.get(canonicalKey) ?? null;
+  }
+
+  async setLabel(canonicalKey: string, label: 'favourite' | 'later' | 'dismissed' | null): Promise<{ label: string | null } | null> {
+    const draft = this.store.get(canonicalKey);
+    if (!draft) return null;
+    (draft as any).label = label;
+    return { label };
   }
 }

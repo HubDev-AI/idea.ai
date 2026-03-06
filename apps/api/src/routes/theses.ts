@@ -24,7 +24,7 @@ export const registerThesesRoute = (
     'store' in storeOrDeps ? storeOrDeps : { store: storeOrDeps };
 
   app.get('/v1/theses', async (request) => {
-    const query = request.query as { page?: string; page_size?: string; status?: string; sort?: string; profile?: string };
+    const query = request.query as { page?: string; page_size?: string; status?: string; sort?: string; profile?: string; label?: string };
     const validSorts = ['score', 'latest', 'evidence', 'newest'] as const;
     const sort = validSorts.includes(query.sort as typeof validSorts[number])
       ? (query.sort as typeof validSorts[number])
@@ -40,7 +40,8 @@ export const registerThesesRoute = (
         pageSize,
         sort,
         ...(query.status ? { status: query.status } : {}),
-        ...(profile !== 'all' ? { profile } : {})
+        ...(profile !== 'all' ? { profile } : {}),
+        ...(query.label ? { label: query.label } : {})
       });
     }
 
@@ -72,6 +73,46 @@ export const registerThesesRoute = (
     }
 
     return draft;
+  });
+
+  const validLabels = new Set(['favourite', 'later', 'dismissed']);
+
+  app.patch('/v1/theses/:key/label', {
+    schema: {
+      params: {
+        type: 'object',
+        properties: { key: { type: 'string', minLength: 1, maxLength: 200 } },
+        required: ['key']
+      },
+      body: {
+        type: 'object',
+        properties: {
+          label: { type: ['string', 'null'] }
+        },
+        required: ['label']
+      }
+    }
+  }, async (request, reply) => {
+    const { key } = request.params as { key: string };
+    const { label } = request.body as { label: string | null };
+
+    if (label !== null && !validLabels.has(label)) {
+      reply.code(400);
+      return { error: `Invalid label. Must be one of: ${[...validLabels].join(', ')} or null` };
+    }
+
+    if (!deps.store.setLabel) {
+      reply.code(503);
+      return { error: 'Label updates not supported' };
+    }
+
+    const result = await deps.store.setLabel(key, label as any);
+    if (!result) {
+      reply.code(404);
+      return { error: 'Thesis not found' };
+    }
+
+    return result;
   });
 
   app.post('/v1/theses/synthesize', {
