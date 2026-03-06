@@ -228,7 +228,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {providerDisplayName[p.provider] ?? p.provider}
                 {role && <span className={`sidebar-role-tag ${role}`}>{role}</span>}
               </span>
-              {p.status === 'idle' && p.attempted === 0 ? (
+              {p.circuit_state === 'open' ? (
+                <span className="sidebar-row-detail detail-error">circuit open</span>
+              ) : p.circuit_state === 'half-open' ? (
+                <span className="sidebar-row-detail detail-standby">probing</span>
+              ) : p.status === 'idle' && p.attempted === 0 ? (
                 <span className="sidebar-row-detail detail-standby">standby</span>
               ) : (
                 <span className={`sidebar-row-detail ${p.failed > 0 ? 'detail-standby' : 'detail-ok'}`}>

@@ -426,6 +426,12 @@ h1, h2, h3, p {
   background: rgba(251, 191, 36, 0.06);
 }
 
+.sidebar-row-detail.detail-error {
+  color: var(--error, #ef4444);
+  border-color: rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.06);
+}
+
 .sidebar-row-detail.detail-count {
   color: var(--text);
   font-variant-numeric: tabular-nums;

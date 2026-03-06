@@ -78,6 +78,8 @@ export type ListLogsQuery = {
 export type AiProviderName = 'claude' | 'codex';
 export type AiProviderStatus = 'disabled' | 'idle' | 'healthy' | 'degraded' | 'error';
 
+export type CircuitBreakerState = 'closed' | 'open' | 'half-open';
+
 export type AiProviderHealthRecord = {
   provider: AiProviderName;
   enabled: boolean;
@@ -87,6 +89,8 @@ export type AiProviderHealthRecord = {
   failed: number;
   retries: number;
   last_error: string | null;
+  circuit_state?: CircuitBreakerState;
+  circuit_failures?: number;
 };
 
 export type AiHealthRecord = {

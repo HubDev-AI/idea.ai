@@ -32,6 +32,8 @@ export type RuntimeEnv = {
   wsInfraPollMs: number;
   wsLogPollMs: number;
   cleanupIntervalMs: number;
+  circuitBreakerThreshold: number;
+  circuitBreakerCooldownMs: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -60,7 +62,9 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     shutdownTimeoutMs: parseNumber(env.SHUTDOWN_TIMEOUT_MS, 15_000),
     wsInfraPollMs: parseNumber(env.WS_INFRA_POLL_MS, 10_000),
     wsLogPollMs: parseNumber(env.WS_LOG_POLL_MS, 3_000),
-    cleanupIntervalMs: parseNumber(env.CLEANUP_INTERVAL_MS, 6 * 60 * 60 * 1000)
+    cleanupIntervalMs: parseNumber(env.CLEANUP_INTERVAL_MS, 6 * 60 * 60 * 1000),
+    circuitBreakerThreshold: parseNumber(env.CIRCUIT_BREAKER_THRESHOLD, 3),
+    circuitBreakerCooldownMs: parseNumber(env.CIRCUIT_BREAKER_COOLDOWN_MS, 10 * 60 * 1000)
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;
