@@ -89,7 +89,7 @@ export const registerThesisExplainRoute = (
       return { error: 'Thesis not found' };
     }
 
-    const profileId = (thesis as any).profileId ?? 'consumer';
+    const profileId = thesis.profileId ?? 'consumer';
     const { weights, source } = resolveWeights(profileId, deps.getActiveWeights);
 
     // -- Weight breakdown --
@@ -144,7 +144,7 @@ export const registerThesisExplainRoute = (
     // -- Bayesian trail --
     let bayesianTrail: ThesisExplainRecord['bayesianTrail'] = {
       prior: thesis.confidence,
-      posterior: (thesis as any).posteriorConfidence ?? thesis.confidence,
+      posterior: thesis.posteriorConfidence ?? thesis.confidence,
       updates: [],
     };
 

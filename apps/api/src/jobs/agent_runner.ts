@@ -118,7 +118,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   let clusterableSignals: ClusterableSignal[] = [];
   if (deps.memoryStore && recentSignals.length > 0) {
     const signalIds = recentSignals.map((s) => s.signal_id);
-    const embeddingRows = await loadEmbeddings(deps.memoryStore, signalIds);
+    const embeddingRows = await deps.memoryStore.getEmbeddings(signalIds);
 
     clusterableSignals = recentSignals
       .filter((s) => embeddingRows.has(s.signal_id))
@@ -314,6 +314,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         if (!parsed) throw new Error('Failed to parse broad scan response');
         return parsed;
       },
+      preferred,
       ...(deps.logger ? { logger: deps.logger } : {})
     }
   );
@@ -523,6 +524,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           if (!parsed) throw new Error('Failed to parse deep dive response');
           return parsed;
         },
+        preferred,
         ...(deps.logger ? { logger: deps.logger } : {})
       }
     );
@@ -714,9 +716,3 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   };
 };
 
-async function loadEmbeddings(
-  memoryStore: PostgresMemoryStore,
-  signalIds: string[]
-): Promise<Map<string, number[]>> {
-  return memoryStore.getEmbeddings(signalIds);
-}

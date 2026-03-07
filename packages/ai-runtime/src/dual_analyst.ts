@@ -55,30 +55,44 @@ export const dualAnalystRun = async <T>(
     runCodex: (input: RunPromptInput) => Promise<RunPromptResult>;
     parseResponse: (text: string) => T;
     logger?: { info: LogFn; warn: LogFn };
+    preferred?: 'claude' | 'codex';
   }
 ): Promise<DualResult<T>> => {
   const log = deps.logger;
-
-  const [claudeResult, codexResult] = await Promise.allSettled([
-    deps.runClaude(input),
-    deps.runCodex(input)
-  ]);
+  const preferred = deps.preferred ?? 'claude';
 
   let claude: T | null = null;
   let codex: T | null = null;
 
-  if (claudeResult.status === 'fulfilled') {
-    try { claude = deps.parseResponse(claudeResult.value.text); } catch { /* skip */ }
-    await log?.info('dual_analyst', 'claude succeeded', { parsed: claude !== null });
-  } else {
-    await log?.warn('dual_analyst', 'claude failed', { error: claudeResult.reason?.message ?? 'unknown' });
+  const runPrimary = preferred === 'claude' ? deps.runClaude : deps.runCodex;
+  const runFallback = preferred === 'claude' ? deps.runCodex : deps.runClaude;
+  const primaryLabel = preferred;
+  const fallbackLabel = preferred === 'claude' ? 'codex' : 'claude';
+
+  // Step 1: Try preferred provider
+  try {
+    const result = await runPrimary(input);
+    const parsed = deps.parseResponse(result.text);
+    if (preferred === 'claude') claude = parsed; else codex = parsed;
+    await log?.info('dual_analyst', `${primaryLabel} succeeded`, { parsed: true });
+    return { claude, codex };
+  } catch (err) {
+    await log?.warn('dual_analyst', `${primaryLabel} failed`, {
+      error: err instanceof Error ? err.message : 'unknown'
+    });
   }
 
-  if (codexResult.status === 'fulfilled') {
-    try { codex = deps.parseResponse(codexResult.value.text); } catch { /* skip */ }
-    await log?.info('dual_analyst', 'codex succeeded', { parsed: codex !== null });
-  } else {
-    await log?.warn('dual_analyst', 'codex failed', { error: codexResult.reason?.message ?? 'unknown' });
+  // Step 2: Try fallback provider
+  try {
+    const result = await runFallback(input);
+    const parsed = deps.parseResponse(result.text);
+    if (fallbackLabel === 'claude') claude = parsed; else codex = parsed;
+    await log?.info('dual_analyst', `${fallbackLabel} succeeded`, { parsed: true });
+    return { claude, codex };
+  } catch (err) {
+    await log?.warn('dual_analyst', `${fallbackLabel} failed`, {
+      error: err instanceof Error ? err.message : 'unknown'
+    });
   }
 
   // Retry if both providers failed
