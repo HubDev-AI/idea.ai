@@ -38,6 +38,7 @@ export type AgentRunnerDeps = {
   logger?: ExecutionLogger;
   runId?: string;
   preferredProvider?: 'claude' | 'codex';
+  allowFallback?: boolean;
   timeoutMs?: number;
   maxClusters?: number;
   profile?: AgentProfile;
@@ -87,6 +88,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   const log = deps.logger ?? noopLogger;
   const runId = deps.runId ?? `agent-${Date.now()}`;
   const preferred = deps.preferredProvider ?? 'claude';
+  const allowFallback = deps.allowFallback ?? true;
   const timeoutMs = deps.timeoutMs ?? 180_000;
   const maxClusters = deps.maxClusters ?? 50;
   const profile = deps.profile ?? consumerProfile;
@@ -315,6 +317,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         return parsed;
       },
       preferred,
+      allowFallback,
       ...(deps.logger ? { logger: deps.logger } : {})
     }
   );
@@ -525,6 +528,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           return parsed;
         },
         preferred,
+        allowFallback,
         ...(deps.logger ? { logger: deps.logger } : {})
       }
     );

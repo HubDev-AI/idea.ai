@@ -1,8 +1,7 @@
-import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
-import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import type { Provider, RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { ProviderCircuitBreaker } from '../runtime/provider_circuit';
+import { clampScore, otherProvider, parseJsonObject, resolvePreferredProvider, runProvider, toPositiveInt } from './ai_helpers';
 
 const defaultJudgeScores: [number, number, number] = [62, 66, 60];
 const opportunityKeywords = [
@@ -22,33 +21,9 @@ const opportunityKeywords = [
   'failure'
 ];
 
-const clampScore = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
-
 const fallbackJudgeScores = (): [number, number, number] => [...defaultJudgeScores] as [number, number, number];
 
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');
-
-const parseJsonObject = (text: string): unknown => {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(match[0]);
-    } catch {
-      return null;
-    }
-  }
-};
 
 export const parseJudgeScores = (text: string): [number, number, number] | null => {
   const parsed = parseJsonObject(text) as { judge_scores?: unknown } | null;
@@ -114,32 +89,15 @@ export type AiJudgeAttempt = {
   error?: string;
 };
 
-const toPositiveInt = (value: string | undefined, fallback: number): number => {
-  const parsed = Number(value ?? fallback);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return fallback;
-  }
-
-  return Math.floor(parsed);
-};
-
 export const resolveAiJudgeSettings = (env: NodeJS.ProcessEnv = process.env): AiJudgeSettings => {
   const providerRaw = env.AI_PROVIDER?.toLowerCase();
   const modeRaw = env.AI_PROVIDER_MODE?.toLowerCase();
   const mode = providerRaw === 'both' && modeRaw === 'ensemble' ? 'ensemble' : 'single';
-  const preferredProvider =
-    providerRaw === 'both'
-      ? env.AI_PROVIDER_PRIMARY === 'codex'
-        ? 'codex'
-        : 'claude'
-      : providerRaw === 'codex'
-        ? 'codex'
-        : 'claude';
   const isTest = env.NODE_ENV === 'test' || env.VITEST === 'true';
   const defaultMaxSignals = isTest ? 0 : 50;
 
   return {
-    preferredProvider,
+    preferredProvider: resolvePreferredProvider(env),
     mode,
     maxSignals: toPositiveInt(env.AI_JUDGE_MAX_SIGNALS, defaultMaxSignals),
     timeoutMs: toPositiveInt(env.AI_JUDGE_TIMEOUT_MS, 180_000),
@@ -180,29 +138,6 @@ export const judgeBuildabilityWithAi = async ({
 }> => {
   const prompt = buildJudgePrompt({ idea, text, topic, source });
 
-  const runProvider = (provider: Provider, input: RunPromptInput): Promise<RunPromptResult> => {
-    if (run) {
-      return run({
-        ...input,
-        preferredProvider: provider
-      });
-    }
-
-    if (provider === 'codex') {
-      return runCodexPrompt({
-        ...input,
-        preferredProvider: 'codex'
-      });
-    }
-
-    return runClaudePrompt({
-      ...input,
-      preferredProvider: 'claude'
-    });
-  };
-
-  const otherProvider = (provider: Provider): Provider => (provider === 'codex' ? 'claude' : 'codex');
-
   const attempts: AiJudgeAttempt[] = [];
 
   const callJudge = async (
@@ -217,7 +152,7 @@ export const judgeBuildabilityWithAi = async ({
           prompt,
           timeoutMs: settings.timeoutMs,
           preferredProvider: provider
-        });
+        }, run);
         const parsedScores = parseJudgeScores(result.text);
         if (!parsedScores) {
           const willRetry = attempt < maxAttempts;

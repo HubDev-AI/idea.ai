@@ -1,8 +1,7 @@
-import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
-import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import type { Provider, RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { ProviderCircuitBreaker } from '../runtime/provider_circuit';
+import { clampConfidence, clampScore, otherProvider, parseJsonObject, resolvePreferredProvider, runProvider, toPositiveInt } from './ai_helpers';
 
 export type AiPostScrapeSettings = {
   enabled: boolean;
@@ -51,45 +50,6 @@ export type AiPostScrapeAttempt = {
 
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_MAX_SIGNALS = 6;
-
-const clampScore = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
-const clampConfidence = (value: number): number => Math.max(0, Math.min(1, value));
-
-const toPositiveInt = (value: string | undefined, fallback: number): number => {
-  const parsed = Number(value ?? fallback);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return fallback;
-  }
-
-  return Math.floor(parsed);
-};
-
-const stripMarkdownFences = (text: string): string => {
-  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  return fenceMatch?.[1] ? fenceMatch[1].trim() : text;
-};
-
-const parseJsonObject = (text: string): unknown => {
-  const trimmed = stripMarkdownFences(text.trim());
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(match[0]);
-    } catch {
-      return null;
-    }
-  }
-};
 
 const parseJudgeScores = (value: unknown): [number, number, number] | undefined => {
   if (!Array.isArray(value) || value.length < 3) {
@@ -184,49 +144,13 @@ const buildPrompt = (items: AiPostScrapeInput[]): string => {
   ].join('\n');
 };
 
-const runProvider = async (
-  provider: Provider,
-  input: RunPromptInput,
-  run?: (input: RunPromptInput) => Promise<RunPromptResult>
-): Promise<RunPromptResult> => {
-  if (run) {
-    return run({
-      ...input,
-      preferredProvider: provider
-    });
-  }
-
-  if (provider === 'codex') {
-    return runCodexPrompt({
-      ...input,
-      preferredProvider: 'codex'
-    });
-  }
-
-  return runClaudePrompt({
-    ...input,
-    preferredProvider: 'claude'
-  });
-};
-
-const otherProvider = (provider: Provider): Provider => (provider === 'codex' ? 'claude' : 'codex');
-
 export const resolveAiPostScrapeSettings = (env: NodeJS.ProcessEnv = process.env): AiPostScrapeSettings => {
-  const providerRaw = env.AI_PROVIDER?.toLowerCase();
-  const preferredProvider =
-    providerRaw === 'both'
-      ? env.AI_PROVIDER_PRIMARY === 'codex'
-        ? 'codex'
-        : 'claude'
-      : providerRaw === 'codex'
-        ? 'codex'
-        : 'claude';
   const isTest = env.NODE_ENV === 'test' || env.VITEST === 'true';
 
   return {
     enabled: env.AI_POST_SCRAPE_ENABLED !== 'false',
-    preferredProvider,
-    allowFallback: providerRaw === 'both' || env.AI_PROVIDER_FALLBACK === 'true',
+    preferredProvider: resolvePreferredProvider(env),
+    allowFallback: env.AI_PROVIDER_FALLBACK === 'true',
     maxSignals: toPositiveInt(env.AI_POST_SCRAPE_MAX_SIGNALS, isTest ? 0 : DEFAULT_MAX_SIGNALS),
     timeoutMs: toPositiveInt(env.AI_POST_SCRAPE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
     retries: toPositiveInt(env.AI_PROVIDER_RETRIES, 1)

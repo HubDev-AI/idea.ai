@@ -56,10 +56,12 @@ export const dualAnalystRun = async <T>(
     parseResponse: (text: string) => T;
     logger?: { info: LogFn; warn: LogFn };
     preferred?: 'claude' | 'codex';
+    allowFallback?: boolean;
   }
 ): Promise<DualResult<T>> => {
   const log = deps.logger;
   const preferred = deps.preferred ?? 'claude';
+  const allowFallback = deps.allowFallback ?? true;
 
   let claude: T | null = null;
   let codex: T | null = null;
@@ -82,46 +84,32 @@ export const dualAnalystRun = async <T>(
     });
   }
 
-  // Step 2: Try fallback provider
-  try {
-    const result = await runFallback(input);
-    const parsed = deps.parseResponse(result.text);
-    if (fallbackLabel === 'claude') claude = parsed; else codex = parsed;
-    await log?.info('dual_analyst', `${fallbackLabel} succeeded`, { parsed: true });
-    return { claude, codex };
-  } catch (err) {
-    await log?.warn('dual_analyst', `${fallbackLabel} failed`, {
-      error: err instanceof Error ? err.message : 'unknown'
-    });
-  }
-
-  // Retry if both providers failed
-  if (claude === null && codex === null) {
-    // Try Claude first
-    await log?.info('dual_analyst', 'both failed, retrying claude');
+  // Step 2: Try fallback provider (only if allowed)
+  if (allowFallback) {
     try {
-      const retry = await deps.runClaude(input);
-      try { claude = deps.parseResponse(retry.text); } catch { /* skip */ }
-      await log?.info('dual_analyst', 'claude retry result', { parsed: claude !== null });
-    } catch { /* exhausted */ }
-
-    // If Claude retry also failed, try Codex
-    if (claude === null) {
-      await log?.info('dual_analyst', 'claude retry failed, trying codex');
-      try {
-        const retry = await deps.runCodex(input);
-        try { codex = deps.parseResponse(retry.text); } catch { /* skip */ }
-        await log?.info('dual_analyst', 'codex retry result', { parsed: codex !== null });
-      } catch { /* both retries exhausted */ }
+      const result = await runFallback(input);
+      const parsed = deps.parseResponse(result.text);
+      if (fallbackLabel === 'claude') claude = parsed; else codex = parsed;
+      await log?.info('dual_analyst', `${fallbackLabel} succeeded`, { parsed: true });
+      return { claude, codex };
+    } catch (err) {
+      await log?.warn('dual_analyst', `${fallbackLabel} failed`, {
+        error: err instanceof Error ? err.message : 'unknown'
+      });
     }
   }
 
-  // Retry with Claude if both providers failed
+  // Retry primary if it failed (and fallback was skipped or also failed)
   if (claude === null && codex === null) {
+    await log?.info('dual_analyst', `retrying ${primaryLabel}`);
     try {
-      const retry = await deps.runClaude(input);
-      try { claude = deps.parseResponse(retry.text); } catch { /* skip */ }
-    } catch { /* both attempts exhausted */ }
+      const retry = await runPrimary(input);
+      try {
+        const parsed = deps.parseResponse(retry.text);
+        if (preferred === 'claude') claude = parsed; else codex = parsed;
+      } catch { /* parse failed */ }
+      await log?.info('dual_analyst', `${primaryLabel} retry result`, { parsed: claude !== null || codex !== null });
+    } catch { /* exhausted */ }
   }
 
   return { claude, codex };

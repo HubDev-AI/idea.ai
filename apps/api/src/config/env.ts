@@ -56,6 +56,10 @@ export type RuntimeEnv = {
   weightOptMinImprovement: number;
   weightOptGridStep: number;
   entityExtractBatchSize: number;
+  aiProvider: 'claude' | 'codex' | 'both';
+  aiProviderPrimary: 'claude' | 'codex';
+  aiProviderFallback: boolean;
+  aiProviderRetries: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -108,7 +112,11 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     weightOptMinPredictions: parseNumber(env.WEIGHT_OPT_MIN_PREDICTIONS, 50),
     weightOptMinImprovement: parseNumber(env.WEIGHT_OPT_MIN_IMPROVEMENT, 0.05),
     weightOptGridStep: parseNumber(env.WEIGHT_OPT_GRID_STEP, 0.05),
-    entityExtractBatchSize: parseNumber(env.ENTITY_EXTRACT_BATCH_SIZE, 10)
+    entityExtractBatchSize: parseNumber(env.ENTITY_EXTRACT_BATCH_SIZE, 10),
+    aiProvider: (env.AI_PROVIDER?.toLowerCase() === 'codex' ? 'codex' : env.AI_PROVIDER?.toLowerCase() === 'both' ? 'both' : 'claude') as RuntimeEnv['aiProvider'],
+    aiProviderPrimary: env.AI_PROVIDER_PRIMARY?.toLowerCase() === 'codex' ? 'codex' : 'claude',
+    aiProviderFallback: env.AI_PROVIDER_FALLBACK === 'true',
+    aiProviderRetries: parseNumber(env.AI_PROVIDER_RETRIES, 1),
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;
