@@ -173,6 +173,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         journalEntriesWritten: 0,
         clustersAnalyzed: 0,
         deepDivesPerformed: 0,
+        debatesPerformed: 0,
         provider: null,
       };
 
@@ -186,6 +187,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
           aggregated.journalEntriesWritten += r.value.journalEntriesWritten;
           aggregated.clustersAnalyzed += r.value.clustersAnalyzed;
           aggregated.deepDivesPerformed += r.value.deepDivesPerformed;
+          aggregated.debatesPerformed = (aggregated.debatesPerformed ?? 0) + (r.value.debatesPerformed ?? 0);
           if (!aggregated.provider) aggregated.provider = r.value.provider;
           if (!aggregated.investigateNext) aggregated.investigateNext = r.value.investigateNext;
           await logger.info('agent_runner', `profile ${p.id} completed`, {
@@ -380,10 +382,10 @@ const RETENTION_DAYS = 90;
 const runRetentionCleanup = async () => {
   if (!pool) return;
   try {
-    await pool.query(`DELETE FROM signal_memory WHERE observed_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
+    await pool.query(`DELETE FROM signal_memory WHERE observed_at < NOW() - INTERVAL '1 day' * $1`, [RETENTION_DAYS]);
     await pool.query(`DELETE FROM signal_embeddings WHERE signal_id NOT IN (SELECT signal_id FROM signal_memory)`);
-    await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
-    await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '${RETENTION_DAYS} days'`);
+    await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '1 day' * $1`, [RETENTION_DAYS]);
+    await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '1 day' * $1`, [RETENTION_DAYS]);
   } catch (err) {
     console.error('retention cleanup failed:', err);
   }

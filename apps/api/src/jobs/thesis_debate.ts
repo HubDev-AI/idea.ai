@@ -46,10 +46,10 @@ export const parseModeratorVerdict = (raw: string): ModeratorVerdict | null => {
     const parsed = JSON.parse(jsonMatch[0]);
     if (!parsed.verdict || !validVerdicts.has(parsed.verdict)) return null;
     return {
-      confidence: Number(parsed.confidence ?? 0.5),
-      bull_strength: Number(parsed.bull_strength ?? 50),
-      bear_strength: Number(parsed.bear_strength ?? 50),
-      missing_evidence: Array.isArray(parsed.missing_evidence) ? parsed.missing_evidence.slice(0, 5) : [],
+      confidence: Math.max(0, Math.min(1, Number(parsed.confidence ?? 0.5))),
+      bull_strength: Math.max(0, Math.min(100, Number(parsed.bull_strength ?? 50))),
+      bear_strength: Math.max(0, Math.min(100, Number(parsed.bear_strength ?? 50))),
+      missing_evidence: Array.isArray(parsed.missing_evidence) ? parsed.missing_evidence.slice(0, 3) : [],
       verdict: parsed.verdict,
     };
   } catch {

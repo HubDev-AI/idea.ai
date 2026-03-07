@@ -97,7 +97,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     if (origin && (openCors || allowedOrigins.has(origin))) {
       reply.header('Access-Control-Allow-Origin', origin);
     }
-    reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
     reply.header('Access-Control-Allow-Headers', 'Content-Type,X-Api-Key');
     reply.header('Vary', 'Origin');
 
