@@ -163,8 +163,9 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const result = await pool.query<{ id: string }>(
       `INSERT INTO thesis_candidates
         (canonical_key, title, topic, status, confidence, problem_statement,
-         target_buyer, proposed_solution, estimated_scope, profile_id, velocity, corroboration_score, first_seen_at, last_seen_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+         target_buyer, proposed_solution, estimated_scope, profile_id, velocity, corroboration_score,
+         prior_confidence, posterior_confidence, first_seen_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $5, $5, NOW(), NOW())
        ON CONFLICT (canonical_key) DO UPDATE SET
          title = EXCLUDED.title,
          status = EXCLUDED.status,
