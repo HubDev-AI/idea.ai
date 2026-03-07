@@ -42,6 +42,8 @@ export type ThesisDraft = {
   profileId?: string;
   velocity?: number | null;
   corroborationScore?: number | null;
+  label?: 'favourite' | 'later' | 'dismissed' | null;
+  posteriorConfidence?: number | null;
 };
 
 const stopWords = new Set([

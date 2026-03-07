@@ -110,6 +110,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
 
     if (request.method === 'OPTIONS') {
       reply.code(204).send();
+      return;
     }
   });
 

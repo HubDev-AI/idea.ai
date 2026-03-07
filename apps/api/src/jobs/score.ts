@@ -115,7 +115,8 @@ export const scoreSignalWithAiFallback = async ({
   canonicalText,
   memoryRetriever,
   topK,
-  runPrompt
+  runPrompt,
+  weights
 }: {
   text: string;
   source: string;
@@ -125,6 +126,7 @@ export const scoreSignalWithAiFallback = async ({
   memoryRetriever?: MemoryRetriever;
   topK?: number;
   runPrompt?: (input: { prompt: string; timeoutMs?: number }) => Promise<RunPromptResult>;
+  weights?: WeightConfig;
 }): Promise<ReturnType<typeof scoreSignal> & { aiScored: boolean; reasoning?: string }> => {
   let aiResult: AiScoreResult | null = null;
   if (runPrompt) {
@@ -140,6 +142,7 @@ export const scoreSignalWithAiFallback = async ({
   };
   if (memoryRetriever !== undefined) retrieverArgs.memoryRetriever = memoryRetriever;
   if (topK !== undefined) retrieverArgs.topK = topK;
+  if (weights !== undefined) retrieverArgs.weights = weights;
   if (aiResult?.demand !== undefined) retrieverArgs.baseDemand = aiResult.demand;
   if (aiResult?.timing !== undefined) retrieverArgs.baseTiming = aiResult.timing;
   const result = await scoreSignalWithRetriever(retrieverArgs);
