@@ -18,9 +18,14 @@ export const registerOpportunityMapRoute = (
       topic: string;
       velocity: number | null;
       evidence_count: number;
+      problem_statement: string | null;
+      status: string;
+      score_total: number | null;
+      supply_demand_classification: string | null;
     }>(
       `SELECT tc.canonical_key, tc.title, tc.confidence, tc.topic,
-              tc.velocity,
+              tc.velocity, tc.problem_statement, tc.status, tc.score_total,
+              tc.supply_demand_classification,
               COUNT(DISTINCT te.signal_id)::int AS evidence_count
        FROM thesis_candidates tc
        LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
@@ -42,6 +47,10 @@ export const registerOpportunityMapRoute = (
         velocity: row.velocity ?? 0,
         supply: 0,
         demand: row.evidence_count,
+        problemStatement: row.problem_statement ?? undefined,
+        status: row.status,
+        scoreTotal: row.score_total != null ? Number(row.score_total) : undefined,
+        supplyDemand: (row.supply_demand_classification as OpportunityNode['supplyDemand']) ?? undefined,
       });
     }
 

@@ -647,7 +647,13 @@ const App = () => {
           </button>
           {omapOpen && (
             <div className="omap-drawer-scroll">
-              <OpportunityMapView apiUrl={API_BASE} />
+              <OpportunityMapView
+                apiUrl={API_BASE}
+                onViewThesis={(key) => {
+                  const t = theses.find(th => th.canonicalKey === key);
+                  if (t) handleViewThesis(t);
+                }}
+              />
             </div>
           )}
         </section>

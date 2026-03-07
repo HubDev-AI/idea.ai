@@ -251,6 +251,9 @@ export type OpportunityNode = {
   demand: number;
   supplyDemand?: 'opportunity' | 'competitive' | 'niche' | 'saturated' | null;
   emerging?: boolean;
+  problemStatement?: string;
+  status?: string;
+  scoreTotal?: number;
   children?: OpportunityNode[];
 };
 
