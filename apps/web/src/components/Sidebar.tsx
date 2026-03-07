@@ -1,4 +1,3 @@
-// biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React, { useEffect, useState } from 'react';
 import type { AgentStatusRecord, AiHealthRecord, ConnectorRecord, InfraStatusRecord, RefreshMeta, ThesisStats } from '../api';
 import { connectorDisplayName, connectorSourceKey } from '../connectorNames';
@@ -9,8 +8,6 @@ type SidebarProps = {
   agentStatus: AgentStatusRecord | null;
   infraStatus: InfraStatusRecord | null;
   thesisStats: ThesisStats;
-  thesisFilter: string | null;
-  onThesisFilter: (key: string | null, title: string) => void;
   signalCount: number;
   latestSignalAt: string | null;
   signalCounts: Record<string, number>;
@@ -19,6 +16,7 @@ type SidebarProps = {
   agentRunResult?: string | null;
   refreshMeta: RefreshMeta | null;
   onForceRefresh?: (cadence?: 'hourly' | 'daily') => void;
+  connected?: boolean;
 };
 
 const dotClass = (status: string, opts?: { enabled?: boolean; lastRun?: string | null }): string => {
@@ -66,12 +64,12 @@ const useCountdown = (lastRunIso: string | null, intervalMs: number): string | n
   return formatCountdown(remaining);
 };
 
-const AGENT_INTERVAL_MS = 1 * 60 * 60 * 1000;
 
 export const Sidebar: React.FC<SidebarProps> = ({
   connectors, aiHealth, agentStatus, infraStatus, thesisStats,
-  thesisFilter, onThesisFilter, signalCount, latestSignalAt, signalCounts,
+  signalCount, latestSignalAt, signalCounts,
   onRunAgent, agentRunning, agentRunResult, refreshMeta, onForceRefresh,
+  connected = true,
 }) => {
   const activeConnectors = connectors.filter((c) => c.status === 'active').length;
   const enabledProviders = aiHealth?.providers?.filter((p) => p.enabled) ?? [];
@@ -86,7 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   );
   const agentCountdown = useCountdown(
     agentStatus?.lastRun?.timestamp ?? null,
-    AGENT_INTERVAL_MS
+    agentStatus?.intervalMs ?? 3600000
   );
 
   return (
@@ -94,6 +92,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="sidebar-header">
         <span className="sidebar-logo">Sixth Sense</span>
         <span className="sidebar-subtitle">Idea Engine</span>
+        <span className={`sidebar-connection ${connected ? 'connected' : 'disconnected'}`}>
+          {connected ? 'LIVE' : 'OFFLINE'}
+        </span>
       </div>
 
       <div className="sidebar-stats">
@@ -118,17 +119,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.postgres ?? 'idle')}`} />
           <span className="sidebar-row-name">Postgres</span>
+          {infraStatus?.diskUsage && (
+            <span className="sidebar-row-detail detail-count">
+              {infraStatus.diskUsage.dbSizeMb >= 1024
+                ? `${(infraStatus.diskUsage.dbSizeMb / 1024).toFixed(1)} GB`
+                : `${Math.round(infraStatus.diskUsage.dbSizeMb)} MB`}
+            </span>
+          )}
         </div>
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.ollama ?? 'idle')}`} />
           <span className="sidebar-row-name">Ollama</span>
+          {infraStatus?.ollamaSizeMb != null && (
+            <span className="sidebar-row-detail detail-count">
+              {infraStatus.ollamaSizeMb >= 1024
+                ? `${(infraStatus.ollamaSizeMb / 1024).toFixed(1)} GB`
+                : `${infraStatus.ollamaSizeMb} MB`}
+            </span>
+          )}
         </div>
         <div className="sidebar-row">
-          <span className={`status-dot ${infraStatus && infraStatus.embeddings.withEmbedding > 0 ? 'dot-ok' : 'dot-warn'}`} />
+          <span className={`status-dot ${
+            !infraStatus ? 'dot-idle'
+              : infraStatus.embeddings.total === 0 ? 'dot-idle'
+              : infraStatus.embeddings.withEmbedding === infraStatus.embeddings.total ? 'dot-ok'
+              : infraStatus.embeddings.withEmbedding > 0 ? 'dot-warn'
+              : 'dot-err'
+          }`} />
           <span className="sidebar-row-name">Embeddings</span>
           {infraStatus && (
             <span className="sidebar-row-detail detail-count">
               {infraStatus.embeddings.withEmbedding}/{infraStatus.embeddings.total}
+              {infraStatus.embeddings.total > 0 && infraStatus.embeddings.withEmbedding < infraStatus.embeddings.total
+                ? ` (${Math.round(infraStatus.embeddings.withEmbedding / infraStatus.embeddings.total * 100)}%)`
+                : ''}
             </span>
           )}
         </div>
@@ -145,8 +169,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div key={cadence} className="sidebar-cadence-group">
               <div className="sidebar-cadence-header">
                 <span className="sidebar-cadence-label">{cadence}</span>
-                <span className={`sidebar-countdown ${countdown === 'now' || isRefreshing ? 'refreshing' : ''}`}>
-                  {isRefreshing ? 'refreshing\u2026' : countdown === null ? 'pending' : countdown === 'now' ? 'refreshing\u2026' : countdown}
+                <span className={`sidebar-countdown ${isRefreshing ? 'refreshing' : ''}`}>
+                  {isRefreshing ? 'refreshing\u2026' : countdown === null ? 'pending' : countdown === 'now' ? 'due' : countdown}
                 </span>
                 {onForceRefresh && (
                   <button
@@ -204,7 +228,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {providerDisplayName[p.provider] ?? p.provider}
                 {role && <span className={`sidebar-role-tag ${role}`}>{role}</span>}
               </span>
-              {p.status === 'idle' && p.attempted === 0 ? (
+              {p.circuit_state === 'open' ? (
+                <span className="sidebar-row-detail detail-error">circuit open</span>
+              ) : p.circuit_state === 'half-open' ? (
+                <span className="sidebar-row-detail detail-standby">probing</span>
+              ) : p.status === 'idle' && p.attempted === 0 ? (
                 <span className="sidebar-row-detail detail-standby">standby</span>
               ) : (
                 <span className={`sidebar-row-detail ${p.failed > 0 ? 'detail-standby' : 'detail-ok'}`}>

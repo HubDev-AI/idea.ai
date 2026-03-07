@@ -164,7 +164,7 @@ describe('feed API', () => {
 
     expect(preflight.statusCode).toBe(204);
     expect(preflight.headers['access-control-allow-origin']).toBe('http://localhost:5173');
-    expect(preflight.headers['access-control-allow-methods']).toBe('GET,POST,OPTIONS');
+    expect(preflight.headers['access-control-allow-methods']).toBe('GET,POST,PATCH,OPTIONS');
 
     const response = await server.inject({
       method: 'GET',

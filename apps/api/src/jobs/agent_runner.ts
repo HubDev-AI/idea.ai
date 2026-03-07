@@ -1,6 +1,8 @@
 import { dualAnalystRun } from '@idea/ai-runtime/src/dual_analyst';
 import type { RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
+import type { AgentProfile } from '@idea/contracts/src/agent_profile.js';
 import type { AgentRunResult } from '@idea/contracts/src/api';
+import { consumerProfile } from '../profiles/consumer.js';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { JournalEntry, JournalStore } from '../runtime/journal_store';
 import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
@@ -14,8 +16,15 @@ import {
   parseBroadScanResponse,
   parseDeepDiveResponse,
 } from './research_agent';
+import { corroborationScore } from '@idea/pipeline/src/scoring/correlation';
+import { computeVelocity, velocityMultiplier } from '@idea/pipeline/src/scoring/velocity';
+import { computeToolFragmentation, computeInvestorAttention, categoryCreationScore } from '@idea/pipeline/src/scoring/category_detector';
+import { estimateSupply, classifyImbalance, imbalanceMultiplier } from '@idea/pipeline/src/scoring/supply_demand';
+import { detectChangePoints } from '@idea/pipeline/src/scoring/cusum';
 import { type ClusterableSignal, clusterSignals } from './signal_clusterer';
 import type { ThesisEvidenceDraft } from './thesis_synthesizer';
+import { runDebate, verdictToLikelihoodRatio, type DebateResult } from './thesis_debate';
+import { bayesianUpdate } from '@idea/pipeline/src/scoring/bayesian';
 
 export type { AgentRunResult };
 
@@ -31,6 +40,12 @@ export type AgentRunnerDeps = {
   preferredProvider?: 'claude' | 'codex';
   timeoutMs?: number;
   maxClusters?: number;
+  profile?: AgentProfile;
+  pool?: import('pg').Pool;
+  debateConfidenceThreshold?: number;
+  debateMaxPerRun?: number;
+  cusumThreshold?: number;
+  cusumDrift?: number;
 };
 
 const MAX_DEEP_DIVES = 2;
@@ -74,6 +89,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   const preferred = deps.preferredProvider ?? 'claude';
   const timeoutMs = deps.timeoutMs ?? 180_000;
   const maxClusters = deps.maxClusters ?? 50;
+  const profile = deps.profile ?? consumerProfile;
   let thesesUpdated = 0;
   let newCandidates = 0;
   const allAlerts: string[] = [];
@@ -119,6 +135,93 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   }
 
   const clusters = clusterSignals(clusterableSignals);
+
+  // Compute velocity and corroboration per cluster for thesis enrichment
+  const clusterMetrics = new Map<number, { velocity: number; corroboration: number }>();
+  const now7d = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const now30d = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  for (const cluster of clusters) {
+    const clusterSignalIds = new Set(cluster.representatives.map((r) => r.signal_id));
+    const matchedSignals = recentSignals.filter((s) => clusterSignalIds.has(s.signal_id));
+    let week = 0;
+    let month = 0;
+    for (const s of matchedSignals) {
+      const ts = new Date(s.observed_at).getTime();
+      if (ts >= now7d) week++;
+      if (ts >= now30d) month++;
+    }
+    const avgWeekly = month > 0 ? month / 4 : 0;
+    const vel = computeVelocity(week, avgWeekly);
+    const corr = corroborationScore(cluster.sources);
+    clusterMetrics.set(cluster.id, { velocity: vel, corroboration: corr });
+  }
+
+  // Category creation score per cluster
+  const clusterCategoryScores = new Map<number, number>();
+  for (const cluster of clusters) {
+    const toolsBySource = new Map<string, number>();
+    for (const src of cluster.sources) {
+      toolsBySource.set(src, (toolsBySource.get(src) ?? 0) + 1);
+    }
+    const tools = Array.from(toolsBySource.entries()).map(([id, engagement]) => ({ id, engagement }));
+    const fragmentation = computeToolFragmentation(tools);
+
+    const investorSources = ['yc_companies', 'producthunt', 'crunchbase'];
+    const investorCounts = new Map<string, number>();
+    for (const s of cluster.sources) {
+      if (investorSources.includes(s)) {
+        investorCounts.set(s, (investorCounts.get(s) ?? 0) + 1);
+      }
+    }
+    const attention = computeInvestorAttention(
+      Array.from(investorCounts.entries()).map(([source, count]) => ({ source, count }))
+    );
+
+    const catScore = categoryCreationScore({
+      vocabularyScore: cluster.totalCount > 5 ? 40 : 0,
+      fragmentationScore: fragmentation.score,
+      investorScore: attention.score,
+    });
+    clusterCategoryScores.set(cluster.id, catScore);
+  }
+
+  // Supply/demand imbalance per cluster
+  const clusterImbalance = new Map<number, string>();
+  const supplySources = new Set(['producthunt', 'alternativeto', 'github_issues', 'npm_trends']);
+  for (const cluster of clusters) {
+    const clusterSignalIds = new Set(cluster.representatives.map(r => r.signal_id));
+    const matchedSignals = recentSignals.filter(s => clusterSignalIds.has(s.signal_id));
+    const supplySignals = matchedSignals.filter(s => supplySources.has(s.source));
+    const supply = estimateSupply({
+      existingProducts: supplySignals.filter(s => s.source === 'producthunt' || s.source === 'alternativeto').length,
+      githubRepos: supplySignals.filter(s => s.source === 'github_issues').length,
+      fundedCompanies: supplySignals.filter(s => s.source === 'yc_companies').length,
+    });
+    const classification = classifyImbalance({ demandSignals: matchedSignals.length, totalSupply: supply.totalSupply });
+    clusterImbalance.set(cluster.id, classification);
+  }
+
+  // CUSUM change point detection on daily signal counts per topic
+  const cusumConfig = { threshold: deps.cusumThreshold ?? 5, drift: deps.cusumDrift ?? 1 };
+  const topicAccelerating = new Set<string>();
+  const topicDailyCounts = new Map<string, Map<string, number>>();
+  for (const signal of recentSignals) {
+    const day = signal.observed_at.slice(0, 10);
+    const topic = signal.topic;
+    if (!topicDailyCounts.has(topic)) topicDailyCounts.set(topic, new Map());
+    const dayCounts = topicDailyCounts.get(topic)!;
+    dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
+  }
+  for (const [topic, dayCounts] of topicDailyCounts) {
+    const sortedDays = Array.from(dayCounts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const values = sortedDays.map(([, count]) => count);
+    if (values.length >= 3) {
+      const changePoints = detectChangePoints(values, cusumConfig);
+      if (changePoints.some(cp => cp >= values.length - 2)) {
+        topicAccelerating.add(topic);
+      }
+    }
+  }
 
   await log.info('agent_runner', 'clustering complete', {
     signal_count: recentSignals.length,
@@ -189,7 +292,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     trendSummary
   };
 
-  const broadPrompt = buildBroadScanPrompt(broadCtx);
+  const broadPrompt = buildBroadScanPrompt(broadCtx, profile);
 
   await log.info('agent_runner', 'broad scan started', {
     cluster_count: clusters.length,
@@ -261,6 +364,66 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         signal_ids: [],
         embedding: null
       });
+    }
+  }
+
+  // === Phase 1.5: Adversarial Debate on top theses ===
+  const debateThreshold = deps.debateConfidenceThreshold ?? 40;
+  const debateMax = deps.debateMaxPerRun ?? 5;
+  const debateCandidates = (await deps.thesisStore.list())
+    .filter(t => t.confidence >= debateThreshold)
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, debateMax);
+
+  const debateResults: Array<{ thesisKey: string; result: DebateResult }> = [];
+
+  for (let di = 0; di < debateCandidates.length; di++) {
+    const thesis = debateCandidates[di];
+    try {
+      const evidence = thesis.evidence.map(e => e.snippet).filter(Boolean);
+      const useClaude = di % 2 === 0;
+      const result = await runDebate({
+        thesisTitle: thesis.title,
+        thesisKey: thesis.canonicalKey,
+        problemStatement: thesis.problemStatement,
+        evidence,
+        runBull: useClaude ? deps.runClaude : deps.runCodex,
+        runBear: useClaude ? deps.runCodex : deps.runClaude,
+        runModerator: deps.runClaude,
+      });
+
+      if (result) {
+        debateResults.push({ thesisKey: thesis.canonicalKey, result });
+
+        // Apply Bayesian update based on verdict
+        const lr = verdictToLikelihoodRatio(result.verdict.verdict);
+        const evidenceType = lr >= 1.5 ? 'multi_source_convergence' as const
+          : lr >= 1.0 ? 'single_high_quality' as const
+          : 'weak_noisy' as const;
+        const newConf = bayesianUpdate(thesis.confidence, { type: evidenceType, confirming: lr >= 1.0, sourceCount: 1 });
+        const delta = newConf - thesis.confidence;
+        if (deps.thesisStore.bayesianUpdate && Math.abs(delta) > 0.1) {
+          await deps.thesisStore.bayesianUpdate(thesis.canonicalKey, delta);
+        }
+
+        // Store debate transcript
+        if (deps.pool) {
+          await deps.pool.query(
+            `INSERT INTO thesis_debates (thesis_key, run_id, bull_provider, bear_provider, bull_case, bear_case, moderator_verdict)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [thesis.canonicalKey, runId, result.bullProvider, result.bearProvider,
+             result.bullCase, result.bearCase, JSON.stringify(result.verdict)]
+          );
+        }
+
+        await log.info('agent_runner', 'debate completed', {
+          thesis: thesis.canonicalKey,
+          verdict: result.verdict.verdict,
+          delta: Math.round(delta * 10) / 10,
+        });
+      }
+    } catch (err) {
+      await log.warn('agent_runner', 'debate failed', { thesis: thesis.canonicalKey, error: String(err) });
     }
   }
 
@@ -343,7 +506,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       relatedTheses
     };
 
-    const divePrompt = buildDeepDivePrompt(diveCtx);
+    const divePrompt = buildDeepDivePrompt(diveCtx, profile);
     await log.debug('agent_runner', 'deep dive prompt sent', {
       topic: dig.topic,
       provider: preferred,
@@ -413,7 +576,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           observed_at: new Date().toISOString()
         }));
 
-        const key = `agent:${proposal.title.toLowerCase().replace(/\s+/g, '_').slice(0, 40)}`;
+        const key = `${profile.id}:${proposal.title.toLowerCase().replace(/\s+/g, '_').slice(0, 40)}`;
         await deps.thesisStore.upsert({
           canonicalKey: key,
           title: proposal.title,
@@ -431,7 +594,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           avgVirality: 0,
           latestObservedAt: new Date().toISOString(),
           evidence,
-          estimatedScope: proposal.estimated_scope ?? null
+          estimatedScope: proposal.estimated_scope ?? null,
+          profileId: profile.id
         });
         newCandidates++;
         await log.info('agent_runner', 'thesis created', {
@@ -461,6 +625,54 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     deepDivesPerformed++;
   }
 
+  // === Enrich all theses with velocity and corroboration from cluster data ===
+  if (clusters.length > 0) {
+    const allThesesNow = await deps.thesisStore.list();
+    let enriched = 0;
+    for (const thesis of allThesesNow) {
+      // Find the best matching cluster by checking if cluster representatives overlap with thesis evidence signals
+      // Fallback: use the most recent cluster metrics globally
+      let bestMetrics: { velocity: number; corroboration: number } | undefined;
+
+      // Match thesis to cluster via signal overlap with representatives
+      for (const cluster of clusters) {
+        const repIds = new Set(cluster.representatives.map((r) => r.signal_id));
+        const hasOverlap = thesis.evidence.some((e) => repIds.has(e.signal_id));
+        if (hasOverlap) {
+          bestMetrics = clusterMetrics.get(cluster.id);
+          break;
+        }
+      }
+
+      // Fallback: compute from cluster sources that mention similar topics
+      if (!bestMetrics) {
+        const matchingCluster = clusters.find((c) =>
+          c.label.toLowerCase().includes(thesis.topic.toLowerCase()) ||
+          thesis.title.toLowerCase().includes(c.label.toLowerCase().split(' ')[0])
+        );
+        if (matchingCluster) {
+          bestMetrics = clusterMetrics.get(matchingCluster.id);
+        }
+      }
+
+      if (bestMetrics) {
+        // Boost velocity if CUSUM detected acceleration (don't mutate shared map entry)
+        const velocity = topicAccelerating.has(thesis.topic)
+          ? Math.min(10, bestMetrics.velocity * 1.5)
+          : bestMetrics.velocity;
+        await deps.thesisStore.upsert({
+          ...thesis,
+          velocity: Math.round(velocity * 100) / 100,
+          corroborationScore: Math.round(bestMetrics.corroboration * 100) / 100,
+        });
+        enriched++;
+      }
+    }
+    if (enriched > 0) {
+      await log.info('agent_runner', 'theses enriched with velocity/corroboration', { enriched, total: allThesesNow.length });
+    }
+  }
+
   // === Phase 3: Commit journal entries ===
 
   // Add run summary
@@ -468,7 +680,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     run_id: runId,
     entry_type: 'run_summary',
     topic: 'general',
-    insight: `Analyzed ${clusters.length} clusters (${clusterableSignals.length} signals), updated ${thesesUpdated} theses, created ${newCandidates} new candidates, performed ${deepDivesPerformed} deep dives.`,
+    insight: `Analyzed ${clusters.length} clusters (${clusterableSignals.length} signals), updated ${thesesUpdated} theses, created ${newCandidates} new candidates, performed ${deepDivesPerformed} deep dives, ${debateResults.length} debates.`,
     narrative: investigateNext ? `Next investigation: ${investigateNext}` : null,
     confidence: 50,
     thesis_keys: [],
@@ -497,6 +709,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     journalEntriesWritten: allJournalEntries.length,
     clustersAnalyzed: clusters.length,
     deepDivesPerformed,
+    debatesPerformed: debateResults.length,
     provider
   };
 };

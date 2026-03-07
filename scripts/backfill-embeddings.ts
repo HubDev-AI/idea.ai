@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
+
 const require = createRequire(import.meta.url);
 const pg = require('pg') as typeof import('pg');
+
 import { buildLocalEmbedding } from '../apps/api/src/jobs/memory_index';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://idea_ai:idea_ai_dev@127.0.0.1:5917/idea_ai';

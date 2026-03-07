@@ -1,5 +1,5 @@
-import type { Pool } from 'pg';
 import type { AgentRunResult } from '@idea/contracts/src/api';
+import type { Pool } from 'pg';
 
 export type AgentRunRow = {
   id: number;

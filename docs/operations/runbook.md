@@ -41,7 +41,6 @@ If required connector config is missing, ingestion logs an error and skips that 
 ## Execution Logs
 
 - `LOG_DIR` controls where JSONL execution logs are persisted (default `./logs/executions`).
-- `SNAPSHOT_FILE` controls persisted last-successful feed snapshot (default `./logs/state/latest_snapshot.json`).
 - Each refresh uses a run id and appends structured entries to `LOG_DIR/<run_id>.jsonl`.
 - Key fields: `run_id`, `level`, `component`, `message`, `context`.
 - `/v1/logs` defaults to current process session logs (`scope=session`) so stale/test history does not pollute the live UI.
@@ -55,7 +54,7 @@ curl -s "http://127.0.0.1:3000/v1/logs?limit=100" | jq
 ```
 
 Restart behavior:
-- API loads `SNAPSHOT_FILE` at startup before refresh, so last known signals/connectors remain available if upstream ingestion fails during restart.
+- API loads cadence timestamps from the `refresh_state` database table at startup, so daily connectors are not re-fetched unnecessarily after a restart.
 
 ## AI Judge Runtime
 

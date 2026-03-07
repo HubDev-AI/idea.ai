@@ -2,6 +2,7 @@ import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
 import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import type { Provider, RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
 import type { ExecutionLogger } from '../runtime/execution_logger';
+import type { ProviderCircuitBreaker } from '../runtime/provider_circuit';
 
 export type AiPostScrapeSettings = {
   enabled: boolean;
@@ -48,7 +49,7 @@ export type AiPostScrapeAttempt = {
   error?: string;
 };
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_MAX_SIGNALS = 6;
 
 const clampScore = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
@@ -238,25 +239,32 @@ const analyzeChunk = async ({
   chunk,
   settings,
   logger,
-  run
+  run,
+  circuit
 }: {
   chunk: AiPostScrapeInput[];
   settings: AiPostScrapeSettings;
   logger?: ExecutionLogger;
   run?: (input: RunPromptInput) => Promise<RunPromptResult>;
+  circuit?: ProviderCircuitBreaker;
 }): Promise<{
   insights: Map<string, AiPostScrapeInsight>;
   provider?: Provider;
   attempts: AiPostScrapeAttempt[];
 }> => {
   const prompt = buildPrompt(chunk);
-  const providersToTry = [settings.preferredProvider];
-  if (settings.allowFallback) {
-    const fallback = otherProvider(settings.preferredProvider);
-    if (!providersToTry.includes(fallback)) {
-      providersToTry.push(fallback);
-    }
-  }
+
+  // Circuit breaker determines provider order — skips providers that are consistently failing
+  const providersToTry = circuit
+    ? circuit.getProviderOrder(settings.preferredProvider, settings.allowFallback)
+    : (() => {
+        const list = [settings.preferredProvider];
+        if (settings.allowFallback) {
+          const fallback = otherProvider(settings.preferredProvider);
+          if (!list.includes(fallback)) list.push(fallback);
+        }
+        return list;
+      })();
 
   const attempts: AiPostScrapeAttempt[] = [];
 
@@ -284,6 +292,7 @@ const analyzeChunk = async ({
             retried: willRetry,
             error: 'response parse failed'
           });
+          circuit?.recordFailure(result.provider, 'response parse failed');
           await logger?.warn('ai_post_scrape', 'ai post-scrape analysis parse failed', {
             provider: result.provider,
             requested_signals: chunk.length,
@@ -301,6 +310,7 @@ const analyzeChunk = async ({
           success: true,
           retried: attempt > 1
         });
+        circuit?.recordSuccess(result.provider);
 
         return { insights, provider: result.provider, attempts };
       } catch (error) {
@@ -313,12 +323,14 @@ const analyzeChunk = async ({
           retried: willRetry,
           error: message
         });
+        circuit?.recordFailure(provider, message);
         await logger?.warn('ai_post_scrape', 'ai post-scrape call failed for provider', {
           provider,
           attempt,
           max_attempts: maxAttempts,
           will_retry: willRetry,
-          error: message
+          error: message,
+          circuit_state: circuit ? circuit.getStatus()[provider].state : undefined
         });
       }
     }
@@ -331,12 +343,14 @@ export const analyzePostScrapeBatchWithAi = async ({
   inputs,
   settings,
   logger,
-  run
+  run,
+  circuit
 }: {
   inputs: AiPostScrapeInput[];
   settings: AiPostScrapeSettings;
   logger?: ExecutionLogger;
   run?: (input: RunPromptInput) => Promise<RunPromptResult>;
+  circuit?: ProviderCircuitBreaker;
 }): Promise<AiPostScrapeResult> => {
   if (!settings.enabled || settings.maxSignals <= 0 || inputs.length === 0) {
     return {
@@ -362,6 +376,7 @@ export const analyzePostScrapeBatchWithAi = async ({
     const chunkOpts: Parameters<typeof analyzeChunk>[0] = { chunk, settings };
     if (logger) chunkOpts.logger = logger;
     if (run) chunkOpts.run = run;
+    if (circuit) chunkOpts.circuit = circuit;
     const result = await analyzeChunk(chunkOpts);
     for (const [id, insight] of result.insights) {
       allInsights.set(id, insight);

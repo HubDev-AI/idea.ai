@@ -13,7 +13,7 @@ describe('GET /v1/infra/status', () => {
     const app = await buildServer({
       infraStatusDeps: {
         checkPostgres: async () => true,
-        checkOllama: async () => false,
+        checkOllama: async () => ({ ok: false, reason: 'model not installed' }),
         getEmbeddingStats: async () => ({ total: 100, withEmbedding: 80, fallbackModel: 'nomic-embed-text' })
       }
     });
@@ -37,7 +37,7 @@ describe('GET /v1/infra/status', () => {
     const app = await buildServer({
       infraStatusDeps: {
         checkPostgres: async () => { throw new Error('connection refused'); },
-        checkOllama: async () => { throw new Error('timeout'); },
+        checkOllama: async (): Promise<never> => { throw new Error('timeout'); },
         getEmbeddingStats: async () => { throw new Error('table missing'); }
       }
     });

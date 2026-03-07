@@ -70,12 +70,15 @@ export type ListLogsQuery = {
   level?: ExecutionLogLevel;
   run_id?: string;
   scope?: 'session' | 'all';
+  component?: string;
 };
 
 // -- AI health ----------------------------------------------------- */
 
 export type AiProviderName = 'claude' | 'codex';
 export type AiProviderStatus = 'disabled' | 'idle' | 'healthy' | 'degraded' | 'error';
+
+export type CircuitBreakerState = 'closed' | 'open' | 'half-open';
 
 export type AiProviderHealthRecord = {
   provider: AiProviderName;
@@ -86,6 +89,8 @@ export type AiProviderHealthRecord = {
   failed: number;
   retries: number;
   last_error: string | null;
+  circuit_state?: CircuitBreakerState;
+  circuit_failures?: number;
 };
 
 export type AiHealthRecord = {
@@ -115,6 +120,14 @@ export type ThesisListItem = {
   estimatedScope: 'small' | 'medium' | 'large' | null;
   lastSeenAt: string;
   hasDeepDive: boolean;
+  profileId?: string;
+  label: 'favourite' | 'later' | 'dismissed' | null;
+  posteriorConfidence?: number;
+  velocity?: number;
+  corroborationScore?: number;
+  debateVerdict?: 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null;
+  categoryEmerging?: boolean;
+  supplyDemand?: 'opportunity' | 'competitive' | 'niche' | 'saturated' | null;
 };
 
 export type ThesisStats = {
@@ -154,11 +167,13 @@ export type AgentRunResult = {
   journalEntriesWritten: number;
   clustersAnalyzed: number;
   deepDivesPerformed: number;
+  debatesPerformed?: number;
   provider: string | null;
 };
 
 export type AgentStatusRecord = {
   isRunning: boolean;
+  intervalMs: number;
   lastRun: {
     timestamp: string;
     thesesUpdated: number;
@@ -174,9 +189,32 @@ export type AgentStatusRecord = {
 export type InfraStatusRecord = {
   postgres: 'ok' | 'error';
   ollama: 'ok' | 'error';
+  ollamaSizeMb?: number;
   embeddings: {
     total: number;
     withEmbedding: number;
     fallbackModel: string;
   };
+  diskUsage?: {
+    dbSizeMb: number;
+    tableSizes: { name: string; sizeMb: number; rows: number }[];
+  };
+};
+
+export type OpportunityNode = {
+  id: string;
+  label: string;
+  type: 'market' | 'category' | 'thesis';
+  confidence: number;
+  velocity: number;
+  supply: number;
+  demand: number;
+  supplyDemand?: 'opportunity' | 'competitive' | 'niche' | 'saturated' | null;
+  emerging?: boolean;
+  children?: OpportunityNode[];
+};
+
+export type OpportunityMapRecord = {
+  roots: OpportunityNode[];
+  generatedAt: string;
 };

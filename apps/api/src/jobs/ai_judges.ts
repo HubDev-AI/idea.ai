@@ -2,6 +2,7 @@ import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
 import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import type { Provider, RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
 import type { ExecutionLogger } from '../runtime/execution_logger';
+import type { ProviderCircuitBreaker } from '../runtime/provider_circuit';
 
 const defaultJudgeScores: [number, number, number] = [62, 66, 60];
 const opportunityKeywords = [
@@ -141,7 +142,7 @@ export const resolveAiJudgeSettings = (env: NodeJS.ProcessEnv = process.env): Ai
     preferredProvider,
     mode,
     maxSignals: toPositiveInt(env.AI_JUDGE_MAX_SIGNALS, defaultMaxSignals),
-    timeoutMs: toPositiveInt(env.AI_JUDGE_TIMEOUT_MS, 120_000),
+    timeoutMs: toPositiveInt(env.AI_JUDGE_TIMEOUT_MS, 180_000),
     allowFallback: env.AI_PROVIDER_FALLBACK === 'true',
     retries: toPositiveInt(env.AI_PROVIDER_RETRIES, 1)
   };
@@ -159,7 +160,8 @@ export const judgeBuildabilityWithAi = async ({
   source,
   settings,
   logger,
-  run
+  run,
+  circuit
 }: {
   idea: string;
   text: string;
@@ -168,6 +170,7 @@ export const judgeBuildabilityWithAi = async ({
   settings: AiJudgeSettings;
   logger?: ExecutionLogger;
   run?: (input: RunPromptInput) => Promise<RunPromptResult>;
+  circuit?: ProviderCircuitBreaker;
 }): Promise<{
   judgeScores: [number, number, number];
   fromAi: boolean;
@@ -226,6 +229,7 @@ export const judgeBuildabilityWithAi = async ({
             retried: willRetry,
             error
           });
+          circuit?.recordFailure(result.provider, error);
           await logger?.warn('ai_judges', 'ai response parse failed for provider', {
             source,
             idea,
@@ -243,6 +247,7 @@ export const judgeBuildabilityWithAi = async ({
           success: true,
           retried: attempt > 1
         });
+        circuit?.recordSuccess(result.provider);
         await logger?.info('ai_judges', 'ai judge call succeeded for provider', {
           source,
           idea,
@@ -264,6 +269,7 @@ export const judgeBuildabilityWithAi = async ({
           retried: willRetry,
           error: message
         });
+        circuit?.recordFailure(provider, message);
         await logger?.warn('ai_judges', 'ai judge call failed for provider', {
           source,
           idea,
@@ -271,7 +277,8 @@ export const judgeBuildabilityWithAi = async ({
           attempt,
           max_attempts: maxAttempts,
           will_retry: willRetry,
-          error: message
+          error: message,
+          circuit_state: circuit ? circuit.getStatus()[provider].state : undefined
         });
       }
     }
@@ -287,7 +294,9 @@ export const judgeBuildabilityWithAi = async ({
 
   try {
     if (settings.mode === 'ensemble') {
-      const providerOrder: Provider[] = [settings.preferredProvider, otherProvider(settings.preferredProvider)];
+      const providerOrder: Provider[] = circuit
+        ? circuit.getProviderOrder(settings.preferredProvider, true)
+        : [settings.preferredProvider, otherProvider(settings.preferredProvider)];
       const results: Array<{ provider: Provider; scores: [number, number, number] }> = [];
 
       for (const provider of providerOrder) {
@@ -329,10 +338,16 @@ export const judgeBuildabilityWithAi = async ({
       };
     }
 
-    const providersToTry: Provider[] = [settings.preferredProvider];
-    if (settings.allowFallback) {
-      providersToTry.push(otherProvider(settings.preferredProvider));
-    }
+    // Circuit breaker determines provider order — skips providers that are consistently failing
+    const providersToTry = circuit
+      ? circuit.getProviderOrder(settings.preferredProvider, settings.allowFallback)
+      : (() => {
+          const list: Provider[] = [settings.preferredProvider];
+          if (settings.allowFallback) {
+            list.push(otherProvider(settings.preferredProvider));
+          }
+          return list;
+        })();
 
     for (const provider of providersToTry) {
       const judged = await callJudge(provider);

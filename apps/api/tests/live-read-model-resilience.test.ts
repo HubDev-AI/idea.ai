@@ -1,6 +1,3 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('live read model resilience', () => {
@@ -248,90 +245,79 @@ describe('live read model resilience', () => {
     expect(second).toEqual(first);
   });
 
-  it('loads persisted snapshot on restart when fresh refresh fails', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'idea-ai-snapshot-'));
-    const snapshotFile = join(tempDir, 'snapshot.json');
-    const previousSnapshot = {
-      refreshedAt: Date.now() - 60_000,
-      signals: [
-        {
-          idea: 'Persisted opportunity',
-          score: 77,
-          top_source: 'github_issues',
-          snippet: 'previously computed signal',
-          source_url: 'https://github.com/example/repo/issues/1',
-          next_action: 'validate_demand',
-          updated_at: '2026-02-25T00:00:00.000Z'
-        }
-      ],
-      connectors: [
-        {
-          name: 'github_issues',
-          status: 'active',
-          last_run: '2026-02-25T00:00:00.000Z'
-        }
-      ]
-    };
+  it('loads refresh state from database and skips daily connectors when recently run', async () => {
+    const recentDailyRun = Date.now() - 60_000; // 1 minute ago
 
-    await writeFile(snapshotFile, JSON.stringify(previousSnapshot), 'utf8');
-    const originalSnapshotFile = process.env.SNAPSHOT_FILE;
-    process.env.SNAPSHOT_FILE = snapshotFile;
+    const dailyIngestionFn = vi.fn(async () => ({
+      events: [],
+      statuses: []
+    }));
 
     vi.doMock('../src/jobs/ingest_open', () => ({
-      runOpenConnectorIngestionDetailed: vi.fn(async () => {
-        throw new Error('network down');
+      runOpenConnectorIngestionDetailed: vi.fn(async (cadence: 'hourly' | 'daily') => {
+        if (cadence === 'daily') {
+          return dailyIngestionFn();
+        }
+
+        return {
+          events: [
+            {
+              source: 'hn',
+              source_item_id: '99',
+              source_timestamp: '2026-02-25T00:00:00.000Z',
+              text: 'Fresh hourly signal after restart',
+              url: 'https://example.com/hn/99'
+            }
+          ],
+          statuses: [
+            { name: 'hn', cadence: 'hourly', status: 'active' }
+          ]
+        };
       })
     }));
 
     vi.doMock('../src/jobs/ingest_byo', () => ({
       runByoConnectorIngestion: vi.fn(async () => ({
         connectors: {
-          exa: {
-            status: 'skipped',
-            reason: 'missing_credentials',
-            events: [],
-            telemetry: {
-              connector: 'exa_byo',
-              skipped: true,
-              reason: 'missing_credentials',
-              budget_usd: 5
-            }
-          },
-          perigon: {
-            status: 'skipped',
-            reason: 'missing_credentials',
-            events: [],
-            telemetry: {
-              connector: 'perigon_byo',
-              skipped: true,
-              reason: 'missing_credentials',
-              budget_usd: 5
-            }
-          },
-          twitter: {
-            status: 'skipped',
-            reason: 'missing_credentials',
-            events: [],
-            telemetry: {
-              connector: 'twitter_byo',
-              skipped: true,
-              reason: 'missing_credentials',
-              budget_usd: 0
-            }
-          }
+          exa: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'exa_byo', skipped: true, reason: 'missing_credentials', budget_usd: 5 } },
+          perigon: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'perigon_byo', skipped: true, reason: 'missing_credentials', budget_usd: 5 } },
+          twitter: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'twitter_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } }
         }
       }))
     }));
 
-    try {
-      const { createLiveReadModel } = await import('../src/runtime/live_read_model');
-      const readModel = createLiveReadModel(0);
+    const mockStore = {
+      retriever: { findSimilar: vi.fn(async () => []), getTrendWindows: vi.fn(async () => []) },
+      save: vi.fn(async () => {}),
+      listAllSignals: vi.fn(async () => []),
+      querySignals: vi.fn(async () => ({ items: [], page: 1, pageSize: 50, totalItems: 0, totalPages: 1, hasNext: false, hasPrev: false })),
+      countSignalsBySource: vi.fn(async () => ({})),
+      getEmbeddings: vi.fn(async () => new Map()),
+      getEmbeddingStats: vi.fn(async () => ({ total: 0, withEmbedding: 0, fallbackModel: 'none' })),
+      findConvergentSignals: vi.fn(async () => []),
+      boostViralityScore: vi.fn(async () => {}),
+      listSignalsWithoutEmbeddings: vi.fn(async () => []),
+      saveEmbedding: vi.fn(async () => {}),
+      loadRefreshState: vi.fn(async () => ({
+        lastHourlyRunAt: recentDailyRun,
+        lastDailyRunAt: recentDailyRun,
+        refreshedAt: recentDailyRun,
+      })),
+      saveRefreshState: vi.fn(async () => {}),
+      ping: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+    };
 
-      const signals = await readModel.listSignals();
-      expect(signals).toEqual(previousSnapshot.signals);
-    } finally {
-      process.env.SNAPSHOT_FILE = originalSnapshotFile;
-      await rm(tempDir, { recursive: true, force: true });
-    }
+    const { createLiveReadModel } = await import('../src/runtime/live_read_model');
+    const readModel = createLiveReadModel(0, { persistentStore: mockStore as any });
+
+    await readModel.listSignals();
+
+    // Daily ingestion should NOT have been called since lastDailyRunAt was only 1 minute ago
+    expect(dailyIngestionFn).not.toHaveBeenCalled();
+    // Refresh state should have been loaded from DB
+    expect(mockStore.loadRefreshState).toHaveBeenCalled();
+    // And saved after successful refresh
+    expect(mockStore.saveRefreshState).toHaveBeenCalled();
   });
 });

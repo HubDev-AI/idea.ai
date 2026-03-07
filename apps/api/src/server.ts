@@ -2,6 +2,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { AgentStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AgentRunResult } from './jobs/agent_runner';
+import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
 import { registerAgentStatusRoute } from './routes/agent_status';
 import { type AiHealthRecord, registerAiHealthRoute } from './routes/ai_health';
 import { type ConnectorStatusRecord, registerConnectorRoute } from './routes/connectors';
@@ -9,13 +10,14 @@ import { type FeedRecord, registerFeedRoute } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_status';
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
+import { registerOpportunityMapRoute } from './routes/opportunity_map';
+import { registerProfilesRoute } from './routes/profiles.js';
 import { registerThesesRoute } from './routes/theses';
 import type { AgentRunStore } from './runtime/agent_run_store';
 import type { DeepDiveStore } from './runtime/deep_dive_store';
+import type { ExecutionLogger } from './runtime/execution_logger';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
-import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
-import type { ExecutionLogger } from './runtime/execution_logger';
 
 export type ServerDeps = {
   listSignals: () => Promise<FeedRecord[]>;
@@ -36,6 +38,7 @@ export type ServerDeps = {
   getRefreshMeta?: () => RefreshMeta;
   triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
   logger?: ExecutionLogger;
+  pool?: import('pg').Pool;
 };
 
 const defaultDeps: ServerDeps = {
@@ -94,7 +97,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     if (origin && (openCors || allowedOrigins.has(origin))) {
       reply.header('Access-Control-Allow-Origin', origin);
     }
-    reply.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
     reply.header('Access-Control-Allow-Headers', 'Content-Type,X-Api-Key');
     reply.header('Vary', 'Origin');
 
@@ -136,6 +139,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
   registerHealthRoute(app);
+  registerProfilesRoute(app);
 
   if (resolvedDeps.getAgentStatus && resolvedDeps.triggerAgentRun) {
     registerAgentStatusRoute(app, {
@@ -155,8 +159,15 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     });
   }
 
+  if (resolvedDeps.pool) {
+    registerOpportunityMapRoute(app, { pool: resolvedDeps.pool });
+  }
+
   if (resolvedDeps.infraStatusDeps) {
-    registerInfraStatusRoute(app, resolvedDeps.infraStatusDeps);
+    registerInfraStatusRoute(app, {
+      ...resolvedDeps.infraStatusDeps,
+      ...(resolvedDeps.logger ? { logger: resolvedDeps.logger } : {})
+    });
   }
 
   return app;

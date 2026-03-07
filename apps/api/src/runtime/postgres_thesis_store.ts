@@ -21,6 +21,11 @@ type ThesisRow = {
   avg_timing: number | string;
   avg_buildability: number | string;
   avg_virality: number | string;
+  profile_id: string;
+  label: string | null;
+  posterior_confidence: number | string | null;
+  velocity: number | string | null;
+  corroboration_score: number | string | null;
 };
 
 const toNumber = (v: unknown): number => {
@@ -52,13 +57,18 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   avgVirality: toNumber(row.avg_virality),
   latestObservedAt: new Date(row.last_seen_at).toISOString(),
   evidence: [],
-  estimatedScope: toScope(row.estimated_scope)
+  estimatedScope: toScope(row.estimated_scope),
+  profileId: row.profile_id ?? 'consumer',
+  label: row.label ?? null,
+  posteriorConfidence: toNumber(row.posterior_confidence ?? row.confidence),
+  velocity: row.velocity != null ? toNumber(row.velocity) : null,
+  corroborationScore: row.corroboration_score != null ? toNumber(row.corroboration_score) : null,
 });
 
 export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
 
 export type PaginatedThesisStore = ThesisStore & {
-  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField }): Promise<ThesisPage>;
+  listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string; label?: string }): Promise<ThesisPage>;
   close: () => Promise<void>;
 };
 
@@ -106,8 +116,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const result = await pool.query<{ id: string }>(
       `INSERT INTO thesis_candidates
         (canonical_key, title, topic, status, confidence, problem_statement,
-         target_buyer, proposed_solution, estimated_scope, first_seen_at, last_seen_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+         target_buyer, proposed_solution, estimated_scope, profile_id, velocity, corroboration_score, first_seen_at, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
        ON CONFLICT (canonical_key) DO UPDATE SET
          title = EXCLUDED.title,
          status = EXCLUDED.status,
@@ -116,6 +126,9 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
          target_buyer = EXCLUDED.target_buyer,
          proposed_solution = EXCLUDED.proposed_solution,
          estimated_scope = COALESCE(EXCLUDED.estimated_scope, thesis_candidates.estimated_scope),
+         profile_id = EXCLUDED.profile_id,
+         velocity = COALESCE(EXCLUDED.velocity, thesis_candidates.velocity),
+         corroboration_score = COALESCE(EXCLUDED.corroboration_score, thesis_candidates.corroboration_score),
          last_seen_at = NOW(),
          updated_at = NOW()
        RETURNING id`,
@@ -123,7 +136,10 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         draft.canonicalKey, draft.title, draft.topic, draft.status,
         draft.confidence, draft.problemStatement,
         draft.targetBuyer, draft.proposedSolution,
-        draft.estimatedScope ?? null
+        draft.estimatedScope ?? null,
+        draft.profileId ?? 'consumer',
+        draft.velocity ?? null,
+        draft.corroborationScore ?? null
       ]
     );
 
@@ -144,9 +160,22 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     }
   },
 
-  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score' }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField } = {}): Promise<ThesisPage> {
-    const where = status ? 'WHERE status = $1' : '';
-    const countParams = status ? [status] : [];
+  async listPaginated({ page = 1, pageSize = 10, status, sort = 'score', profile, label }: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string; label?: string } = {}): Promise<ThesisPage> {
+    const whereClauses: string[] = [];
+    const countParams: (string | number)[] = [];
+    if (status) {
+      countParams.push(status);
+      whereClauses.push(`status = $${countParams.length}`);
+    }
+    if (profile) {
+      countParams.push(profile);
+      whereClauses.push(`profile_id = $${countParams.length}`);
+    }
+    if (label) {
+      countParams.push(label);
+      whereClauses.push(`label = $${countParams.length}`);
+    }
+    const where = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     const [countResult, statsResult] = await Promise.all([
       pool.query<{ count: string }>(
@@ -184,7 +213,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const safePage = Math.min(Math.max(1, page), totalPages);
     const offset = (safePage - 1) * pageSize;
 
-    const params: (string | number)[] = status ? [status] : [];
+    const params: (string | number)[] = [...countParams];
     const limitIdx = params.length + 1;
     const offsetIdx = params.length + 2;
 
@@ -195,18 +224,26 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
              ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality,
-             EXISTS(SELECT 1 FROM thesis_deep_dives dd WHERE dd.canonical_key = tc.canonical_key) AS has_deep_dive
+             EXISTS(SELECT 1 FROM thesis_deep_dives dd WHERE dd.canonical_key = tc.canonical_key) AS has_deep_dive,
+             dv.debate_verdict
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+      LEFT JOIN LATERAL (
+        SELECT moderator_verdict->>'verdict' AS debate_verdict
+        FROM thesis_debates td
+        WHERE td.thesis_key = tc.canonical_key
+        ORDER BY td.created_at DESC LIMIT 1
+      ) dv ON true
       ${where}
-      GROUP BY tc.id
+      GROUP BY tc.id, dv.debate_verdict
       ORDER BY ${sort === 'latest' ? 'tc.last_seen_at DESC' : sort === 'evidence' ? 'evidence_count DESC' : sort === 'newest' ? 'tc.first_seen_at DESC' : 'tc.confidence DESC'}
       LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
-    const result = await pool.query<ThesisRow & { has_deep_dive: boolean }>(sql, [...params, pageSize, offset]);
+    const result = await pool.query<ThesisRow & { has_deep_dive: boolean; debate_verdict: string | null }>(sql, [...params, pageSize, offset]);
     const items = result.rows.map(rowToDraft);
     const deepDiveFlags = new Map(result.rows.map((r) => [r.canonical_key, r.has_deep_dive]));
+    const debateVerdicts = new Map(result.rows.map((r) => [r.canonical_key, r.debate_verdict ?? null]));
 
     return {
       items: items.map((d) => ({
@@ -219,7 +256,13 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
         estimatedScope: d.estimatedScope ?? null,
         lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
-        hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true
+        hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
+        profileId: (d as ReturnType<typeof rowToDraft>).profileId ?? 'consumer',
+        label: (d as ReturnType<typeof rowToDraft>).label ?? null,
+        posteriorConfidence: (d as ReturnType<typeof rowToDraft>).posteriorConfidence ?? d.confidence,
+        velocity: (d as ReturnType<typeof rowToDraft>).velocity ?? undefined,
+        corroborationScore: (d as ReturnType<typeof rowToDraft>).corroborationScore ?? undefined,
+        debateVerdict: (debateVerdicts.get(d.canonicalKey) ?? null) as 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null,
       })),
       page: safePage,
       page_size: pageSize,
@@ -229,6 +272,32 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       has_prev: safePage > 1,
       stats
     };
+  },
+
+  async setLabel(canonicalKey: string, label: 'favourite' | 'later' | 'dismissed' | null): Promise<{ label: string | null } | null> {
+    const result = await pool.query<{ label: string | null }>(
+      `UPDATE thesis_candidates SET label = $1, updated_at = NOW()
+       WHERE canonical_key = $2
+       RETURNING label`,
+      [label, canonicalKey]
+    );
+    return result.rows[0] ?? null;
+  },
+
+  async bayesianUpdate(canonicalKey: string, confidenceDelta: number): Promise<void> {
+    await pool.query(
+      `UPDATE thesis_candidates
+       SET prior_confidence = posterior_confidence,
+           posterior_confidence = GREATEST(0, LEAST(100, posterior_confidence + $2)),
+           confidence = GREATEST(0, LEAST(100, posterior_confidence + $2)),
+           confidence_last_updated_at = NOW(),
+           evidence_count_bayes = evidence_count_bayes + 1,
+           confirming_signals = CASE WHEN $2 > 0 THEN confirming_signals + 1 ELSE confirming_signals END,
+           contradicting_signals = CASE WHEN $2 < 0 THEN contradicting_signals + 1 ELSE contradicting_signals END,
+           updated_at = NOW()
+       WHERE canonical_key = $1`,
+      [canonicalKey, confidenceDelta]
+    );
   },
 
   async close(): Promise<void> {}

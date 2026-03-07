@@ -1,3 +1,5 @@
+import type { AgentProfile } from '@idea/contracts/src/agent_profile.js';
+
 // === Existing types (keep as-is) ===
 
 export type AgentThesisSummary = {
@@ -61,11 +63,19 @@ export type JournalSummary = {
   created_at: string;
 };
 
+export type ExperienceExample = {
+  signal_summary: string;
+  reasoning_trajectory: string;
+  thesis_output: string;
+  outcome_validated: boolean;
+};
+
 export type BroadScanContext = {
   activeTheses: AgentThesisSummary[];
   clusters: ClusterSummary[];
   recentJournal: JournalSummary[];
   trendSummary: AgentTrendSummary[];
+  experienceExamples?: ExperienceExample[];
 };
 
 export type BroadScanOutput = {
@@ -112,7 +122,7 @@ export type AgentContext = {
 
 // === Prompt builders ===
 
-export const buildBroadScanPrompt = (ctx: BroadScanContext): string => {
+export const buildBroadScanPrompt = (ctx: BroadScanContext, profile: AgentProfile): string => {
   const thesesBlock = ctx.activeTheses.length > 0
     ? ctx.activeTheses.map((t) =>
         `- "${t.title}" [${t.canonicalKey}] (confidence: ${t.confidence}%, ${t.evidenceCount} signals, status: ${t.status})`
@@ -141,24 +151,20 @@ export const buildBroadScanPrompt = (ctx: BroadScanContext): string => {
     : '(no trend data)';
 
   return `You are Sixth Sense, a product opportunity scout with persistent memory.
-You specialize in finding CONSUMER and SOCIAL product ideas with viral growth potential.
-Your primary focus: consumer social apps, community platforms, creator tools, prosumer products with network effects, and mobile-first experiences.
+${profile.prompts.identity}
+Your primary focus: ${profile.prompts.focusAreas.join(', ')}.
 Your observations from previous runs are shown below — use them to build on your prior reasoning.
 
 CRITICAL BIAS:
-- STRONGLY PREFER consumer/social product ideas over developer tools or enterprise B2B.
-- Developer tooling ideas should only be surfaced if the signal is exceptionally strong (demand > 80).
-- When you see trending consumer topics (Google Trends, TikTok, AlternativeTo), ask: "What app could a solo founder build in 1-2 months to serve this audience?"
-- Cross-pollinate: tech signals can inspire consumer products. A GitHub issue about video processing → "TikTok-style editor for X niche".
+${profile.prompts.antiPatterns.map(p => `- ${p}`).join('\n')}
 
 IMPORTANT GUIDELINES:
 - Each thesis must be a CONCRETE product idea, not an abstract market observation.
-- BAD: "Vertical SaaS Consolidation in Regulated Industries", "Proxy-signal instrumentation"
-- GOOD: "Community Recipe Sharing App with AI Meal Planning", "TikTok-Style Short Video Editor for Realtors", "Dating App Where Friends Write Your Bio"
-- Focus on specific pain points felt by real people (not just developers)
-- Target specific buyer personas: "college students who meal prep", "freelance photographers who need a portfolio", "parents looking for educational apps"
-- For virality: describe the SPECIFIC sharing moment — the user action that naturally brings a new user
-- Growth loops must be concrete: "User creates a shareable recipe card that links back to the app"
+${profile.prompts.exampleBad.map(e => `- BAD: "${e}"`).join('\n')}
+${profile.prompts.exampleGood.map(e => `- GOOD: "${e}"`).join('\n')}
+- Focus on specific pain points felt by real people
+- Target specific buyer personas
+${profile.prompts.scopeConstraint ? `- ${profile.prompts.scopeConstraint}` : ''}
 
 YOUR RECENT OBSERVATIONS:
 ${journalBlock}
@@ -171,7 +177,18 @@ ${clustersBlock}
 
 TREND WINDOWS:
 ${trendsBlock}
-
+${ctx.experienceExamples && ctx.experienceExamples.length > 0
+    ? '\nVALIDATED THESIS EXAMPLES (from past successful predictions):\n' +
+      ctx.experienceExamples.filter(e => e.outcome_validated).map((e, i) =>
+        `Example ${i + 1}:\n  Signals: ${e.signal_summary}\n  Analysis: ${e.reasoning_trajectory}\n  Result: ${e.thesis_output}\n  Outcome: Validated`
+      ).join('\n') +
+      (ctx.experienceExamples.filter(e => !e.outcome_validated).length > 0
+        ? '\n' + ctx.experienceExamples.filter(e => !e.outcome_validated).slice(0, 2).map((e, i) =>
+            `Counter-example ${i + 1}:\n  Signals: ${e.signal_summary}\n  Analysis: ${e.reasoning_trajectory}\n  Result: ${e.thesis_output}\n  Outcome: Not validated`
+          ).join('\n')
+        : '') +
+      '\n\nUse these examples as calibration for your confidence estimates.\n'
+    : ''}
 YOUR TASK:
 1. Analyze signal clusters. What concrete product ideas do they suggest? Do any clusters reinforce or contradict existing theses?
 2. For each relevant thesis, provide a confidence_delta (-20 to +20) with reasoning.
@@ -187,7 +204,7 @@ Return ONLY valid JSON:
 }`;
 };
 
-export const buildDeepDivePrompt = (ctx: DeepDiveContext): string => {
+export const buildDeepDivePrompt = (ctx: DeepDiveContext, profile: AgentProfile): string => {
   const currentBlock = ctx.currentSignals.map((s) =>
     `- [${s.signal_id}] [${s.source}] ${s.text.slice(0, 300)} (demand: ${s.demand}, timing: ${s.timing}${s.virality != null ? `, virality: ${s.virality}` : ''})`
   ).join('\n') || '(none)';
@@ -223,23 +240,16 @@ ${thesesBlock}
 
 IMPORTANT GUIDELINES FOR NEW THESES:
 - Each thesis must be a CONCRETE product idea, not an abstract market observation
-- BAD: "Vertical SaaS Consolidation in Regulated Industries" (too abstract, enterprise-scale)
-- BAD: "Proxy-signal instrumentation platform" (meaningless buzzwords, no clear product)
-- GOOD: "Community Recipe Sharing App with AI Meal Planning" (viral sharing, clear product)
-- GOOD: "AI-Powered Contract Clause Highlighter for Freelancers" (clear pain, specific user)
+${profile.prompts.exampleBad.map(e => `- BAD: "${e}"`).join('\n')}
+${profile.prompts.exampleGood.map(e => `- GOOD: "${e}"`).join('\n')}
 - The problem_statement should describe a real pain point a specific person has
-- The target_buyer should be a specific persona (e.g., "freelance designers who invoice 5+ clients/month")
-- The proposed_solution should describe a concrete software tool, not a strategy or framework
-- Assess virality and network effects — how would users discover and share this product?
-- Consider growth loops: does the product create shareable artifacts? Does value increase with users?
-- Products with inherent distribution (social, community, UGC) are higher signal
+- The target_buyer should be a specific persona
+- The proposed_solution should describe a concrete software tool
 
-CONSUMER FOCUS:
-- PREFER consumer/social product ideas. Solo founder building for real people, not enterprises.
-- For every idea, describe the "sharing moment" — the specific user action that brings a new user.
-- Prefer small scope: solo dev, 1-2 month MVP, viral distribution over paid acquisition.
-- Consider: does the product create content users want to share? Does it get better with more users?
-- Specific channels: which subreddits, TikTok niches, or communities would discover this first?
+${profile.prompts.identity}
+${profile.prompts.focusAreas.map(f => `- ${f}`).join('\n')}
+${profile.prompts.antiPatterns.map(p => `- ${p}`).join('\n')}
+${profile.prompts.scopeConstraint ? profile.prompts.scopeConstraint : ''}
 
 DEEP ANALYSIS:
 1. What product ideas emerge from these signals? Prioritize ideas with viral distribution mechanics.

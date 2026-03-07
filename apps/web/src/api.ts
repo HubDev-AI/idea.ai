@@ -43,6 +43,8 @@ const API_BASE_URL = resolveApiBaseUrl();
 
 export const buildApiUrl = (path: string): string => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
+export const API_BASE = API_BASE_URL;
+
 export type SortField = 'score' | 'newest' | 'virality' | 'demand';
 
 export const fetchSignals = async ({
@@ -84,11 +86,13 @@ export const fetchConnectors = async (): Promise<ConnectorRecord[]> => {
 export const fetchLogs = async ({
   limit = 200,
   level,
-  runId
+  runId,
+  component
 }: {
   limit?: number;
   level?: ExecutionLogRecord['level'];
   runId?: string;
+  component?: string;
 } = {}): Promise<ExecutionLogRecord[]> => {
   const params = new URLSearchParams({
     limit: String(Math.max(1, Math.floor(limit)))
@@ -100,6 +104,10 @@ export const fetchLogs = async ({
 
   if (runId) {
     params.set('run_id', runId);
+  }
+
+  if (component) {
+    params.set('component', component);
   }
 
   const response = await fetch(buildApiUrl(`/v1/logs?${params.toString()}`));
@@ -125,18 +133,24 @@ export const fetchTheses = async ({
   page = 1,
   pageSize = 10,
   status,
-  sort = 'score'
+  sort = 'score',
+  profile,
+  label,
 }: {
   page?: number;
   pageSize?: number;
   status?: string;
   sort?: ThesisSortField;
+  profile?: string;
+  label?: string;
 } = {}): Promise<ThesisPage> => {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('page_size', String(pageSize));
   if (status) params.set('status', status);
   if (sort !== 'score') params.set('sort', sort);
+  if (profile && profile !== 'all') params.set('profile', profile);
+  if (label) params.set('label', label);
   const response = await fetch(buildApiUrl(`/v1/theses?${params.toString()}`));
   if (!response.ok) throw new Error('Failed to load theses');
   const data = await response.json();
@@ -212,4 +226,32 @@ export const generateThesisDeepDive = async (canonicalKey: string): Promise<Thes
   );
   if (!response.ok) throw new Error(`generateThesisDeepDive failed: ${response.status}`);
   return response.json() as Promise<ThesisDeepDive>;
+};
+
+export type ThesisLabel = 'favourite' | 'later' | 'dismissed' | null;
+
+export const setThesisLabel = async (canonicalKey: string, label: ThesisLabel): Promise<{ label: ThesisLabel }> => {
+  const response = await fetch(
+    buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/label`),
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label })
+    }
+  );
+  if (!response.ok) throw new Error(`setThesisLabel failed: ${response.status}`);
+  return response.json();
+};
+
+export type ProfileDisplay = {
+  id: string;
+  name: string;
+  display: { badge: string; badgeColor: string; icon?: string; defaultSort?: string };
+  dimensions: { name: string; weight: number }[];
+};
+
+export const fetchProfiles = async (): Promise<ProfileDisplay[]> => {
+  const response = await fetch(buildApiUrl('/v1/profiles'));
+  if (!response.ok) throw new Error('Failed to load profiles');
+  return response.json() as Promise<ProfileDisplay[]>;
 };
