@@ -23,6 +23,7 @@ export type DebateInput = {
   thesisKey: string;
   problemStatement: string;
   evidence: string[];
+  timeoutMs?: number;
   runBull: (input: RunPromptInput) => Promise<RunPromptResult>;
   runBear: (input: RunPromptInput) => Promise<RunPromptResult>;
   runModerator: (input: RunPromptInput) => Promise<RunPromptResult>;
@@ -71,17 +72,21 @@ export const runDebate = async (input: DebateInput): Promise<DebateResult | null
   const evidenceBlock = input.evidence.length > 0
     ? `\n\nSupporting evidence:\n${input.evidence.map((e, i) => `${i + 1}. ${e}`).join('\n')}`
     : '';
+  const callTimeout = input.timeoutMs;
 
   const bullResult = await input.runBull({
     prompt: `${BULL_SYSTEM}\n\nThesis: "${input.thesisTitle}"\nProblem: ${input.problemStatement}${evidenceBlock}\n\nMake your bull case:`,
+    timeoutMs: callTimeout,
   });
 
   const bearResult = await input.runBear({
     prompt: `${BEAR_SYSTEM}\n\nThesis: "${input.thesisTitle}"\nProblem: ${input.problemStatement}${evidenceBlock}\n\nBull case to counter:\n${bullResult.text}\n\nMake your bear case:`,
+    timeoutMs: callTimeout,
   });
 
   const modResult = await input.runModerator({
     prompt: `${MODERATOR_SYSTEM}\n\nThesis: "${input.thesisTitle}"\nProblem: ${input.problemStatement}\n\nBull case:\n${bullResult.text}\n\nBear case:\n${bearResult.text}\n\nOutput your JSON verdict:`,
+    timeoutMs: callTimeout,
   });
 
   const verdict = parseModeratorVerdict(modResult.text);

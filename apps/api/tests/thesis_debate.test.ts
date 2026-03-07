@@ -91,6 +91,31 @@ describe('runDebate', () => {
     expect(result!.bearCase).toContain('bear argument');
   });
 
+  it('forwards timeoutMs to each AI call', async () => {
+    const receivedTimeouts: (number | undefined)[] = [];
+    const mockRun = (label: string) => async (input: { prompt: string; timeoutMs?: number }) => {
+      receivedTimeouts.push(input.timeoutMs);
+      if (label === 'moderator') {
+        return {
+          text: JSON.stringify({
+            confidence: 0.5, bull_strength: 50, bear_strength: 50,
+            missing_evidence: [], verdict: 'contested',
+          }),
+          provider: 'claude' as const, meta: {},
+        };
+      }
+      return { text: `${label} case`, provider: 'claude' as const, meta: {} };
+    };
+
+    await runDebate({
+      thesisTitle: 'T', thesisKey: 'k', problemStatement: 'p', evidence: [],
+      timeoutMs: 120_000,
+      runBull: mockRun('bull'), runBear: mockRun('bear'), runModerator: mockRun('moderator'),
+    });
+
+    expect(receivedTimeouts).toEqual([120_000, 120_000, 120_000]);
+  });
+
   it('returns null if moderator fails to parse', async () => {
     const mockRun = async () => ({ text: 'garbage', provider: 'claude' as const, meta: {} });
     const result = await runDebate({

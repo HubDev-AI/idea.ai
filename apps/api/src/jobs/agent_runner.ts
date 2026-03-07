@@ -386,6 +386,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         thesisKey: thesis.canonicalKey,
         problemStatement: thesis.problemStatement,
         evidence,
+        timeoutMs: timeoutMs,
         runBull: useClaude ? deps.runClaude : deps.runCodex,
         runBear: useClaude ? deps.runCodex : deps.runClaude,
         runModerator: deps.runClaude,
