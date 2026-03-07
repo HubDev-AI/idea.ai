@@ -130,11 +130,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-row">
           <span className={`status-dot ${dotClass(infraStatus?.ollama ?? 'idle')}`} />
           <span className="sidebar-row-name">Ollama</span>
-          {infraStatus?.embeddings?.dataSizeMb != null && (
+          {infraStatus?.ollamaSizeMb != null && (
             <span className="sidebar-row-detail detail-count">
-              {infraStatus.embeddings.dataSizeMb >= 1024
-                ? `${(infraStatus.embeddings.dataSizeMb / 1024).toFixed(1)} GB`
-                : `${Math.round(infraStatus.embeddings.dataSizeMb)} MB`}
+              {infraStatus.ollamaSizeMb >= 1024
+                ? `${(infraStatus.ollamaSizeMb / 1024).toFixed(1)} GB`
+                : `${Math.round(infraStatus.ollamaSizeMb)} MB`}
             </span>
           )}
         </div>
@@ -149,10 +149,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="sidebar-row-name">Embeddings</span>
           {infraStatus && (
             <span className="sidebar-row-detail detail-count">
-              {infraStatus.embeddings.withEmbedding}/{infraStatus.embeddings.total}
-              {infraStatus.embeddings.total > 0 && infraStatus.embeddings.withEmbedding < infraStatus.embeddings.total
-                ? ` (${Math.round(infraStatus.embeddings.withEmbedding / infraStatus.embeddings.total * 100)}%)`
-                : ''}
+              {infraStatus.embeddings.withEmbedding < infraStatus.embeddings.total
+                ? `${infraStatus.embeddings.withEmbedding}/${infraStatus.embeddings.total} (${Math.round(infraStatus.embeddings.withEmbedding / infraStatus.embeddings.total * 100)}%)`
+                : infraStatus.embeddings.dataSizeMb != null
+                  ? (infraStatus.embeddings.dataSizeMb >= 1024
+                    ? `${(infraStatus.embeddings.dataSizeMb / 1024).toFixed(1)} GB`
+                    : `${Math.round(infraStatus.embeddings.dataSizeMb)} MB`)
+                  : `${infraStatus.embeddings.total}`
+              }
             </span>
           )}
         </div>

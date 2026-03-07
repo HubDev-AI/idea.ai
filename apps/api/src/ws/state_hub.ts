@@ -19,6 +19,8 @@ export type StateHubDeps = {
   getInfraStatus: () => Promise<InfraStatusRecord>;
   getRefreshMeta: () => RefreshMeta;
   getSignalCounts: () => Promise<Record<string, number>>;
+  getSignalCount: () => Promise<number>;
+  getLatestSignalAt: () => Promise<string | null>;
   getThesisStats: () => Promise<ThesisStats>;
   getLogs: () => Promise<ExecutionLogRecord[]>;
 };
@@ -49,6 +51,8 @@ export class StateHub {
       infraStatus: null,
       refreshMeta: { last_hourly_run: null, last_daily_run: null, hourly_interval_ms: 3600000, daily_interval_ms: 86400000, refreshing: null },
       signalCounts: {},
+      signalCount: 0,
+      latestSignalAt: null,
       thesisStats: { total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 },
       logs: [],
     };
@@ -59,11 +63,13 @@ export class StateHub {
   }
 
   async collectAll(): Promise<void> {
-    const [connectors, aiHealth, infraStatus, signalCounts, thesisStats, logs] = await Promise.allSettled([
+    const [connectors, aiHealth, infraStatus, signalCounts, signalCount, latestSignalAt, thesisStats, logs] = await Promise.allSettled([
       this.deps.getConnectors(),
       this.deps.getAiHealth(),
       this.deps.getInfraStatus(),
       this.deps.getSignalCounts(),
+      this.deps.getSignalCount(),
+      this.deps.getLatestSignalAt(),
       this.deps.getThesisStats(),
       this.deps.getLogs(),
     ]);
@@ -72,6 +78,8 @@ export class StateHub {
     if (aiHealth.status === 'fulfilled') this.state.aiHealth = aiHealth.value;
     if (infraStatus.status === 'fulfilled') this.state.infraStatus = infraStatus.value;
     if (signalCounts.status === 'fulfilled') this.state.signalCounts = signalCounts.value;
+    if (signalCount.status === 'fulfilled') this.state.signalCount = signalCount.value;
+    if (latestSignalAt.status === 'fulfilled') this.state.latestSignalAt = latestSignalAt.value;
     if (thesisStats.status === 'fulfilled') this.state.thesisStats = thesisStats.value;
     if (logs.status === 'fulfilled') this.state.logs = logs.value;
 

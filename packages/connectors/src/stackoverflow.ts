@@ -26,26 +26,37 @@ export async function fetchStackOverflow(opts: SOOptions = {}): Promise<RawEvent
     pageSize = 25,
     fetchImpl = fetch,
   } = opts;
-  const tagStr = tags.join(';');
-  const url = `${API_BASE}/questions?order=desc&sort=activity&tagged=${encodeURIComponent(tagStr)}&site=stackoverflow&pagesize=${pageSize}&filter=withbody`;
 
-  const res = await fetchImpl(url);
-  if (!res.ok) return [];
+  // StackExchange API treats semicolon-joined tags as AND (all required).
+  // Query each tag separately and dedupe by question_id.
+  const seen = new Set<number>();
+  const results: RawEventInput[] = [];
 
-  const data = await res.json();
-  const items: SOQuestion[] = data.items ?? [];
+  for (const tag of tags) {
+    if (results.length >= pageSize) break;
+    const url = `${API_BASE}/questions?order=desc&sort=activity&tagged=${encodeURIComponent(tag)}&site=stackoverflow&pagesize=5&filter=withbody`;
+    try {
+      const res = await fetchImpl(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      for (const q of (data.items ?? []) as SOQuestion[]) {
+        if (seen.has(q.question_id)) continue;
+        seen.add(q.question_id);
+        const questionTags = q.tags ?? [];
+        const unansweredLabel = q.is_answered === false ? ' [UNANSWERED]' : '';
+        results.push({
+          source: 'stackoverflow',
+          source_item_id: `so-${q.question_id}`,
+          source_timestamp: new Date(q.creation_date * 1000).toISOString(),
+          text: `[${questionTags.join(', ')}]${unansweredLabel} ${q.title}`.slice(0, 2000),
+          url: q.link,
+          engagement_count: (q.view_count ?? 0) + (q.score ?? 0),
+        });
+      }
+    } catch {
+      // Skip failed tag query
+    }
+  }
 
-  return items.map((q) => {
-    const questionTags = q.tags ?? [];
-    const unansweredLabel = q.is_answered === false ? ' [UNANSWERED]' : '';
-
-    return {
-      source: 'stackoverflow',
-      source_item_id: `so-${q.question_id}`,
-      source_timestamp: new Date(q.creation_date * 1000).toISOString(),
-      text: `[${questionTags.join(', ')}]${unansweredLabel} ${q.title}`.slice(0, 2000),
-      url: q.link,
-      engagement_count: (q.view_count ?? 0) + (q.score ?? 0),
-    };
-  });
+  return results.slice(0, pageSize);
 }

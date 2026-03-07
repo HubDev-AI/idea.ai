@@ -35,9 +35,10 @@ export const registerScoringHealthRoute = (
         `SELECT computed_at, demand_weight, timing_weight, buildability_weight, virality_weight,
                 precision_score, sample_size
          FROM scoring_weight_history
+         WHERE profile_id = $1
          ORDER BY computed_at DESC
-         LIMIT $1`,
-        [HISTORY_LIMIT],
+         LIMIT $2`,
+        [profile, HISTORY_LIMIT],
       );
       optimizationHistory = rows.map((r) => ({
         computedAt: new Date(r.computed_at).toISOString(),

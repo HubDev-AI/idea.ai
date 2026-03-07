@@ -86,7 +86,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
              ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
-      LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+      LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
       ${where}
       GROUP BY tc.id
       ORDER BY tc.confidence DESC
@@ -105,7 +105,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
               ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
        FROM thesis_candidates tc
        LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
-       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+       LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
        WHERE tc.canonical_key = $1
        GROUP BY tc.id`,
       [canonicalKey]
@@ -114,7 +114,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
   },
 
   async getAsListItem(canonicalKey: string): Promise<ThesisListItem | null> {
-    const result = await pool.query<ThesisRow & { has_deep_dive: boolean; debate_verdict: string | null; supply_demand_classification: string | null; category_emerging: boolean | null }>(
+    const result = await pool.query<ThesisRow & { has_deep_dive: boolean; debate_verdict: string | null }>(
       `SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
               COUNT(DISTINCT sm.source)::int AS source_count,
               ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
@@ -125,7 +125,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
               dv.debate_verdict
        FROM thesis_candidates tc
        LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
-       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+       LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
        LEFT JOIN LATERAL (
          SELECT moderator_verdict->>'verdict' AS debate_verdict
          FROM thesis_debates td
@@ -156,7 +156,6 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       velocity: (d as ReturnType<typeof rowToDraft>).velocity ?? undefined,
       corroborationScore: (d as ReturnType<typeof rowToDraft>).corroborationScore ?? undefined,
       debateVerdict: (row.debate_verdict ?? null) as ThesisListItem['debateVerdict'],
-      supplyDemand: (row.supply_demand_classification ?? null) as ThesisListItem['supplyDemand'],
     };
   },
 
@@ -242,7 +241,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
                   COUNT(DISTINCT sm.source) AS src_count
            FROM thesis_candidates tc
            LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
-           LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+           LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
            GROUP BY tc.id, tc.status
          ) sub`
       )
@@ -276,7 +275,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
              dv.debate_verdict
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
-      LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+      LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
       LEFT JOIN LATERAL (
         SELECT moderator_verdict->>'verdict' AS debate_verdict
         FROM thesis_debates td

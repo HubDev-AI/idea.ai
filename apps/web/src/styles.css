@@ -1953,12 +1953,25 @@ a.signal-idea-link:hover {
   color: var(--err);
 }
 
-.explain-debate-case p {
-  font-size: 0.8rem;
+.explain-debate-case p { font-size: 0.8rem; color: var(--text); line-height: 1.5; margin: 0; }
+.explain-formatted { font-size: 0.8rem; color: var(--text); line-height: 1.6; }
+.explain-formatted-para { margin: 0 0 0.6rem 0; }
+.explain-formatted-para:last-child { margin-bottom: 0; }
+.explain-formatted-heading {
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin: 0.75rem 0 0.3rem 0;
   color: var(--text);
-  line-height: 1.5;
-  margin: 0;
 }
+.explain-formatted-heading:first-child { margin-top: 0; }
+.explain-formatted-list {
+  line-height: 1.6;
+  margin: 0 0 0.6rem 0;
+  padding-left: 1.2rem;
+}
+.explain-formatted-list li { margin-bottom: 0.25rem; }
+.explain-formatted-list li:last-child { margin-bottom: 0; }
+.explain-formatted-list:last-child { margin-bottom: 0; }
 
 .explain-debate-strength {
   font-size: 0.68rem;

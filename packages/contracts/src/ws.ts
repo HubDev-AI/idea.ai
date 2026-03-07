@@ -15,6 +15,8 @@ export type AppSnapshot = {
   infraStatus: InfraStatusRecord | null;
   refreshMeta: RefreshMeta;
   signalCounts: Record<string, number>;
+  signalCount: number;
+  latestSignalAt: string | null;
   thesisStats: ThesisStats;
   logs: ExecutionLogRecord[];
 };

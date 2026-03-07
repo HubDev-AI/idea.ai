@@ -124,7 +124,7 @@ const App = () => {
     hasNext: false,
     hasPrev: false
   });
-  const [latestSignalAt, setLatestSignalAt] = useState<string | null>(null);
+  // latestSignalAt now comes from ws.latestSignalAt (real-time from DB)
   const logComponents = useMemo(() => {
     const set = new Set<string>();
     for (const entry of ws.logs) set.add(entry.component);
@@ -224,9 +224,6 @@ const App = () => {
           hasNext: result.has_next,
           hasPrev: result.has_prev
         });
-        if (result.page === 1 && result.items.length > 0) {
-          setLatestSignalAt(result.items[0].updated_at);
-        }
         if (result.page !== requestedPage) {
           setRequestedPage(result.page);
         }
@@ -343,6 +340,9 @@ const App = () => {
         setTheses((prev) => prev.map((t) =>
           t.canonicalKey === key ? { ...t, hasDeepDive: true } : t
         ));
+        setOmapSelectedThesis((prev) =>
+          prev && prev.canonicalKey === key ? { ...prev, hasDeepDive: true } : prev
+        );
         showToast(`Deep dive ready: ${thesis.title.slice(0, 50)}`);
       } catch (err) {
         showToast(
@@ -412,8 +412,8 @@ const App = () => {
         agentStatus={ws.agentStatus}
         infraStatus={ws.infraStatus}
         thesisStats={thesisStats}
-        signalCount={Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
-        latestSignalAt={latestSignalAt}
+        signalCount={ws.signalCount || Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
+        latestSignalAt={ws.latestSignalAt}
         signalCounts={ws.signalCounts}
         onRunAgent={handleRunAgent}
         agentRunning={agentRunning}

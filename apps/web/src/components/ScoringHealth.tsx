@@ -4,16 +4,19 @@ import React, { useEffect, useState } from 'react';
 export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
   const [data, setData] = useState<ScoringHealthRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState('consumer');
 
   useEffect(() => {
-    fetch(`${apiUrl}/v1/scoring-health`)
+    setData(null);
+    setError(null);
+    fetch(`${apiUrl}/v1/scoring-health?profile=${profile}`)
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json() as Promise<ScoringHealthRecord>;
       })
       .then(setData)
       .catch((err) => setError(err.message));
-  }, [apiUrl]);
+  }, [apiUrl, profile]);
 
   if (error) return <div className="scoring-error">Failed to load scoring health: {error}</div>;
   if (!data) return <div className="scoring-loading">Loading scoring health...</div>;
@@ -23,6 +26,22 @@ export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
 
   return (
     <div className="scoring-container">
+      <div className="profile-tabs" style={{ marginBottom: '0.75rem' }}>
+        <button
+          type="button"
+          className={`profile-tab ${profile === 'consumer' ? 'active' : ''}`}
+          onClick={() => setProfile('consumer')}
+        >
+          Consumer
+        </button>
+        <button
+          type="button"
+          className={`profile-tab ${profile === 'b2b' ? 'active' : ''}`}
+          onClick={() => setProfile('b2b')}
+        >
+          B2B
+        </button>
+      </div>
       <div className="scoring-grid">
         {/* Current weights card */}
         <div className="scoring-card">

@@ -16,7 +16,7 @@ const run = async () => {
   // Find signals missing embeddings OR still using local-hash fallback
   const { rows } = await pool.query<{ signal_id: string; canonical_text: string }>(`
     SELECT sm.signal_id, sm.canonical_text
-    FROM signal_memory sm
+    FROM scored_signals sm
     LEFT JOIN signal_embeddings se ON sm.signal_id = se.signal_id
     WHERE se.signal_id IS NULL
        OR se.model = 'local-hash-v1'

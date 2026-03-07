@@ -2,7 +2,6 @@ import type { SimilarSignalMatch, TrendWindowSnapshot } from '@idea/contracts/sr
 import type { MemoryQuery, MemoryRetriever } from '@idea/pipeline/src/memory/retrieve';
 import type { Pool, PoolClient } from 'pg';
 import pg from 'pg';
-import { buildLocalEmbedding } from '../jobs/memory_index';
 import type { IndexedMemoryEntry } from '../jobs/memory_retriever';
 import type { ExecutionLogger } from './execution_logger';
 
@@ -40,14 +39,14 @@ SELECT
   $1::text AS topic,
   $2::text AS source,
   windows.window_name AS window,
-  COUNT(signal_memory.signal_id)::int AS count_signals,
-  ROUND(COALESCE(AVG(signal_memory.demand), 0)::numeric, 2) AS avg_demand,
-  ROUND(COALESCE(AVG(signal_memory.timing), 0)::numeric, 2) AS avg_timing
+  COUNT(scored_signals.signal_id)::int AS count_signals,
+  ROUND(COALESCE(AVG(scored_signals.demand), 0)::numeric, 2) AS avg_demand,
+  ROUND(COALESCE(AVG(scored_signals.timing), 0)::numeric, 2) AS avg_timing
 FROM windows
-LEFT JOIN signal_memory
-  ON signal_memory.topic = $1
- AND signal_memory.source = $2
- AND signal_memory.observed_at >= NOW() - windows.age_interval
+LEFT JOIN scored_signals
+  ON scored_signals.topic = $1
+ AND scored_signals.source = $2
+ AND scored_signals.observed_at >= NOW() - windows.age_interval
 GROUP BY windows.window_name
 ORDER BY CASE windows.window_name
   WHEN '7d' THEN 1
@@ -78,7 +77,7 @@ type SimilarRow = {
 const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry): Promise<void> => {
   await client.query(
     `
-      INSERT INTO signal_memory (
+      INSERT INTO scored_signals (
         signal_id,
         topic,
         source,
@@ -104,7 +103,7 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
         buildability = EXCLUDED.buildability,
         blended = EXCLUDED.blended,
         virality = EXCLUDED.virality,
-        source_url = COALESCE(EXCLUDED.source_url, signal_memory.source_url),
+        source_url = COALESCE(EXCLUDED.source_url, scored_signals.source_url),
         updated_at = NOW()
     `,
     [
@@ -122,8 +121,8 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
     ]
   );
 
-  // Skip embedding storage if Ollama returned null (service unreachable)
-  if (entry.embeddingRecord.embedding === null) {
+  // Skip embedding storage if Ollama was unreachable
+  if (!entry.embeddingRecord || entry.embeddingRecord.embedding === null) {
     return;
   }
 
@@ -171,7 +170,7 @@ const upsertTrendWindows = async (client: PoolClient, topic: string, source: str
           ROUND(COALESCE(AVG(demand), 0)::numeric, 2),
           ROUND(COALESCE(AVG(timing), 0)::numeric, 2),
           NOW()
-        FROM signal_memory
+        FROM scored_signals
         WHERE topic = $1
           AND source = $2
           AND observed_at >= NOW() - $4::interval
@@ -189,17 +188,17 @@ const upsertTrendWindows = async (client: PoolClient, topic: string, source: str
 
 const similarSql = `
 SELECT
-  signal_memory.signal_id,
+  scored_signals.signal_id,
   LEAST(GREATEST((signal_embeddings.embedding <=> $1::vector)::double precision, 0), 1) AS distance,
-  signal_memory.demand,
-  signal_memory.timing,
-  signal_memory.source,
-  signal_memory.observed_at,
-  signal_memory.canonical_text
+  scored_signals.demand,
+  scored_signals.timing,
+  scored_signals.source,
+  scored_signals.observed_at,
+  scored_signals.canonical_text
 FROM signal_embeddings
-JOIN signal_memory
-  ON signal_memory.signal_id = signal_embeddings.signal_id
-WHERE signal_memory.topic = $2 OR signal_memory.source = $3
+JOIN scored_signals
+  ON scored_signals.signal_id = signal_embeddings.signal_id
+WHERE scored_signals.topic = $2 OR scored_signals.source = $3
 ORDER BY signal_embeddings.embedding <=> $1::vector
 LIMIT $4
 `;
@@ -258,7 +257,15 @@ export type RefreshState = {
   refreshedAt: number;
 };
 
-export type PostgresMemoryStore = {
+export type ConnectorStateRow = {
+  connector_name: string;
+  status: string;
+  last_run_at: string | null;
+  last_error: string | null;
+  cadence: string | null;
+};
+
+export type PostgresSignalStore = {
   retriever: MemoryRetriever;
   save: (entry: IndexedMemoryEntry) => Promise<void>;
   listAllSignals: (limit?: number) => Promise<MemorySignalRow[]>;
@@ -272,11 +279,15 @@ export type PostgresMemoryStore = {
   saveEmbedding: (signalId: string, embedding: number[], model: string) => Promise<void>;
   loadRefreshState: () => Promise<RefreshState>;
   saveRefreshState: (state: RefreshState) => Promise<void>;
+  upsertConnectorState: (name: string, status: string, cadence: string | null, error?: string | null) => Promise<void>;
+  listConnectorStates: () => Promise<ConnectorStateRow[]>;
+  getSignalCount: () => Promise<number>;
+  getLatestSignalAt: () => Promise<string | null>;
   ping: () => Promise<void>;
   close: () => Promise<void>;
 };
 
-export const createPostgresMemoryStore = ({
+export const createPostgresSignalStore = ({
   databaseUrl,
   logger,
   embedText
@@ -284,7 +295,7 @@ export const createPostgresMemoryStore = ({
   databaseUrl: string;
   logger?: ExecutionLogger;
   embedText?: (text: string) => Promise<number[] | null>;
-}): PostgresMemoryStore => {
+}): PostgresSignalStore => {
   const pool: Pool = new PgPool({
     connectionString: databaseUrl,
     max: 8,
@@ -305,7 +316,7 @@ export const createPostgresMemoryStore = ({
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
-      await logger?.error('postgres_memory_store', 'persist failed', {
+      await logger?.error('postgres_signal_store', 'persist failed', {
         signal_id: entry.memoryRecord.signal_id,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
@@ -319,8 +330,9 @@ export const createPostgresMemoryStore = ({
     findSimilar: async (query: MemoryQuery): Promise<SimilarSignalMatch[]> => {
       const limit = query.topK ?? 8;
       const queryEmbedding = embedText
-        ? (await embedText(query.canonicalText)) ?? buildLocalEmbedding(query.canonicalText)
-        : buildLocalEmbedding(query.canonicalText);
+        ? await embedText(query.canonicalText)
+        : null;
+      if (!queryEmbedding) return [];
       const result = await pool.query<SimilarRow>(similarSql, [
         toVectorLiteral(queryEmbedding),
         query.topic,
@@ -383,7 +395,7 @@ export const createPostgresMemoryStore = ({
       source_url: string | null;
     }>(
       `SELECT signal_id, topic, source, canonical_text, observed_at, demand, timing, buildability, blended, virality, source_url
-       FROM signal_memory
+       FROM scored_signals
        ORDER BY observed_at DESC
        LIMIT $1`,
       [limit]
@@ -438,7 +450,7 @@ export const createPostgresMemoryStore = ({
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const countSql = `SELECT COUNT(DISTINCT sm.signal_id)::int AS count FROM signal_memory sm ${joinClause} ${whereClause}`;
+    const countSql = `SELECT COUNT(DISTINCT sm.signal_id)::int AS count FROM scored_signals sm ${joinClause} ${whereClause}`;
     const countResult = await pool.query<{ count: number }>(countSql, values);
     const totalItems = countResult.rows[0]?.count ?? 0;
 
@@ -448,7 +460,7 @@ export const createPostgresMemoryStore = ({
     const dataSql = `
       SELECT DISTINCT sm.signal_id, sm.topic, sm.source, sm.canonical_text,
              sm.observed_at, sm.demand, sm.timing, sm.buildability, sm.blended, sm.virality, sm.source_url
-      FROM signal_memory sm ${joinClause} ${whereClause}
+      FROM scored_signals sm ${joinClause} ${whereClause}
       ${sortClause(sort)}
       LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
     const dataResult = await pool.query<Record<string, unknown>>(dataSql, [...values, pageSize, offset]);
@@ -473,7 +485,7 @@ export const createPostgresMemoryStore = ({
 
   const countSignalsBySource = async (): Promise<Record<string, number>> => {
     const result = await pool.query<{ source: string; count: number }>(
-      'SELECT source, COUNT(*)::int AS count FROM signal_memory GROUP BY source'
+      'SELECT source, COUNT(*)::int AS count FROM scored_signals GROUP BY source'
     );
     const counts: Record<string, number> = {};
     for (const row of result.rows) {
@@ -507,7 +519,7 @@ export const createPostgresMemoryStore = ({
   const getEmbeddingStats = async (): Promise<EmbeddingStats> => {
     const result = await pool.query<{ total: number; with_embedding: number; fallback_model: string | null; data_size_mb: number }>(`
       SELECT
-        (SELECT COUNT(*)::int FROM signal_memory) AS total,
+        (SELECT COUNT(*)::int FROM scored_signals) AS total,
         (SELECT COUNT(*)::int FROM signal_embeddings) AS with_embedding,
         (SELECT model FROM signal_embeddings ORDER BY created_at DESC LIMIT 1) AS fallback_model,
         (SELECT ROUND(pg_total_relation_size('signal_embeddings') / 1024.0 / 1024.0, 1)::float) AS data_size_mb
@@ -527,7 +539,7 @@ export const createPostgresMemoryStore = ({
       sm.source,
       LEAST(GREATEST((se.embedding <=> $1::vector)::double precision, 0), 1) AS distance
     FROM signal_embeddings se
-    JOIN signal_memory sm ON sm.signal_id = se.signal_id
+    JOIN scored_signals sm ON sm.signal_id = se.signal_id
     WHERE sm.signal_id != $2
       AND sm.source != $3
       AND sm.observed_at >= NOW() - INTERVAL '48 hours'
@@ -555,7 +567,7 @@ export const createPostgresMemoryStore = ({
 
   const boostViralityScore = async (signalId: string, boost: number): Promise<void> => {
     await pool.query(
-      `UPDATE signal_memory
+      `UPDATE scored_signals
        SET virality = LEAST(100, virality + $2),
            blended = ROUND((0.25 * demand + 0.20 * timing + 0.20 * buildability + 0.35 * LEAST(100, virality + $2))::numeric, 2),
            updated_at = NOW()
@@ -567,7 +579,7 @@ export const createPostgresMemoryStore = ({
   const listSignalsWithoutEmbeddings = async (limit: number): Promise<{ signal_id: string; canonical_text: string }[]> => {
     const result = await pool.query<{ signal_id: string; canonical_text: string }>(
       `SELECT sm.signal_id, sm.canonical_text
-       FROM signal_memory sm
+       FROM scored_signals sm
        LEFT JOIN signal_embeddings se ON se.signal_id = sm.signal_id
        WHERE se.signal_id IS NULL
        ORDER BY sm.observed_at DESC
@@ -624,6 +636,37 @@ export const createPostgresMemoryStore = ({
     );
   };
 
+  const upsertConnectorState = async (
+    name: string, status: string, cadence: string | null, error?: string | null
+  ): Promise<void> => {
+    await pool.query(
+      `INSERT INTO connector_state (connector_name, status, last_run_at, last_error, cadence, updated_at)
+       VALUES ($1, $2, NOW(), $3, $4, NOW())
+       ON CONFLICT (connector_name)
+       DO UPDATE SET status = $2, last_run_at = NOW(), last_error = $3, cadence = $4, updated_at = NOW()`,
+      [name, status, error ?? null, cadence]
+    );
+  };
+
+  const listConnectorStates = async (): Promise<ConnectorStateRow[]> => {
+    const result = await pool.query<ConnectorStateRow>(
+      `SELECT connector_name, status, last_run_at::text, last_error, cadence FROM connector_state ORDER BY connector_name`
+    );
+    return result.rows;
+  };
+
+  const getSignalCount = async (): Promise<number> => {
+    const result = await pool.query<{ count: number }>(`SELECT COUNT(*)::int AS count FROM scored_signals`);
+    return result.rows[0]?.count ?? 0;
+  };
+
+  const getLatestSignalAt = async (): Promise<string | null> => {
+    const result = await pool.query<{ latest: string | null }>(
+      `SELECT MAX(updated_at)::text AS latest FROM scored_signals`
+    );
+    return result.rows[0]?.latest ?? null;
+  };
+
   return {
     retriever,
     save,
@@ -638,6 +681,10 @@ export const createPostgresMemoryStore = ({
     saveEmbedding,
     loadRefreshState,
     saveRefreshState,
+    upsertConnectorState,
+    listConnectorStates,
+    getSignalCount,
+    getLatestSignalAt,
     ping,
     close: async () => {
       await pool.end();

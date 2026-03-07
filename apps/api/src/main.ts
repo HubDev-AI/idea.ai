@@ -23,7 +23,7 @@ import { createExecutionLogger } from './runtime/execution_logger';
 import { createExperienceStore } from './runtime/experience_store';
 import { createPostgresJournalStore } from './runtime/journal_store';
 import { createLiveReadModel } from './runtime/live_read_model';
-import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
+import { createPostgresSignalStore } from './runtime/postgres_signal_store';
 import { createPostgresThesisStore, type PaginatedThesisStore } from './runtime/postgres_thesis_store';
 import { createProviderCircuitBreaker } from './runtime/provider_circuit';
 import { InMemoryThesisStore } from './runtime/thesis_store';
@@ -54,12 +54,12 @@ const thesisStore = pool
 
 const embedTextFn = (text: string) => embedText(text, { fallbackToNull: true });
 
-const memoryStore = databaseUrl
-  ? createPostgresMemoryStore({ databaseUrl, embedText: embedTextFn })
+const signalStore = databaseUrl
+  ? createPostgresSignalStore({ databaseUrl, embedText: embedTextFn })
   : null;
 
 const readModel = createLiveReadModel(undefined, {
-  ...(memoryStore ? { persistentStore: memoryStore } : {}),
+  ...(signalStore ? { persistentStore: signalStore } : {}),
   circuit: providerCircuit,
   ...(pool ? { pool } : {}),
 });
@@ -143,7 +143,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
 
       const baseDeps = {
         thesisStore,
-        memoryStore,
+        signalStore,
         journalStore,
         embedText: (text: string) => embedText(text, { fallbackToNull: true }),
         runClaude: runClaudePrompt,
@@ -260,10 +260,10 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
     void stateHub.broadcastAll();
 
     // Entity extraction: run after refresh if both entityStore and modelRouter are available
-    if (entityStore && modelRouter && memoryStore) {
+    if (entityStore && modelRouter && signalStore) {
       try {
         const rEnv = loadRuntimeEnv(process.env);
-        const signals = await memoryStore.listAllSignals(rEnv.entityExtractBatchSize);
+        const signals = await signalStore.listAllSignals(rEnv.entityExtractBatchSize);
         for (const signal of signals) {
           try {
             await extractEntities({
@@ -282,7 +282,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
     }
   },
   thesisStore,
-  memoryStore,
+  signalStore,
   deepDiveStore: pool ? createDeepDiveStore({ pool }) : null,
   deepDiveAi: {
     runClaude: runClaudePrompt,
@@ -301,8 +301,8 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   entityStore,
   infraStatusDeps: {
     checkPostgres: async () => {
-      if (!memoryStore) return false;
-      await memoryStore.ping();
+      if (!signalStore) return false;
+      await signalStore.ping();
       return true;
     },
     checkOllama: async () => {
@@ -312,8 +312,15 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
         if (!res.ok) return { ok: false, reason: `ollama returned ${res.status}` };
         const data = await res.json() as { models?: { name: string; size?: number }[] };
         const hasModel = data.models?.some((m) => m.name.startsWith(embedModel)) ?? false;
-        const totalBytes = data.models?.reduce((sum, m) => sum + (m.size ?? 0), 0) ?? 0;
-        const sizeMb = Math.round(totalBytes / 1024 / 1024);
+        // Get actual disk usage from ~/.ollama directory
+        let sizeMb: number | undefined;
+        try {
+          const { execSync } = await import('node:child_process');
+          const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+          const duOutput = execSync(`du -sk "${home}/.ollama" 2>/dev/null`, { timeout: 3000 }).toString().trim();
+          const kb = parseInt(duOutput.split('\t')[0] ?? '0', 10);
+          if (kb > 0) sizeMb = Math.round(kb / 1024);
+        } catch { /* disk check optional */ }
         if (!hasModel) return { ok: false, reason: `model '${embedModel}' not installed — run: ollama pull ${embedModel}`, sizeMb };
         return { ok: true, sizeMb };
       } catch (err) {
@@ -321,8 +328,8 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
       }
     },
     getEmbeddingStats: async () => {
-      if (!memoryStore) return { total: 0, withEmbedding: 0, fallbackModel: 'none' };
-      return memoryStore.getEmbeddingStats();
+      if (!signalStore) return { total: 0, withEmbedding: 0, fallbackModel: 'none' };
+      return signalStore.getEmbeddingStats();
     },
     getDiskStats: pool ? async () => {
       const dbSize = await pool.query<{ size_mb: number }>(
@@ -383,8 +390,16 @@ const stateHub = new StateHub(io, {
   },
   getRefreshMeta: readModel.getRefreshMeta,
   getSignalCounts: async () => {
-    if (!memoryStore) return {};
-    return memoryStore.countSignalsBySource();
+    if (!signalStore) return {};
+    return signalStore.countSignalsBySource();
+  },
+  getSignalCount: async () => {
+    if (!signalStore) return 0;
+    return signalStore.getSignalCount();
+  },
+  getLatestSignalAt: async () => {
+    if (!signalStore) return null;
+    return signalStore.getLatestSignalAt();
   },
   getThesisStats: async () => {
     if ('listPaginated' in thesisStore) {
@@ -410,8 +425,8 @@ const runRetentionCleanup = async () => {
   const retentionDays = startupEnv.retentionDays;
   if (retentionDays <= 0) return; // 0 = disabled
   try {
-    await pool.query(`DELETE FROM signal_memory WHERE observed_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
-    await pool.query(`DELETE FROM signal_embeddings WHERE signal_id NOT IN (SELECT signal_id FROM signal_memory)`);
+    await pool.query(`DELETE FROM scored_signals WHERE observed_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
+    await pool.query(`DELETE FROM signal_embeddings WHERE signal_id NOT IN (SELECT signal_id FROM scored_signals)`);
     await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
     await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
   } catch (err) {
@@ -449,7 +464,7 @@ const shutdown = async () => {
     agentRunInFlight = null;
   }
 
-  // readModel.close() closes the shared memoryStore pool — don't close it again
+  // readModel.close() closes the shared signalStore pool — don't close it again
   await readModel.close();
   if ('close' in thesisStore) {
     await (thesisStore as { close: () => Promise<void> }).close();
@@ -523,7 +538,7 @@ app
           searchRecentSignals: async (thesisKey: string) => {
             const thesis = await thesisStore.getByKey(thesisKey);
             if (!thesis) return [];
-            const signals = await memoryStore!.listAllSignals(100);
+            const signals = await signalStore!.listAllSignals(100);
             return signals
               .filter(s => s.topic === thesis.topic)
               .map(s => ({ source: s.source, canonical_text: s.canonical_text }));

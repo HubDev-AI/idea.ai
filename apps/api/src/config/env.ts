@@ -66,7 +66,7 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
 export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv => {
   const result: RuntimeEnv = {
     hourlyConnectors: parseCsv(env.HOURLY_CONNECTORS, ['hn', 'github_issues', 'reddit']),
-    dailyConnectors: parseCsv(env.DAILY_CONNECTORS, ['greenhouse', 'lever', 'yc_companies', 'producthunt', 'appstore_trending', 'indiehackers', 'google_trends', 'tiktok_creative']),
+    dailyConnectors: parseCsv(env.DAILY_CONNECTORS, ['greenhouse', 'lever', 'yc_companies', 'producthunt', 'appstore_trending', 'indiehackers', 'google_trends']),
     exaDailyBudgetUsd: parseNumber(env.EXA_DAILY_BUDGET_USD, 5),
     perigonDailyBudgetUsd: parseNumber(env.PERIGON_DAILY_BUDGET_USD, 5),
     ollamaBaseUrl: env.OLLAMA_BASE_URL ?? 'http://localhost:11434',

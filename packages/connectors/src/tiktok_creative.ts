@@ -1,4 +1,4 @@
-import { type RawEventInput, withRetry } from './common/http';
+import type { RawEventInput } from './common/http';
 
 type TikTokTrend = {
   hashtag_name: string;
@@ -17,16 +17,17 @@ type TikTokLoaderFn = (limit: number) => Promise<TikTokResponse>;
 const CREATIVE_CENTER_URL = 'https://ads.tiktok.com/creative_radar_api/v1/popular_trend/hashtag/list?period=7&page=1&limit=50&country_code=US';
 
 const defaultLoader: TikTokLoaderFn = async () => {
-  return withRetry(async () => {
-    const res = await fetch(CREATIVE_CENTER_URL, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json',
-      },
-    });
-    if (!res.ok) throw new Error(`TikTok Creative Center failed: ${res.status}`);
-    return res.json() as Promise<TikTokResponse>;
+  const res = await fetch(CREATIVE_CENTER_URL, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      'Accept': 'application/json',
+    },
   });
+  // TikTok Creative Center API requires authentication since early 2026
+  if (!res.ok) return { data: { trend_list: [] } };
+  const body = await res.json() as TikTokResponse;
+  if (body.code && body.code !== 0) return { data: { trend_list: [] } };
+  return body;
 };
 
 export const fetchTikTokCreative = async (
