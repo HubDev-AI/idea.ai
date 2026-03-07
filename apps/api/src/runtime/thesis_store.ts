@@ -34,7 +34,7 @@ export class InMemoryThesisStore implements ThesisStore {
   async setLabel(canonicalKey: string, label: 'favourite' | 'later' | 'dismissed' | null): Promise<{ label: string | null } | null> {
     const draft = this.store.get(canonicalKey);
     if (!draft) return null;
-    (draft as any).label = label;
+    draft.label = label;
     return { label };
   }
 }

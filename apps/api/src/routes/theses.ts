@@ -34,7 +34,7 @@ export const registerThesesRoute = (
     if ('listPaginated' in deps.store) {
       const page = Math.max(1, Number(query.page) || 1);
       const pageSize = Math.min(50, Math.max(1, Number(query.page_size) || 10));
-      const profile = (query as any).profile || 'all';
+      const profile = query.profile || 'all';
       return (deps.store as PaginatedThesisStore).listPaginated({
         page,
         pageSize,
@@ -106,7 +106,7 @@ export const registerThesesRoute = (
       return { error: 'Label updates not supported' };
     }
 
-    const result = await deps.store.setLabel(key, label as any);
+    const result = await deps.store.setLabel(key, label as 'favourite' | 'later' | 'dismissed' | null);
     if (!result) {
       reply.code(404);
       return { error: 'Thesis not found' };
