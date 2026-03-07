@@ -12,6 +12,8 @@ import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_s
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
 import { registerOpportunityMapRoute } from './routes/opportunity_map';
 import { registerProfilesRoute } from './routes/profiles.js';
+import { registerScoringHealthRoute } from './routes/scoring_health';
+import { getActiveWeights } from './runtime/active_weights';
 import { registerThesesRoute } from './routes/theses';
 import { registerThesisExplainRoute } from './routes/thesis_explain';
 import type { AgentRunStore } from './runtime/agent_run_store';
@@ -166,6 +168,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
 
   if (resolvedDeps.pool) {
     registerOpportunityMapRoute(app, { pool: resolvedDeps.pool });
+    registerScoringHealthRoute(app, {
+      pool: resolvedDeps.pool,
+      getActiveWeights: (profileId) => getActiveWeights(resolvedDeps.pool!, profileId),
+    });
   }
 
   if (resolvedDeps.infraStatusDeps) {

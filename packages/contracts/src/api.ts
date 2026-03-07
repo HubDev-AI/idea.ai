@@ -250,3 +250,29 @@ export type OpportunityMapRecord = {
   roots: OpportunityNode[];
   generatedAt: string;
 };
+
+export type ScoringHealthRecord = {
+  currentWeights: {
+    profileId: string;
+    demand: number;
+    timing: number;
+    buildability: number;
+    virality: number;
+    source: 'optimized' | 'default';
+  };
+  optimizationHistory: {
+    computedAt: string;
+    demand: number;
+    timing: number;
+    buildability: number;
+    virality: number;
+    precision: number | null;
+    sampleSize: number | null;
+  }[];
+  predictionTrackRecord: {
+    total: number;
+    validated: number;
+    accuracy: number | null;
+  };
+  experienceLibrarySize: number;
+};

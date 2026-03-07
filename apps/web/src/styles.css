@@ -2277,3 +2277,95 @@ a.signal-idea-link:hover {
   scrollbar-width: thin;
   scrollbar-color: var(--surface-2) transparent;
 }
+
+/* Scoring Health */
+.scoring-container { padding: 16px 0; }
+
+.scoring-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.scoring-card {
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.scoring-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scoring-badge {
+  font-size: 0.65rem;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.scoring-badge.optimized {
+  background: var(--ok);
+  color: #000;
+}
+.scoring-badge.default {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--glass-border);
+}
+
+.scoring-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 0.82rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.scoring-stat-row:last-child {
+  border-bottom: none;
+}
+.scoring-stat-row span:first-child {
+  color: var(--muted);
+}
+.scoring-stat-row span:last-child {
+  font-weight: 500;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.scoring-history-section {
+  margin-top: 4px;
+}
+
+.scoring-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin-top: 8px;
+}
+.scoring-history-table th {
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--glass-border);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.scoring-history-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.scoring-error { color: var(--err); padding: 16px; }
+.scoring-loading { color: var(--muted); padding: 16px; }
