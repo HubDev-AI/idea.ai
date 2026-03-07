@@ -19,6 +19,16 @@ export const TASK_ROUTES: Record<string, TaskRoute> = {
   deep_dive: { tier: 'expensive' },
 };
 
+export type RouterStats = {
+  ollamaCalls: number;
+  ollamaSucceeded: number;
+  ollamaFailed: number;
+  cliCalls: number;
+  cliSucceeded: number;
+  cliFailed: number;
+  fallbacks: number;
+};
+
 export type RouterDeps = {
   runOllama: (prompt: string, options: OllamaPromptOptions) => Promise<string>;
   runCli: (input: RunPromptInput) => Promise<RunPromptResult>;
@@ -30,30 +40,75 @@ export type RouterDeps = {
 
 export type Router = {
   route: (task: string, prompt: string) => Promise<string>;
+  getStats: () => RouterStats;
+  resetStats: () => void;
 };
 
-export const createRouter = (deps: RouterDeps): Router => ({
-  route: async (task: string, prompt: string): Promise<string> => {
-    const route = TASK_ROUTES[task];
-    if (!route || route.tier === 'expensive') {
-      const result = await deps.runCli({ prompt });
-      return result.text;
-    }
+export const createRouter = (deps: RouterDeps): Router => {
+  const stats: RouterStats = {
+    ollamaCalls: 0,
+    ollamaSucceeded: 0,
+    ollamaFailed: 0,
+    cliCalls: 0,
+    cliSucceeded: 0,
+    cliFailed: 0,
+    fallbacks: 0,
+  };
 
-    const model = route.ollamaModel === 'cheap' ? deps.ollamaCheapModel : deps.ollamaMediumModel;
-
-    try {
-      return await deps.runOllama(prompt, {
-        model,
-        baseUrl: deps.ollamaBaseUrl,
-        timeoutMs: deps.ollamaTimeoutMs,
-      });
-    } catch (err) {
-      if (route.fallbackToCli) {
-        const result = await deps.runCli({ prompt });
-        return result.text;
+  return {
+    route: async (task: string, prompt: string): Promise<string> => {
+      const route = TASK_ROUTES[task];
+      if (!route || route.tier === 'expensive') {
+        stats.cliCalls++;
+        try {
+          const result = await deps.runCli({ prompt });
+          stats.cliSucceeded++;
+          return result.text;
+        } catch (err) {
+          stats.cliFailed++;
+          throw err;
+        }
       }
-      throw err;
-    }
-  },
-});
+
+      const model = route.ollamaModel === 'cheap' ? deps.ollamaCheapModel : deps.ollamaMediumModel;
+
+      stats.ollamaCalls++;
+      try {
+        const result = await deps.runOllama(prompt, {
+          model,
+          baseUrl: deps.ollamaBaseUrl,
+          timeoutMs: deps.ollamaTimeoutMs,
+        });
+        stats.ollamaSucceeded++;
+        return result;
+      } catch (err) {
+        stats.ollamaFailed++;
+        if (route.fallbackToCli) {
+          stats.fallbacks++;
+          stats.cliCalls++;
+          try {
+            const result = await deps.runCli({ prompt });
+            stats.cliSucceeded++;
+            return result.text;
+          } catch (cliErr) {
+            stats.cliFailed++;
+            throw cliErr;
+          }
+        }
+        throw err;
+      }
+    },
+
+    getStats: () => ({ ...stats }),
+
+    resetStats: () => {
+      stats.ollamaCalls = 0;
+      stats.ollamaSucceeded = 0;
+      stats.ollamaFailed = 0;
+      stats.cliCalls = 0;
+      stats.cliSucceeded = 0;
+      stats.cliFailed = 0;
+      stats.fallbacks = 0;
+    },
+  };
+};

@@ -105,6 +105,14 @@ export type AiHealthRecord = {
   post_scrape_max_signals: number;
   judge_max_signals: number;
   providers: AiProviderHealthRecord[];
+  routerStats?: {
+    ollamaCalls: number;
+    ollamaSucceeded: number;
+    cliCalls: number;
+    cliSucceeded: number;
+    fallbacks: number;
+    routingEnabled: boolean;
+  };
 };
 
 // -- Theses / Research agent --------------------------------------- */
@@ -157,6 +165,38 @@ export type ThesisDeepDive = {
   buildSuggestions: string;
   generatedBy: string;
   createdAt: string;
+};
+
+export type ThesisExplainRecord = {
+  weightBreakdown: {
+    demand: { score: number; weight: number; contribution: number };
+    timing: { score: number; weight: number; contribution: number };
+    buildability: { score: number; weight: number; contribution: number };
+    virality: { score: number; weight: number; contribution: number };
+    blended: number;
+    weightsSource: 'optimized' | 'default';
+  };
+  debate: {
+    bullCase: string;
+    bearCase: string;
+    verdict: string;
+    confidence: number;
+    bullStrength: number;
+    bearStrength: number;
+    missingEvidence: string[];
+    debatedAt: string;
+  } | null;
+  bayesianTrail: {
+    prior: number;
+    posterior: number;
+    updates: { source: string; delta: number; at: string }[];
+  };
+  topEvidence: {
+    signalId: string;
+    text: string;
+    source: string;
+    score: number;
+  }[];
 };
 
 export type AgentRunResult = {
@@ -217,4 +257,53 @@ export type OpportunityNode = {
 export type OpportunityMapRecord = {
   roots: OpportunityNode[];
   generatedAt: string;
+};
+
+export type EntityRecord = {
+  id: number;
+  entityType: string;
+  name: string;
+  description: string | null;
+  mentionCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  relations: {
+    relationType: string;
+    targetName: string;
+    targetType: string;
+    confidence: number;
+  }[];
+};
+
+export type EntityInsights = {
+  unaddressedPains: { name: string; mentionCount: number; description: string | null }[];
+  emergingTech: { name: string; mentionCount: number; description: string | null }[];
+  totalEntities: number;
+  totalRelations: number;
+};
+
+export type ScoringHealthRecord = {
+  currentWeights: {
+    profileId: string;
+    demand: number;
+    timing: number;
+    buildability: number;
+    virality: number;
+    source: 'optimized' | 'default';
+  };
+  optimizationHistory: {
+    computedAt: string;
+    demand: number;
+    timing: number;
+    buildability: number;
+    virality: number;
+    precision: number | null;
+    sampleSize: number | null;
+  }[];
+  predictionTrackRecord: {
+    total: number;
+    validated: number;
+    accuracy: number | null;
+  };
+  experienceLibrarySize: number;
 };

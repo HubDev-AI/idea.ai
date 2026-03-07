@@ -6,15 +6,20 @@ import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
 import { registerAgentStatusRoute } from './routes/agent_status';
 import { type AiHealthRecord, registerAiHealthRoute } from './routes/ai_health';
 import { type ConnectorStatusRecord, registerConnectorRoute } from './routes/connectors';
+import { registerEntitiesRoute } from './routes/entities';
 import { type FeedRecord, registerFeedRoute } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_status';
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
 import { registerOpportunityMapRoute } from './routes/opportunity_map';
 import { registerProfilesRoute } from './routes/profiles.js';
+import { registerScoringHealthRoute } from './routes/scoring_health';
+import { getActiveWeights } from './runtime/active_weights';
 import { registerThesesRoute } from './routes/theses';
+import { registerThesisExplainRoute } from './routes/thesis_explain';
 import type { AgentRunStore } from './runtime/agent_run_store';
 import type { DeepDiveStore } from './runtime/deep_dive_store';
+import type { EntityStore } from './runtime/entity_store';
 import type { ExecutionLogger } from './runtime/execution_logger';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
@@ -39,6 +44,8 @@ export type ServerDeps = {
   triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
   logger?: ExecutionLogger;
   pool?: import('pg').Pool;
+  entityStore?: EntityStore | null;
+  getRouterStats?: () => { stats: { ollamaCalls: number; ollamaSucceeded: number; ollamaFailed: number; cliCalls: number; cliSucceeded: number; cliFailed: number; fallbacks: number }; enabled: boolean } | null;
 };
 
 const defaultDeps: ServerDeps = {
@@ -137,7 +144,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     logger: resolvedDeps.logger
   });
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
-  registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
+  registerAiHealthRoute(app, {
+    getAiHealth: resolvedDeps.getAiHealth,
+    ...(resolvedDeps.getRouterStats ? { getRouterStats: resolvedDeps.getRouterStats } : {}),
+  });
   registerHealthRoute(app);
   registerProfilesRoute(app);
 
@@ -157,10 +167,24 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
       deepDiveAi: resolvedDeps.deepDiveAi ?? null,
       logger: resolvedDeps.logger
     });
+    registerThesisExplainRoute(app, {
+      store: resolvedDeps.thesisStore,
+      pool: resolvedDeps.pool ?? null,
+    });
   }
 
   if (resolvedDeps.pool) {
     registerOpportunityMapRoute(app, { pool: resolvedDeps.pool });
+    registerScoringHealthRoute(app, {
+      pool: resolvedDeps.pool,
+      getActiveWeights: (profileId) => getActiveWeights(resolvedDeps.pool!, profileId),
+    });
+    if (resolvedDeps.entityStore) {
+      registerEntitiesRoute(app, {
+        pool: resolvedDeps.pool,
+        entityStore: resolvedDeps.entityStore,
+      });
+    }
   }
 
   if (resolvedDeps.infraStatusDeps) {

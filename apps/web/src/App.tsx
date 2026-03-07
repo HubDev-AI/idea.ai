@@ -19,7 +19,9 @@ import {
   triggerAgentRun,
   triggerConnectorRefresh,
 } from './api';
+import { ConnectionsView } from './components/ConnectionsView';
 import { OpportunityMapView } from './components/OpportunityMap';
+import { ScoringHealth } from './components/ScoringHealth';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
 import { ThesisCard } from './components/ThesisCard';
@@ -101,6 +103,8 @@ const App = () => {
   const [activeProfile, setActiveProfile] = useState('all');
   const [labelFilter, setLabelFilter] = useState<string>('all');
   const [omapOpen, setOmapOpen] = useState(false);
+  const [scoringHealthOpen, setScoringHealthOpen] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [logComponentFilter, setLogComponentFilter] = useState('all');
@@ -648,6 +652,44 @@ const App = () => {
           )}
         </section>
 
+        {/* Scoring Health drawer — collapsible bottom */}
+        <section className={`omap-drawer ${scoringHealthOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className="omap-drawer-toggle"
+            onClick={() => setScoringHealthOpen((v) => !v)}
+          >
+            <span className="omap-drawer-title">
+              Scoring Health
+            </span>
+            <span className="omap-drawer-chevron">{scoringHealthOpen ? '\u25BC' : '\u25B2'}</span>
+          </button>
+          {scoringHealthOpen && (
+            <div className="omap-drawer-scroll">
+              <ScoringHealth apiUrl={API_BASE} />
+            </div>
+          )}
+        </section>
+
+        {/* Connections drawer — collapsible bottom */}
+        <section className={`omap-drawer ${connectionsOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className="omap-drawer-toggle"
+            onClick={() => setConnectionsOpen((v) => !v)}
+          >
+            <span className="omap-drawer-title">
+              Connections
+            </span>
+            <span className="omap-drawer-chevron">{connectionsOpen ? '\u25BC' : '\u25B2'}</span>
+          </button>
+          {connectionsOpen && (
+            <div className="omap-drawer-scroll">
+              <ConnectionsView apiUrl={API_BASE} />
+            </div>
+          )}
+        </section>
+
         {/* Log drawer — collapsible bottom */}
         <section className={`log-drawer ${logDrawerOpen ? 'open' : ''}`}>
           <button
@@ -676,17 +718,6 @@ const App = () => {
                     }}
                   >
                     Copy
-                  </button>
-                  <button
-                    type="button"
-                    className="log-action-btn"
-                    title="Clear log view"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLogs([]);
-                    }}
-                  >
-                    Clear
                   </button>
                 </>
               )}

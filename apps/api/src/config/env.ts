@@ -54,6 +54,7 @@ export type RuntimeEnv = {
   weightOptMinPredictions: number;
   weightOptMinImprovement: number;
   weightOptGridStep: number;
+  entityExtractBatchSize: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -104,7 +105,8 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     weightOptIntervalMs: parseNumber(env.WEIGHT_OPT_INTERVAL_MS, 7 * 24 * 60 * 60 * 1000),
     weightOptMinPredictions: parseNumber(env.WEIGHT_OPT_MIN_PREDICTIONS, 50),
     weightOptMinImprovement: parseNumber(env.WEIGHT_OPT_MIN_IMPROVEMENT, 0.05),
-    weightOptGridStep: parseNumber(env.WEIGHT_OPT_GRID_STEP, 0.05)
+    weightOptGridStep: parseNumber(env.WEIGHT_OPT_GRID_STEP, 0.05),
+    entityExtractBatchSize: parseNumber(env.ENTITY_EXTRACT_BATCH_SIZE, 10)
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;

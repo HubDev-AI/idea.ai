@@ -1773,6 +1773,375 @@ a.signal-idea-link:hover {
   border-top: 1px solid var(--glass-border);
 }
 
+/* ── Deep-Dive Tabs ──────────────────────────────────── */
+
+.deep-dive-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 0.5rem;
+}
+
+.deep-dive-tab {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.deep-dive-tab:hover {
+  background: var(--glass);
+  color: var(--text);
+}
+
+.deep-dive-tab.active {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* ── Explain Tab ─────────────────────────────────────── */
+
+.explain-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.explain-section h3 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem;
+}
+
+/* Weight bars */
+.explain-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.explain-bar-row {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.explain-bar-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.explain-bar-track {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.explain-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.explain-bar-value {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.explain-blended {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--glass-border);
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.explain-blended strong {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  color: var(--accent);
+  font-size: 1rem;
+}
+
+.explain-weights-badge {
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Debate cards */
+.explain-debate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.explain-debate-case {
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid;
+  background: var(--glass);
+}
+
+.explain-debate-case.bull {
+  border-left-color: var(--ok);
+}
+
+.explain-debate-case.bear {
+  border-left-color: var(--err);
+}
+
+.explain-debate-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+.explain-debate-case.bull .explain-debate-label {
+  color: var(--ok);
+}
+
+.explain-debate-case.bear .explain-debate-label {
+  color: var(--err);
+}
+
+.explain-debate-case p {
+  font-size: 0.8rem;
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.explain-debate-strength {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+  display: block;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+/* Verdict */
+.explain-verdict {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.explain-verdict-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: capitalize;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--glass-border);
+}
+
+.explain-verdict-badge.strong-opportunity {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--ok);
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.explain-verdict-badge.needs-investigation {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.explain-verdict-badge.contested {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--err);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.explain-verdict-badge.likely-noise {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.explain-verdict-conf {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.explain-missing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.explain-missing-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.explain-missing-item {
+  font-size: 0.68rem;
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  color: var(--warn);
+}
+
+/* Trail */
+.explain-trail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.explain-trail-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.explain-trail-arrow {
+  color: var(--muted);
+}
+
+.explain-trail-updates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.explain-trail-update {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  background: var(--glass);
+}
+
+.explain-trail-update.positive {
+  border-left: 2px solid var(--ok);
+}
+
+.explain-trail-update.negative {
+  border-left: 2px solid var(--err);
+}
+
+.explain-trail-source {
+  color: var(--text);
+}
+
+.explain-trail-delta {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-weight: 600;
+}
+
+.explain-trail-update.positive .explain-trail-delta {
+  color: var(--ok);
+}
+
+.explain-trail-update.negative .explain-trail-delta {
+  color: var(--err);
+}
+
+.explain-trail-date {
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.explain-trail-empty {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Evidence list */
+.explain-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.explain-evidence-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--glass);
+  border-radius: 5px;
+  align-items: start;
+}
+
+.explain-evidence-score {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--surface-2);
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.explain-evidence-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.explain-evidence-text {
+  font-size: 0.78rem;
+  color: var(--text);
+  line-height: 1.4;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.explain-evidence-source {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
 /* Toast notifications */
 .toast-container {
   position: fixed;
@@ -1908,3 +2277,284 @@ a.signal-idea-link:hover {
   scrollbar-width: thin;
   scrollbar-color: var(--surface-2) transparent;
 }
+
+/* Scoring Health */
+.scoring-container { padding: 16px 0; }
+
+.scoring-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.scoring-card {
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.scoring-card h3 {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scoring-badge {
+  font-size: 0.65rem;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.scoring-badge.optimized {
+  background: var(--ok);
+  color: #000;
+}
+.scoring-badge.default {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--glass-border);
+}
+
+.scoring-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 0.82rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.scoring-stat-row:last-child {
+  border-bottom: none;
+}
+.scoring-stat-row span:first-child {
+  color: var(--muted);
+}
+.scoring-stat-row span:last-child {
+  font-weight: 500;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.scoring-history-section {
+  margin-top: 4px;
+}
+
+.scoring-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  margin-top: 8px;
+}
+.scoring-history-table th {
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--glass-border);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.scoring-history-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.scoring-error { color: var(--err); padding: 16px; }
+.scoring-loading { color: var(--muted); padding: 16px; }
+
+/* ── Connections (Knowledge Graph) ─────────────────── */
+
+.conn-container { padding: 16px 0; }
+
+.conn-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.conn-section {
+  margin-bottom: 16px;
+}
+.conn-section h4 {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.conn-insight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.conn-insight-item {
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.conn-insight-item.pain {
+  border-left: 3px solid var(--err);
+}
+.conn-insight-item.tech {
+  border-left: 3px solid var(--accent);
+}
+.conn-insight-item strong {
+  font-size: 0.85rem;
+}
+.conn-mention-count {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+.conn-insight-desc {
+  width: 100%;
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.conn-type-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.conn-type-btn {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 3px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.conn-type-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.conn-type-btn.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+
+.conn-entity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.conn-entity-item {
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.conn-entity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+.conn-entity-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.conn-entity-type {
+  font-size: 0.65rem;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.conn-entity-type.pain_point { background: var(--err); color: #000; }
+.conn-entity-type.technology { background: var(--accent); color: #000; }
+.conn-entity-type.market { background: var(--ok); color: #000; }
+.conn-entity-type.competitor { background: var(--warn); color: #000; }
+.conn-entity-type.trend { background: #a78bfa; color: #000; }
+
+.conn-entity-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.conn-entity-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  flex-shrink: 0;
+}
+
+.conn-relations {
+  list-style: none;
+  margin: 0;
+  padding: 4px 12px 8px 36px;
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.conn-relation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.conn-rel-type {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.68rem;
+  color: var(--accent);
+  min-width: 80px;
+}
+.conn-rel-target {
+  flex: 1;
+}
+.conn-rel-confidence {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.68rem;
+}
+
+.conn-loading { color: var(--muted); padding: 16px; }
+.conn-error { color: var(--err); padding: 16px; }
+.conn-empty { color: var(--muted); padding: 16px; font-size: 0.82rem; }
