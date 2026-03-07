@@ -251,6 +251,29 @@ export type OpportunityMapRecord = {
   generatedAt: string;
 };
 
+export type EntityRecord = {
+  id: number;
+  entityType: string;
+  name: string;
+  description: string | null;
+  mentionCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  relations: {
+    relationType: string;
+    targetName: string;
+    targetType: string;
+    confidence: number;
+  }[];
+};
+
+export type EntityInsights = {
+  unaddressedPains: { name: string; mentionCount: number; description: string | null }[];
+  emergingTech: { name: string; mentionCount: number; description: string | null }[];
+  totalEntities: number;
+  totalRelations: number;
+};
+
 export type ScoringHealthRecord = {
   currentWeights: {
     profileId: string;

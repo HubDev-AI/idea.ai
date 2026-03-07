@@ -10,6 +10,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { loadEnvFile } from './config/dotenv';
 import { loadRuntimeEnv } from './config/env';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
+import { extractEntities } from './jobs/entity_extractor';
 import { snapshotPredictions } from './jobs/backtest_snapshot';
 import { validatePredictions } from './jobs/backtest_validate';
 import { resolveAiJudgeSettings } from './jobs/ai_judges';
@@ -256,6 +257,28 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
     stateHub.pushRefreshMeta();
     await readModel.refresh(cadence);
     void stateHub.broadcastAll();
+
+    // Entity extraction: run after refresh if both entityStore and modelRouter are available
+    if (entityStore && modelRouter && memoryStore) {
+      try {
+        const rEnv = loadRuntimeEnv(process.env);
+        const signals = await memoryStore.listAllSignals(rEnv.entityExtractBatchSize);
+        for (const signal of signals) {
+          try {
+            await extractEntities({
+              signalText: signal.canonical_text,
+              signalId: signal.signal_id,
+              route: modelRouter.route,
+              entityStore,
+            });
+          } catch {
+            // Non-critical — skip individual signal failures
+          }
+        }
+      } catch {
+        // Non-critical — entity extraction is best-effort
+      }
+    }
   },
   thesisStore,
   memoryStore,
@@ -271,6 +294,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   agentRunStore,
   corsOrigins,
   pool: pool ?? undefined,
+  entityStore,
   infraStatusDeps: {
     checkPostgres: async () => {
       if (!memoryStore) return false;

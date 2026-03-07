@@ -6,6 +6,7 @@ import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
 import { registerAgentStatusRoute } from './routes/agent_status';
 import { type AiHealthRecord, registerAiHealthRoute } from './routes/ai_health';
 import { type ConnectorStatusRecord, registerConnectorRoute } from './routes/connectors';
+import { registerEntitiesRoute } from './routes/entities';
 import { type FeedRecord, registerFeedRoute } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_status';
@@ -18,6 +19,7 @@ import { registerThesesRoute } from './routes/theses';
 import { registerThesisExplainRoute } from './routes/thesis_explain';
 import type { AgentRunStore } from './runtime/agent_run_store';
 import type { DeepDiveStore } from './runtime/deep_dive_store';
+import type { EntityStore } from './runtime/entity_store';
 import type { ExecutionLogger } from './runtime/execution_logger';
 import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
 import type { ThesisStore } from './runtime/thesis_store';
@@ -42,6 +44,7 @@ export type ServerDeps = {
   triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
   logger?: ExecutionLogger;
   pool?: import('pg').Pool;
+  entityStore?: EntityStore | null;
 };
 
 const defaultDeps: ServerDeps = {
@@ -172,6 +175,12 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
       pool: resolvedDeps.pool,
       getActiveWeights: (profileId) => getActiveWeights(resolvedDeps.pool!, profileId),
     });
+    if (resolvedDeps.entityStore) {
+      registerEntitiesRoute(app, {
+        pool: resolvedDeps.pool,
+        entityStore: resolvedDeps.entityStore,
+      });
+    }
   }
 
   if (resolvedDeps.infraStatusDeps) {
