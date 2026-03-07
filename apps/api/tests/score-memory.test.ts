@@ -56,4 +56,19 @@ describe('memory-aware scoring', () => {
     expect(withMemory.memory.novelty).toBeGreaterThanOrEqual(0);
     expect(withMemory.memory.persistence).toBeGreaterThan(0);
   });
+
+  it('uses custom weights when provided', () => {
+    const weights = { demand: 0.5, timing: 0.1, buildability: 0.1, virality: 0.3 };
+    const result = scoreSignal({
+      text: 'manual costly compliance process creates friction',
+      judgeScores: [60, 70, 65],
+      weights,
+    });
+    const defaultResult = scoreSignal({
+      text: 'manual costly compliance process creates friction',
+      judgeScores: [60, 70, 65],
+    });
+    expect(result.blended).not.toBe(defaultResult.blended);
+    expect(result.demand).toBe(defaultResult.demand);
+  });
 });
