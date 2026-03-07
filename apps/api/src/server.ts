@@ -45,6 +45,7 @@ export type ServerDeps = {
   logger?: ExecutionLogger;
   pool?: import('pg').Pool;
   entityStore?: EntityStore | null;
+  getRouterStats?: () => { stats: { ollamaCalls: number; ollamaSucceeded: number; ollamaFailed: number; cliCalls: number; cliSucceeded: number; cliFailed: number; fallbacks: number }; enabled: boolean } | null;
 };
 
 const defaultDeps: ServerDeps = {
@@ -143,7 +144,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     logger: resolvedDeps.logger
   });
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
-  registerAiHealthRoute(app, { getAiHealth: resolvedDeps.getAiHealth });
+  registerAiHealthRoute(app, {
+    getAiHealth: resolvedDeps.getAiHealth,
+    ...(resolvedDeps.getRouterStats ? { getRouterStats: resolvedDeps.getRouterStats } : {}),
+  });
   registerHealthRoute(app);
   registerProfilesRoute(app);
 

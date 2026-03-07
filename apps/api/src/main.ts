@@ -289,6 +289,9 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
     preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider
   },
   logger: createExecutionLogger({ runId: 'api-services' }),
+  getRouterStats: () => modelRouter
+    ? { stats: modelRouter.getStats(), enabled: startupEnv.modelRoutingEnabled }
+    : null,
   getAgentStatus: () => ({ ...agentStatus, isRunning: agentRunInFlight !== null }),
   triggerAgentRun: executeAgentRun,
   agentRunStore,

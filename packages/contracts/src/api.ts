@@ -105,6 +105,14 @@ export type AiHealthRecord = {
   post_scrape_max_signals: number;
   judge_max_signals: number;
   providers: AiProviderHealthRecord[];
+  routerStats?: {
+    ollamaCalls: number;
+    ollamaSucceeded: number;
+    cliCalls: number;
+    cliSucceeded: number;
+    fallbacks: number;
+    routingEnabled: boolean;
+  };
 };
 
 // -- Theses / Research agent --------------------------------------- */
