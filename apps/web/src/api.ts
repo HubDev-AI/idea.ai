@@ -10,6 +10,7 @@ import type {
   SignalPage,
   FeedRecord as SignalRecord,
   ThesisDeepDive,
+  ThesisExplainRecord,
   ThesisListItem,
   ThesisPage,
   ThesisStats
@@ -23,6 +24,7 @@ export type {
   AiProviderHealthRecord,
   AiHealthRecord,
   ThesisDeepDive,
+  ThesisExplainRecord,
   ThesisListItem,
   ThesisPage,
   ThesisStats,
@@ -254,4 +256,10 @@ export const fetchProfiles = async (): Promise<ProfileDisplay[]> => {
   const response = await fetch(buildApiUrl('/v1/profiles'));
   if (!response.ok) throw new Error('Failed to load profiles');
   return response.json() as Promise<ProfileDisplay[]>;
+};
+
+export const fetchThesisExplain = async (canonicalKey: string): Promise<ThesisExplainRecord> => {
+  const response = await fetch(buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/explain`));
+  if (!response.ok) throw new Error(`fetchThesisExplain failed: ${response.status}`);
+  return response.json() as Promise<ThesisExplainRecord>;
 };

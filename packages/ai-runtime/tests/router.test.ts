@@ -54,4 +54,65 @@ describe('createRouter', () => {
     const result = await router.route('unknown_task', 'test');
     expect(deps.runCli).toHaveBeenCalled();
   });
+
+  it('starts with zeroed stats', () => {
+    const router = createRouter(makeDeps());
+    const stats = router.getStats();
+    expect(stats).toEqual({
+      ollamaCalls: 0, ollamaSucceeded: 0, ollamaFailed: 0,
+      cliCalls: 0, cliSucceeded: 0, cliFailed: 0, fallbacks: 0,
+    });
+  });
+
+  it('tracks Ollama success stats', async () => {
+    const router = createRouter(makeDeps());
+    await router.route('noise_classification', 'test');
+    const stats = router.getStats();
+    expect(stats.ollamaCalls).toBe(1);
+    expect(stats.ollamaSucceeded).toBe(1);
+    expect(stats.ollamaFailed).toBe(0);
+    expect(stats.cliCalls).toBe(0);
+  });
+
+  it('tracks CLI success stats for expensive tasks', async () => {
+    const router = createRouter(makeDeps());
+    await router.route('thesis_synthesis', 'test');
+    const stats = router.getStats();
+    expect(stats.cliCalls).toBe(1);
+    expect(stats.cliSucceeded).toBe(1);
+    expect(stats.ollamaCalls).toBe(0);
+  });
+
+  it('tracks fallback stats on Ollama failure with CLI fallback', async () => {
+    const router = createRouter(makeDeps({
+      runOllama: vi.fn().mockRejectedValue(new Error('fail')),
+    }));
+    await router.route('basic_scoring', 'test');
+    const stats = router.getStats();
+    expect(stats.ollamaCalls).toBe(1);
+    expect(stats.ollamaFailed).toBe(1);
+    expect(stats.ollamaSucceeded).toBe(0);
+    expect(stats.fallbacks).toBe(1);
+    expect(stats.cliCalls).toBe(1);
+    expect(stats.cliSucceeded).toBe(1);
+  });
+
+  it('resets stats to zero', async () => {
+    const router = createRouter(makeDeps());
+    await router.route('noise_classification', 'test');
+    expect(router.getStats().ollamaCalls).toBe(1);
+    router.resetStats();
+    expect(router.getStats()).toEqual({
+      ollamaCalls: 0, ollamaSucceeded: 0, ollamaFailed: 0,
+      cliCalls: 0, cliSucceeded: 0, cliFailed: 0, fallbacks: 0,
+    });
+  });
+
+  it('getStats returns a copy (not mutable reference)', async () => {
+    const router = createRouter(makeDeps());
+    await router.route('noise_classification', 'test');
+    const stats = router.getStats();
+    stats.ollamaCalls = 999;
+    expect(router.getStats().ollamaCalls).toBe(1);
+  });
 });

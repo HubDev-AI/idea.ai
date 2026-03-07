@@ -245,6 +245,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {enabledProviders.length === 0 && <p className="sidebar-empty">No providers</p>}
       </nav>
 
+      {aiHealth?.routerStats && (
+        <nav className="sidebar-section">
+          <h3 className="sidebar-label">Model Routing</h3>
+          <div className="sidebar-row">
+            <span className="sidebar-row-name">Status</span>
+            <span className={`sidebar-row-detail ${aiHealth.routerStats.routingEnabled ? 'detail-ok' : 'detail-standby'}`}>
+              {aiHealth.routerStats.routingEnabled ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          <div className="sidebar-row">
+            <span className="sidebar-row-name">Ollama calls</span>
+            <span className="sidebar-row-detail detail-count">{aiHealth.routerStats.ollamaCalls} ({aiHealth.routerStats.ollamaSucceeded} ok)</span>
+          </div>
+          <div className="sidebar-row">
+            <span className="sidebar-row-name">CLI calls</span>
+            <span className="sidebar-row-detail detail-count">{aiHealth.routerStats.cliCalls} ({aiHealth.routerStats.cliSucceeded} ok)</span>
+          </div>
+          {aiHealth.routerStats.fallbacks > 0 && (
+            <div className="sidebar-row">
+              <span className="sidebar-row-name">Fallbacks</span>
+              <span className="sidebar-row-detail detail-count">{aiHealth.routerStats.fallbacks}</span>
+            </div>
+          )}
+        </nav>
+      )}
+
       <nav className="sidebar-section">
         <div className="sidebar-label-row">
           <h3 className="sidebar-label">Research Agent</h3>
