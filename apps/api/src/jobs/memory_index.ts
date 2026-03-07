@@ -23,58 +23,16 @@ export type SignalEmbeddingRecord = {
   model: string;
 };
 
-const EMBEDDING_DIMENSION = 768;
-const EMBEDDING_MODEL = 'local-hash-v1';
 const OLLAMA_EMBEDDING_MODEL = 'ollama-nomic-embed-text';
-
-const tokenize = (text: string): string[] =>
-  text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]+/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-
-const hashToken = (token: string): number => {
-  let hash = 2166136261;
-
-  for (let index = 0; index < token.length; index += 1) {
-    hash ^= token.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return Math.abs(hash);
-};
-
-const normalizeVector = (vector: number[]): number[] => {
-  const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
-
-  if (magnitude === 0) {
-    return vector;
-  }
-
-  return vector.map((value) => Math.round((value / magnitude) * 1_000_000) / 1_000_000);
-};
 
 export const buildCanonicalText = ({ idea, snippet, text, topic }: Pick<ScoredSignalInput, 'idea' | 'snippet' | 'text' | 'topic'>): string =>
   [idea.trim(), snippet.trim(), text.trim(), `topic:${topic.trim()}`].filter(Boolean).join(' | ');
 
-export const buildLocalEmbedding = (text: string, dimension = EMBEDDING_DIMENSION): number[] => {
-  const vector = Array.from({ length: dimension }, () => 0);
-
-  for (const token of tokenize(text)) {
-    const index = hashToken(token) % dimension;
-    vector[index] = (vector[index] ?? 0) + 1;
-  }
-
-  return normalizeVector(vector);
-};
-
 export const indexSignalMemory = async (
   input: ScoredSignalInput
-): Promise<{ memoryRecord: SignalMemoryRecord; embeddingRecord: SignalEmbeddingRecord }> => {
+): Promise<{ memoryRecord: SignalMemoryRecord; embeddingRecord: SignalEmbeddingRecord | null }> => {
   const canonicalText = buildCanonicalText(input);
   const ollamaEmbedding = await embedText(canonicalText, { fallbackToNull: true });
-  const finalEmbedding = ollamaEmbedding ?? buildLocalEmbedding(canonicalText);
 
   return {
     memoryRecord: {
@@ -90,10 +48,8 @@ export const indexSignalMemory = async (
       virality: input.virality,
       source_url: input.sourceUrl ?? null
     },
-    embeddingRecord: {
-      signal_id: input.signalId,
-      embedding: finalEmbedding,
-      model: ollamaEmbedding ? OLLAMA_EMBEDDING_MODEL : EMBEDDING_MODEL
-    }
+    embeddingRecord: ollamaEmbedding
+      ? { signal_id: input.signalId, embedding: ollamaEmbedding, model: OLLAMA_EMBEDDING_MODEL }
+      : null
   };
 };

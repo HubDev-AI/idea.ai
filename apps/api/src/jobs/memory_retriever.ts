@@ -1,47 +1,15 @@
 import type {
   SignalMemoryRecord,
-  SimilarSignalMatch,
   TrendWindowSnapshot
 } from '@idea/contracts/src/memory';
 import type { MemoryQuery, MemoryRetriever } from '@idea/pipeline/src/memory/retrieve';
-import { buildCanonicalText, buildLocalEmbedding, type SignalEmbeddingRecord } from './memory_index';
+import { buildCanonicalText, type SignalEmbeddingRecord } from './memory_index';
 import { refreshTrendWindows } from './memory_windows';
 
 export type IndexedMemoryEntry = {
   memoryRecord: SignalMemoryRecord;
-  embeddingRecord: SignalEmbeddingRecord;
+  embeddingRecord: SignalEmbeddingRecord | null;
 };
-
-const cosineDistance = (left: number[], right: number[]): number => {
-  let dot = 0;
-  let leftMagnitude = 0;
-  let rightMagnitude = 0;
-
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const l = left[index] ?? 0;
-    const r = right[index] ?? 0;
-    dot += l * r;
-    leftMagnitude += l * l;
-    rightMagnitude += r * r;
-  }
-
-  const denominator = Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude);
-  if (denominator === 0) {
-    return 1;
-  }
-
-  const similarity = dot / denominator;
-  return Math.min(1, Math.max(0, 1 - similarity));
-};
-
-const toSimilarMatch = (entry: IndexedMemoryEntry, distance: number): SimilarSignalMatch => ({
-  signal_id: entry.memoryRecord.signal_id,
-  distance: Math.round(distance * 10000) / 10000,
-  demand: entry.memoryRecord.demand,
-  timing: entry.memoryRecord.timing,
-  source: entry.memoryRecord.source,
-  observed_at: entry.memoryRecord.observed_at
-});
 
 const trendWindowsFor = (
   allRecords: SignalMemoryRecord[],
@@ -60,18 +28,10 @@ export const createInMemoryRetriever = (
   const allRecords = entries.map((entry) => entry.memoryRecord);
 
   return {
-    findSimilar: async (query: MemoryQuery) => {
-      const queryEmbedding = buildLocalEmbedding(query.canonicalText);
-      const limit = query.topK ?? 8;
-
-      return entries
-        .filter((entry) => entry.memoryRecord.topic === query.topic || entry.memoryRecord.source === query.source)
-        .filter((entry) => entry.embeddingRecord.embedding !== null)
-        .map((entry) =>
-          toSimilarMatch(entry, cosineDistance(entry.embeddingRecord.embedding!, queryEmbedding))
-        )
-        .sort((left, right) => left.distance - right.distance)
-        .slice(0, limit);
+    findSimilar: async (_query: MemoryQuery) => {
+      // In-memory retriever cannot do real similarity search without Ollama.
+      // The Postgres retriever handles real similarity queries via pgvector.
+      return [];
     },
     getTrendWindows: async (query: MemoryQuery) => trendWindowsFor(allRecords, query, now)
   };

@@ -1,7 +1,7 @@
 import type { ConnectorStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
 import type { FastifyInstance } from 'fastify';
 import type { ExecutionLogger } from '../runtime/execution_logger';
-import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
+import type { PostgresSignalStore } from '../runtime/postgres_signal_store';
 
 export type { ConnectorStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
 
@@ -9,7 +9,7 @@ export const registerConnectorRoute = (
   app: FastifyInstance,
   deps: {
     listConnectors: () => Promise<ConnectorStatusRecord[]>;
-    memoryStore?: PostgresMemoryStore | null;
+    signalStore?: PostgresSignalStore | null;
     getRefreshMeta?: () => RefreshMeta;
     triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
     logger?: Pick<ExecutionLogger, 'info'>;
@@ -18,10 +18,10 @@ export const registerConnectorRoute = (
   app.get('/v1/connectors', async () => deps.listConnectors());
 
   app.get('/v1/signals/counts', async () => {
-    if (!deps.memoryStore) {
+    if (!deps.signalStore) {
       return {};
     }
-    return deps.memoryStore.countSignalsBySource();
+    return deps.signalStore.countSignalsBySource();
   });
 
   app.get('/v1/connectors/refresh-meta', async () => {

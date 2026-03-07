@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /* ------------------------------------------------------------------ */
-/* Mock pg.Pool so createPostgresMemoryStore never hits a real DB      */
+/* Mock pg.Pool so createPostgresSignalStore never hits a real DB      */
 /* ------------------------------------------------------------------ */
 
 const mockQuery = vi.fn();
@@ -18,17 +18,13 @@ vi.doMock('pg', () => ({
   Pool: vi.fn(() => mockPool)
 }));
 
-/* Mock buildLocalEmbedding (used by retriever.findSimilar) so we
-   don't depend on the real hashing implementation in tests */
-vi.doMock('../src/jobs/memory_index', () => ({
-  buildLocalEmbedding: vi.fn(() => Array.from({ length: 768 }, () => 0.1))
-}));
+/* Mock memory_index — buildLocalEmbedding was removed, only type re-exports needed */
 
 /* ------------------------------------------------------------------ */
 /* Tests                                                               */
 /* ------------------------------------------------------------------ */
 
-describe('PostgresMemoryStore', () => {
+describe('PostgresSignalStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Re-wire mockConnect default after clearAllMocks
@@ -41,24 +37,24 @@ describe('PostgresMemoryStore', () => {
   /* ---- ping ---- */
 
   it('ping succeeds when SELECT 1 resolves', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     mockQuery.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
     await expect(store.ping()).resolves.toBeUndefined();
     expect(mockQuery).toHaveBeenCalledWith('SELECT 1');
   });
 
   it('ping rejects when pool.query throws', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     mockQuery.mockRejectedValueOnce(new Error('connection refused'));
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
     await expect(store.ping()).rejects.toThrow('connection refused');
   });
 
   /* ---- listAllSignals ---- */
 
   it('listAllSignals returns mapped rows with numeric coercion', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
@@ -75,7 +71,7 @@ describe('PostgresMemoryStore', () => {
         }
       ]
     });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
     const signals = await store.listAllSignals(10);
     expect(signals).toHaveLength(1);
     expect(signals[0]).toEqual({
@@ -96,15 +92,15 @@ describe('PostgresMemoryStore', () => {
   });
 
   it('listAllSignals defaults limit to 500', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
     await store.listAllSignals();
     expect(mockQuery.mock.calls[0]![1]).toEqual([500]);
   });
 
   it('listAllSignals coerces NaN/null values to 0', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
@@ -121,7 +117,7 @@ describe('PostgresMemoryStore', () => {
         }
       ]
     });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
     const signals = await store.listAllSignals();
     expect(signals[0]!.demand).toBe(0);
     expect(signals[0]!.timing).toBe(0);
@@ -132,11 +128,11 @@ describe('PostgresMemoryStore', () => {
   /* ---- save ---- */
 
   it('save commits a transaction using pool.connect', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     // BEGIN, upsertSignalMemory INSERT, upsertSignalMemory INSERT (embedding),
     // upsertTrendWindows (3 windows), COMMIT
     mockQuery.mockResolvedValue({ rows: [] });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
 
     const entry = {
       memoryRecord: {
@@ -169,9 +165,9 @@ describe('PostgresMemoryStore', () => {
   });
 
   it('save skips embedding insert when embedding is null', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     mockQuery.mockResolvedValue({ rows: [] });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
 
     const entry = {
       memoryRecord: {
@@ -185,16 +181,12 @@ describe('PostgresMemoryStore', () => {
         buildability: 50,
         blended: 50
       },
-      embeddingRecord: {
-        signal_id: 's2',
-        embedding: null,
-        model: 'local-hash-v1'
-      }
+      embeddingRecord: null
     };
 
     await store.save(entry);
 
-    // Should have: BEGIN, signal_memory INSERT, 3x trend_windows, COMMIT = 6 calls
+    // Should have: BEGIN, scored_signals INSERT, 3x trend_windows, COMMIT = 6 calls
     // (no signal_embeddings INSERT because embedding is null)
     const queries = mockQuery.mock.calls.map((c: any[]) => c[0] as string);
     const embeddingInserts = queries.filter((q: string) => q.includes('signal_embeddings'));
@@ -203,8 +195,8 @@ describe('PostgresMemoryStore', () => {
   });
 
   it('save rolls back and re-throws on error', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
-    // BEGIN succeeds, signal_memory INSERT throws
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
+    // BEGIN succeeds, scored_signals INSERT throws
     mockQuery
       .mockResolvedValueOnce({ rows: [] }) // BEGIN
       .mockRejectedValueOnce(new Error('unique violation')); // INSERT
@@ -215,7 +207,7 @@ describe('PostgresMemoryStore', () => {
       error: vi.fn()
     } as any;
 
-    const store = createPostgresMemoryStore({
+    const store = createPostgresSignalStore({
       databaseUrl: 'postgres://test',
       logger: mockLogger
     });
@@ -246,7 +238,7 @@ describe('PostgresMemoryStore', () => {
     expect(queries).toContain('ROLLBACK');
     // Logger should have been notified
     expect(mockLogger.error).toHaveBeenCalledWith(
-      'postgres_memory_store',
+      'postgres_signal_store',
       'persist failed',
       expect.objectContaining({ signal_id: 's1', error: 'unique violation' })
     );
@@ -256,7 +248,8 @@ describe('PostgresMemoryStore', () => {
   /* ---- retriever.findSimilar ---- */
 
   it('retriever.findSimilar returns mapped rows', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
+    const mockEmbedText = vi.fn().mockResolvedValue(Array.from({ length: 768 }, () => 0.1));
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
@@ -269,7 +262,7 @@ describe('PostgresMemoryStore', () => {
         }
       ]
     });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test', embedText: mockEmbedText });
     const results = await store.retriever.findSimilar({
       canonicalText: 'test query',
       topic: 'ai',
@@ -293,9 +286,10 @@ describe('PostgresMemoryStore', () => {
   });
 
   it('retriever.findSimilar respects custom topK', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
+    const mockEmbedText = vi.fn().mockResolvedValue(Array.from({ length: 768 }, () => 0.1));
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test', embedText: mockEmbedText });
     await store.retriever.findSimilar({
       canonicalText: 'test',
       topic: 't',
@@ -309,7 +303,7 @@ describe('PostgresMemoryStore', () => {
   /* ---- retriever.getTrendWindows ---- */
 
   it('getTrendWindows returns all 3 windows in order', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     mockQuery.mockResolvedValueOnce({
       rows: [
         { topic: 'ai', source: 'hn', window: '7d', count_signals: 5, avg_demand: '72.50', avg_timing: '68.00' },
@@ -317,7 +311,7 @@ describe('PostgresMemoryStore', () => {
         { topic: 'ai', source: 'hn', window: '90d', count_signals: 50, avg_demand: '60.00', avg_timing: '55.00' }
       ]
     });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
     const windows = await store.retriever.getTrendWindows({
       canonicalText: 'irrelevant',
       topic: 'ai',
@@ -338,14 +332,14 @@ describe('PostgresMemoryStore', () => {
   });
 
   it('getTrendWindows fills missing windows with zeroes', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
     // Return only 7d; 30d and 90d are missing
     mockQuery.mockResolvedValueOnce({
       rows: [
         { topic: 'ai', source: 'hn', window: '7d', count_signals: 2, avg_demand: '50', avg_timing: '50' }
       ]
     });
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
     const windows = await store.retriever.getTrendWindows({
       canonicalText: 'irrelevant',
       topic: 'ai',
@@ -373,7 +367,7 @@ describe('PostgresMemoryStore', () => {
 
   describe('querySignals', () => {
     it('returns paginated signals within time window', async () => {
-      const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+      const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
       mockQuery.mockResolvedValueOnce({ rows: [{ count: 2 }] }); // count query
       mockQuery.mockResolvedValueOnce({
         rows: [
@@ -389,7 +383,7 @@ describe('PostgresMemoryStore', () => {
           }
         ]
       });
-      const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+      const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
       const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20 });
       expect(result.items).toHaveLength(2);
       expect(result.totalItems).toBe(2);
@@ -398,7 +392,7 @@ describe('PostgresMemoryStore', () => {
     });
 
     it('filters by source', async () => {
-      const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+      const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
       mockQuery.mockResolvedValueOnce({ rows: [{ count: 1 }] });
       mockQuery.mockResolvedValueOnce({
         rows: [{
@@ -407,7 +401,7 @@ describe('PostgresMemoryStore', () => {
           pain: '70', timing: '80', buildability: '60', blended: '72'
         }]
       });
-      const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+      const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
       const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20, source: 'hn' });
       expect(result.items).toHaveLength(1);
       // Verify SQL contains source filter
@@ -417,7 +411,7 @@ describe('PostgresMemoryStore', () => {
     });
 
     it('filters by thesis key via evidence join', async () => {
-      const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
+      const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
       mockQuery.mockResolvedValueOnce({ rows: [{ count: 1 }] });
       mockQuery.mockResolvedValueOnce({
         rows: [{
@@ -426,7 +420,7 @@ describe('PostgresMemoryStore', () => {
           pain: '70', timing: '80', buildability: '60', blended: '72'
         }]
       });
-      const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+      const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
       const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20, thesisKey: 'remote-dev-tools' });
       expect(result.items).toHaveLength(1);
       const sql = mockQuery.mock.calls[0]![0];
@@ -438,8 +432,8 @@ describe('PostgresMemoryStore', () => {
   /* ---- close ---- */
 
   it('close calls pool.end', async () => {
-    const { createPostgresMemoryStore } = await import('../src/runtime/postgres_memory_store');
-    const store = createPostgresMemoryStore({ databaseUrl: 'postgres://test' });
+    const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
+    const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
     await store.close();
     expect(mockEnd).toHaveBeenCalledTimes(1);
   });

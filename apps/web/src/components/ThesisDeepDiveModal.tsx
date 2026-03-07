@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ThesisDeepDive, ThesisListItem } from '../api';
 import { fetchThesisDeepDive, generateThesisDeepDive } from '../api';
+import { FormatText } from './FormatText';
 import { ThesisExplainTab } from './ThesisExplainTab';
 
 type Props = {
@@ -157,19 +158,19 @@ export const ThesisDeepDiveModal: React.FC<Props> = ({ thesis, cachedData, onClo
               <div className="deep-dive-content">
                 <section className="deep-dive-section">
                   <h3>What is this?</h3>
-                  <p>{data.summary}</p>
+                  <FormatText text={data.summary} />
                 </section>
                 <section className="deep-dive-section">
                   <h3>How it works</h3>
-                  <p>{data.howItWorks}</p>
+                  <FormatText text={data.howItWorks} />
                 </section>
                 <section className="deep-dive-section">
                   <h3>Growth strategy</h3>
-                  <p>{data.growthStrategy}</p>
+                  <FormatText text={data.growthStrategy} />
                 </section>
                 <section className="deep-dive-section">
                   <h3>Build suggestions</h3>
-                  <p>{data.buildSuggestions}</p>
+                  <FormatText text={data.buildSuggestions} />
                 </section>
                 {data.generatedBy && (
                   <p className="deep-dive-provider">

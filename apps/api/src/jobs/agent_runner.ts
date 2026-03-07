@@ -5,7 +5,7 @@ import type { AgentRunResult } from '@idea/contracts/src/api';
 import { consumerProfile } from '../profiles/consumer.js';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { JournalEntry, JournalStore } from '../runtime/journal_store';
-import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
+import type { PostgresSignalStore } from '../runtime/postgres_signal_store';
 import type { ThesisStore } from '../runtime/thesis_store';
 import {
   type AgentThesisSummary,
@@ -30,7 +30,7 @@ export type { AgentRunResult };
 
 export type AgentRunnerDeps = {
   thesisStore: ThesisStore;
-  memoryStore?: PostgresMemoryStore | null;
+  signalStore?: PostgresSignalStore | null;
   journalStore?: JournalStore | null;
   embedText?: (text: string) => Promise<number[] | null>;
   runClaude: (input: RunPromptInput) => Promise<RunPromptResult>;
@@ -110,15 +110,15 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     }));
 
   // Load recent signals with embeddings for clustering
-  const recentSignals = deps.memoryStore
-    ? await deps.memoryStore.listAllSignals(500)
+  const recentSignals = deps.signalStore
+    ? await deps.signalStore.listAllSignals(500)
     : [];
 
   // Load embeddings for clustering
   let clusterableSignals: ClusterableSignal[] = [];
-  if (deps.memoryStore && recentSignals.length > 0) {
+  if (deps.signalStore && recentSignals.length > 0) {
     const signalIds = recentSignals.map((s) => s.signal_id);
-    const embeddingRows = await deps.memoryStore.getEmbeddings(signalIds);
+    const embeddingRows = await deps.signalStore.getEmbeddings(signalIds);
 
     clusterableSignals = recentSignals
       .filter((s) => embeddingRows.has(s.signal_id))
@@ -232,8 +232,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   });
 
   // Load trend windows
-  const trendSummary = deps.memoryStore
-    ? (await deps.memoryStore.retriever.getTrendWindows({
+  const trendSummary = deps.signalStore
+    ? (await deps.signalStore.retriever.getTrendWindows({
         topic: 'general',
         source: 'all',
         canonicalText: ''
@@ -458,10 +458,10 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
 
     // Similarity search for historical signals
     let historicalSignals: { signal_id: string; text: string; source: string; demand: number; timing: number; virality?: number }[] = [];
-    if (deps.memoryStore && deps.embedText) {
+    if (deps.signalStore && deps.embedText) {
       const topicEmbedding = await deps.embedText(dig.topic);
       if (topicEmbedding) {
-        const similar = await deps.memoryStore.retriever.findSimilar({
+        const similar = await deps.signalStore.retriever.findSimilar({
           topic: dig.topic,
           source: 'all',
           canonicalText: dig.topic,

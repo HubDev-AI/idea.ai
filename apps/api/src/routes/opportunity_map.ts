@@ -18,9 +18,11 @@ export const registerOpportunityMapRoute = (
       topic: string;
       velocity: number | null;
       evidence_count: number;
+      problem_statement: string | null;
+      status: string;
     }>(
       `SELECT tc.canonical_key, tc.title, tc.confidence, tc.topic,
-              tc.velocity,
+              tc.velocity, tc.problem_statement, tc.status,
               COUNT(DISTINCT te.signal_id)::int AS evidence_count
        FROM thesis_candidates tc
        LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
@@ -42,6 +44,8 @@ export const registerOpportunityMapRoute = (
         velocity: row.velocity ?? 0,
         supply: 0,
         demand: row.evidence_count,
+        problemStatement: row.problem_statement ?? undefined,
+        status: row.status,
       });
     }
 
@@ -54,7 +58,7 @@ export const registerOpportunityMapRoute = (
         velocity: Math.round(children.reduce((s, c) => s + c.velocity, 0) / children.length * 10) / 10,
         supply: 0,
         demand: children.reduce((s, c) => s + c.demand, 0),
-        children: children.slice(0, 5),
+        children: children.slice(0, 15),
       }))
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 10);

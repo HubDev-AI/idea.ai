@@ -26,7 +26,7 @@ const buildMockPool = (opts?: {
         return { rows: wRows };
       }
       // optimization history query
-      if (s.includes('scoring_weight_history') && s.includes('LIMIT $1')) {
+      if (s.includes('scoring_weight_history') && s.includes('LIMIT $2')) {
         return { rows: hRows };
       }
       // prediction track record

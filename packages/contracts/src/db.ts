@@ -3,7 +3,7 @@ export const DB_TABLES = {
   normalizedSignals: 'normalized_signals',
   publishedSignals: 'published_signals',
   connectorState: 'connector_state',
-  signalMemory: 'signal_memory',
+  scoredSignals: 'scored_signals',
   signalEmbeddings: 'signal_embeddings',
   trendWindows: 'trend_windows'
 } as const;

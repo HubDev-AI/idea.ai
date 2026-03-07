@@ -4,13 +4,13 @@ import { generateDeepDive } from '../jobs/deep_dive_generator';
 import { buildThesisCandidates } from '../jobs/thesis_synthesizer';
 import type { DeepDiveStore } from '../runtime/deep_dive_store';
 import type { ExecutionLogger } from '../runtime/execution_logger';
-import type { PostgresMemoryStore } from '../runtime/postgres_memory_store';
+import type { PostgresSignalStore } from '../runtime/postgres_signal_store';
 import type { PaginatedThesisStore } from '../runtime/postgres_thesis_store';
 import type { ThesisStore } from '../runtime/thesis_store';
 
 export type ThesesRouteDeps = {
   store: ThesisStore;
-  memoryStore?: PostgresMemoryStore | null;
+  signalStore?: PostgresSignalStore | null;
   deepDiveStore?: DeepDiveStore | null;
   deepDiveAi?: DeepDiveGeneratorDeps | null;
   logger?: Pick<ExecutionLogger, 'info' | 'debug' | 'error'>;
@@ -66,6 +66,16 @@ export const registerThesesRoute = (
       return { error: 'Missing thesis key' };
     }
 
+    // Return full ThesisListItem shape when using paginated store
+    if ('getAsListItem' in deps.store) {
+      const item = await (deps.store as import('../runtime/postgres_thesis_store').PaginatedThesisStore).getAsListItem(key);
+      if (!item) {
+        reply.code(404);
+        return { error: 'Thesis not found' };
+      }
+      return item;
+    }
+
     const draft = await deps.store.getByKey(key);
     if (!draft) {
       reply.code(404);
@@ -118,12 +128,12 @@ export const registerThesesRoute = (
   app.post('/v1/theses/synthesize', {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } }
   }, async (_request, reply) => {
-    if (!deps.memoryStore) {
+    if (!deps.signalStore) {
       reply.code(503);
       return { error: 'Memory store not available' };
     }
 
-    const signals = await deps.memoryStore.listAllSignals(500);
+    const signals = await deps.signalStore.listAllSignals(500);
     if (signals.length === 0) {
       return { theses: [], message: 'No signals in memory store' };
     }

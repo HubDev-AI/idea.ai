@@ -33,7 +33,7 @@ import type { FeedRecord } from '../routes/feed';
 import type { ExecutionLogRecord, ListLogsQuery } from '../routes/logs';
 import { readExecutionLogs } from './execution_log_reader';
 import { createExecutionLogger, createRunId } from './execution_logger';
-import { createPostgresMemoryStore, type PostgresMemoryStore } from './postgres_memory_store';
+import { createPostgresSignalStore, type PostgresSignalStore } from './postgres_signal_store';
 import type { ProviderCircuitBreaker } from './provider_circuit';
 import {
   applySourceQualityPenalty,
@@ -398,7 +398,7 @@ const buildInitialConnectors = (env: RuntimeEnv): ConnectorStatusRecord[] => {
 };
 
 export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
-  persistentStore?: PostgresMemoryStore;
+  persistentStore?: PostgresSignalStore;
   circuit?: ProviderCircuitBreaker;
   pool?: import('pg').Pool;
 }) => {
@@ -408,7 +408,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   const initialAiPostScrapeSettings = resolveAiPostScrapeSettings(process.env);
   const circuit = opts?.circuit;
   const memoryEntries: IndexedMemoryEntry[] = [];
-  let postgresMemoryStore: PostgresMemoryStore | null | undefined = opts?.persistentStore ?? undefined;
+  let postgresSignalStore: PostgresSignalStore | null | undefined = opts?.persistentStore ?? undefined;
   let snapshotHydrated = false;
   let refreshInFlight: Promise<Snapshot> | null = null;
   let refreshingCadence: 'hourly' | 'daily' | null = null;
@@ -438,7 +438,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
 
     snapshotHydrated = true;
 
-    const store = await resolvePostgresMemoryStore(env, logger);
+    const store = await resolvePostgresSignalStore(env, logger);
     if (!store) {
       return;
     }
@@ -465,7 +465,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     logger: ReturnType<typeof createExecutionLogger>,
     state: { lastHourlyRunAt: number; lastDailyRunAt: number; refreshedAt: number }
   ): Promise<void> => {
-    const store = await resolvePostgresMemoryStore(env, logger);
+    const store = await resolvePostgresSignalStore(env, logger);
     if (!store) {
       return;
     }
@@ -479,36 +479,36 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     }
   };
 
-  const resolvePostgresMemoryStore = async (
+  const resolvePostgresSignalStore = async (
     env: RuntimeEnv,
     logger: ReturnType<typeof createExecutionLogger>
-  ): Promise<PostgresMemoryStore | null> => {
-    if (postgresMemoryStore !== undefined) {
-      return postgresMemoryStore;
+  ): Promise<PostgresSignalStore | null> => {
+    if (postgresSignalStore !== undefined) {
+      return postgresSignalStore;
     }
 
     if (!env.databaseUrl) {
-      postgresMemoryStore = null;
+      postgresSignalStore = null;
       await logger.warn('live_read_model', 'DATABASE_URL not set, using in-memory memory store');
-      return postgresMemoryStore;
+      return postgresSignalStore;
     }
 
     try {
-      const store = createPostgresMemoryStore({
+      const store = createPostgresSignalStore({
         databaseUrl: env.databaseUrl,
         logger
       });
       await store.ping();
-      postgresMemoryStore = store;
+      postgresSignalStore = store;
 
       await logger.info('live_read_model', 'postgres memory store enabled');
-      return postgresMemoryStore;
+      return postgresSignalStore;
     } catch (error) {
-      postgresMemoryStore = null;
+      postgresSignalStore = null;
       await logger.error('live_read_model', 'postgres memory store unavailable', {
         error: toErrorMessage(error)
       });
-      return postgresMemoryStore;
+      return postgresSignalStore;
     }
   };
 
@@ -536,7 +536,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
 
     await hydrateRefreshState(env, logger);
 
-    const persistentStore = await resolvePostgresMemoryStore(env, logger);
+    const persistentStore = await resolvePostgresSignalStore(env, logger);
     const DAILY_CADENCE_MS = 24 * 60 * 60 * 1000;
     const dailyDue = forceCadence === 'daily' || (!forceCadence && Date.now() - snapshot.lastDailyRunAt >= DAILY_CADENCE_MS);
     refreshingCadence = dailyDue ? 'daily' : 'hourly';
@@ -775,7 +775,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
               await persistentStore.save(indexedEntry);
 
               // Multi-source convergence boost: if similar signals exist from other sources within 48h, boost virality
-              if (indexedEntry.embeddingRecord.embedding) {
+              if (indexedEntry.embeddingRecord?.embedding) {
                 const convergent = await persistentStore.findConvergentSignals(
                   indexedEntry.memoryRecord.signal_id,
                   indexedEntry.embeddingRecord.embedding,
@@ -910,6 +910,16 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
         refreshedAt: snapshot.refreshedAt,
       });
 
+      // Persist connector statuses to database
+      const store = await resolvePostgresSignalStore(env, logger);
+      if (store) {
+        for (const c of snapshot.connectors) {
+          try {
+            await store.upsertConnectorState(c.name, c.status, c.cadence ?? null);
+          } catch { /* non-critical */ }
+        }
+      }
+
       await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH COMPLETE ===`, {
         run_id: logger.runId,
         events: events.length,
@@ -1035,8 +1045,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     registerRunId: (runId: string) => { sessionRunIds.add(runId); },
     refresh,
     close: async (): Promise<void> => {
-      if (postgresMemoryStore) {
-        await postgresMemoryStore.close();
+      if (postgresSignalStore) {
+        await postgresSignalStore.close();
       }
     }
   };

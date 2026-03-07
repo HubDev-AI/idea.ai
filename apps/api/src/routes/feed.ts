@@ -3,9 +3,9 @@ import { recommendNextAction } from '@idea/pipeline/src/recommend_action';
 import type { FastifyInstance } from 'fastify';
 import type {
   MemorySignalRow,
-  PostgresMemoryStore,
+  PostgresSignalStore,
   SignalSortField
-} from '../runtime/postgres_memory_store';
+} from '../runtime/postgres_signal_store';
 
 export type { FeedRecord, PaginatedFeedResponse } from '@idea/contracts/src/api';
 
@@ -81,7 +81,7 @@ const signalToFeedRecord = (row: MemorySignalRow): FeedRecord => ({
 
 export type FeedDeps = {
   listSignals: () => Promise<FeedRecord[]>;
-  memoryStore?: PostgresMemoryStore | null;
+  signalStore?: PostgresSignalStore | null;
 };
 
 export const registerFeedRoute = (
@@ -124,14 +124,14 @@ export const registerFeedRoute = (
     const thesisKeyParam = request.query.thesis_key;
     const sortParam = request.query.sort as SignalSortField | undefined;
 
-    // When memoryStore is available, use DB-backed pagination via querySignals
-    if (deps.memoryStore) {
+    // When signalStore is available, use DB-backed pagination via querySignals
+    if (deps.signalStore) {
       const windowDays = WINDOW_MAP[windowParam ?? '7d'] ?? 7;
       const requestedPageSize = parsePositiveInt(request.query.page_size, 20);
       const pageSize = Math.min(MAX_PAGE_SIZE, requestedPageSize);
       const page = parsePositiveInt(request.query.page, 1);
 
-      const queryParams: Parameters<typeof deps.memoryStore.querySignals>[0] = {
+      const queryParams: Parameters<typeof deps.signalStore.querySignals>[0] = {
         windowDays,
         page,
         pageSize
@@ -139,7 +139,7 @@ export const registerFeedRoute = (
       if (sourceParam !== undefined) queryParams.source = sourceParam;
       if (thesisKeyParam !== undefined) queryParams.thesisKey = thesisKeyParam;
       if (sortParam !== undefined) queryParams.sort = sortParam;
-      const result = await deps.memoryStore.querySignals(queryParams);
+      const result = await deps.signalStore.querySignals(queryParams);
 
       const items = result.items
         .map(signalToFeedRecord)

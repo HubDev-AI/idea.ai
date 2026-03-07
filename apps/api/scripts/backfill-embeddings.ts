@@ -27,7 +27,7 @@ const main = async () => {
 
   const { rows: [{ count }] } = await pool.query<{ count: number }>(
     `SELECT COUNT(*)::int as count
-     FROM signal_memory sm
+     FROM scored_signals sm
      LEFT JOIN signal_embeddings se ON se.signal_id = sm.signal_id
      WHERE se.signal_id IS NULL`
   );
@@ -46,7 +46,7 @@ const main = async () => {
   while (true) {
     const { rows } = await pool.query<{ signal_id: string; canonical_text: string }>(
       `SELECT sm.signal_id, sm.canonical_text
-       FROM signal_memory sm
+       FROM scored_signals sm
        LEFT JOIN signal_embeddings se ON se.signal_id = sm.signal_id
        WHERE se.signal_id IS NULL
        ORDER BY sm.observed_at DESC

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ThesisExplainRecord } from '../api';
 import { fetchThesisExplain } from '../api';
+import { FormatText } from './FormatText';
 
 type Props = {
   canonicalKey: string;
@@ -103,12 +104,12 @@ export const ThesisExplainTab: React.FC<Props> = ({ canonicalKey }) => {
           <div className="explain-debate">
             <div className="explain-debate-case bull">
               <span className="explain-debate-label">Bull Case</span>
-              <p>{debate.bullCase}</p>
+              <FormatText text={debate.bullCase} />
               <span className="explain-debate-strength">Strength: {debate.bullStrength}/100</span>
             </div>
             <div className="explain-debate-case bear">
               <span className="explain-debate-label">Bear Case</span>
-              <p>{debate.bearCase}</p>
+              <FormatText text={debate.bearCase} />
               <span className="explain-debate-strength">Strength: {debate.bearStrength}/100</span>
             </div>
           </div>

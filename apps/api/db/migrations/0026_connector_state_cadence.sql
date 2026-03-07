@@ -1,0 +1,1 @@
+ALTER TABLE connector_state ADD COLUMN IF NOT EXISTS cadence TEXT;
