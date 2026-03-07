@@ -1,4 +1,4 @@
-import type { ThesisPage } from '@idea/contracts/src/api';
+import type { ThesisListItem, ThesisPage } from '@idea/contracts/src/api';
 import type { Pool } from 'pg';
 import type { ThesisDraft } from '../jobs/thesis_synthesizer';
 import type { ThesisStore, ThesisStoreFilter } from './thesis_store';
@@ -69,6 +69,7 @@ export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
 
 export type PaginatedThesisStore = ThesisStore & {
   listPaginated(params: { page?: number; pageSize?: number; status?: string; sort?: ThesisSortField; profile?: string; label?: string }): Promise<ThesisPage>;
+  getAsListItem(canonicalKey: string): Promise<ThesisListItem | null>;
   close: () => Promise<void>;
 };
 
@@ -110,6 +111,53 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       [canonicalKey]
     );
     return result.rows[0] ? rowToDraft(result.rows[0]) : null;
+  },
+
+  async getAsListItem(canonicalKey: string): Promise<ThesisListItem | null> {
+    const result = await pool.query<ThesisRow & { has_deep_dive: boolean; debate_verdict: string | null; supply_demand_classification: string | null; category_emerging: boolean | null }>(
+      `SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
+              COUNT(DISTINCT sm.source)::int AS source_count,
+              ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
+              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
+              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
+              ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality,
+              EXISTS(SELECT 1 FROM thesis_deep_dives dd WHERE dd.canonical_key = tc.canonical_key) AS has_deep_dive,
+              dv.debate_verdict
+       FROM thesis_candidates tc
+       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
+       LEFT JOIN signal_memory sm ON sm.signal_id = te.signal_id
+       LEFT JOIN LATERAL (
+         SELECT moderator_verdict->>'verdict' AS debate_verdict
+         FROM thesis_debates td
+         WHERE td.thesis_key = tc.canonical_key
+         ORDER BY td.created_at DESC LIMIT 1
+       ) dv ON true
+       WHERE tc.canonical_key = $1
+       GROUP BY tc.id, dv.debate_verdict`,
+      [canonicalKey]
+    );
+    if (!result.rows[0]) return null;
+    const row = result.rows[0];
+    const d = rowToDraft(row);
+    return {
+      canonicalKey: d.canonicalKey,
+      title: d.title,
+      confidence: d.confidence,
+      status: d.status,
+      evidenceCount: d.evidenceCount,
+      problemStatement: d.problemStatement,
+      sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
+      estimatedScope: d.estimatedScope ?? null,
+      lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
+      hasDeepDive: row.has_deep_dive === true,
+      profileId: (d as ReturnType<typeof rowToDraft>).profileId ?? 'consumer',
+      label: (d as ReturnType<typeof rowToDraft>).label ?? null,
+      posteriorConfidence: (d as ReturnType<typeof rowToDraft>).posteriorConfidence ?? d.confidence,
+      velocity: (d as ReturnType<typeof rowToDraft>).velocity ?? undefined,
+      corroborationScore: (d as ReturnType<typeof rowToDraft>).corroborationScore ?? undefined,
+      debateVerdict: (row.debate_verdict ?? null) as ThesisListItem['debateVerdict'],
+      supplyDemand: (row.supply_demand_classification ?? null) as ThesisListItem['supplyDemand'],
+    };
   },
 
   async upsert(draft: ThesisDraft): Promise<void> {

@@ -66,6 +66,16 @@ export const registerThesesRoute = (
       return { error: 'Missing thesis key' };
     }
 
+    // Return full ThesisListItem shape when using paginated store
+    if ('getAsListItem' in deps.store) {
+      const item = await (deps.store as import('../runtime/postgres_thesis_store').PaginatedThesisStore).getAsListItem(key);
+      if (!item) {
+        reply.code(404);
+        return { error: 'Thesis not found' };
+      }
+      return item;
+    }
+
     const draft = await deps.store.getByKey(key);
     if (!draft) {
       reply.code(404);

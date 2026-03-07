@@ -5,6 +5,7 @@ import {
   fetchProfiles,
   fetchSignals,
   fetchTheses,
+  fetchThesis,
   fetchThesisDeepDive,
   generateThesisDeepDive,
   type ProfileDisplay,
@@ -650,8 +651,15 @@ const App = () => {
               <OpportunityMapView
                 apiUrl={API_BASE}
                 onViewThesis={(key) => {
-                  const t = theses.find(th => th.canonicalKey === key);
-                  if (t) handleViewThesis(t);
+                  const cached = theses.find(th => th.canonicalKey === key);
+                  if (cached) {
+                    handleViewThesis(cached);
+                    return;
+                  }
+                  // Thesis not on current page — fetch from API
+                  fetchThesis(key)
+                    .then(handleViewThesis)
+                    .catch(err => showToast(`Failed to load thesis: ${err.message}`));
                 }}
               />
             </div>

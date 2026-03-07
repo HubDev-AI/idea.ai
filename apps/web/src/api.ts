@@ -258,6 +258,12 @@ export const fetchProfiles = async (): Promise<ProfileDisplay[]> => {
   return response.json() as Promise<ProfileDisplay[]>;
 };
 
+export const fetchThesis = async (canonicalKey: string): Promise<ThesisListItem> => {
+  const response = await fetch(buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}`));
+  if (!response.ok) throw new Error(`fetchThesis failed: ${response.status}`);
+  return response.json() as Promise<ThesisListItem>;
+};
+
 export const fetchThesisExplain = async (canonicalKey: string): Promise<ThesisExplainRecord> => {
   const response = await fetch(buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/explain`));
   if (!response.ok) throw new Error(`fetchThesisExplain failed: ${response.status}`);
