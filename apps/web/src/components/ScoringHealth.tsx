@@ -7,6 +7,7 @@ export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
   const [profile, setProfile] = useState('consumer');
 
   useEffect(() => {
+    let cancelled = false;
     setData(null);
     setError(null);
     fetch(`${apiUrl}/v1/scoring-health?profile=${profile}`)
@@ -14,8 +15,9 @@ export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json() as Promise<ScoringHealthRecord>;
       })
-      .then(setData)
-      .catch((err) => setError(err.message));
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((err) => { if (!cancelled) setError(err.message); });
+    return () => { cancelled = true; };
   }, [apiUrl, profile]);
 
   if (error) return <div className="scoring-error">Failed to load scoring health: {error}</div>;

@@ -122,6 +122,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
       const provided = request.headers['x-api-key'];
       if (provided !== apiKey) {
         reply.code(401).send({ error: 'Unauthorized' });
+        return;
       }
     });
   }
