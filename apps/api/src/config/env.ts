@@ -50,6 +50,7 @@ export type RuntimeEnv = {
   ollamaMediumModel: string;
   ollamaTaskTimeoutMs: number;
   weightOptEnabled: boolean;
+  weightOptIntervalMs: number;
   weightOptMinPredictions: number;
   weightOptMinImprovement: number;
   weightOptGridStep: number;
@@ -100,6 +101,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     ollamaMediumModel: env.OLLAMA_MEDIUM_MODEL ?? 'qwen2.5:7b',
     ollamaTaskTimeoutMs: parseNumber(env.OLLAMA_TASK_TIMEOUT_MS, 30_000),
     weightOptEnabled: env.WEIGHT_OPT_ENABLED !== 'false',
+    weightOptIntervalMs: parseNumber(env.WEIGHT_OPT_INTERVAL_MS, 7 * 24 * 60 * 60 * 1000),
     weightOptMinPredictions: parseNumber(env.WEIGHT_OPT_MIN_PREDICTIONS, 50),
     weightOptMinImprovement: parseNumber(env.WEIGHT_OPT_MIN_IMPROVEMENT, 0.05),
     weightOptGridStep: parseNumber(env.WEIGHT_OPT_GRID_STEP, 0.05)
