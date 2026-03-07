@@ -141,6 +141,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         count: profiles.length
       });
 
+      const aiSettings = resolveAiJudgeSettings(process.env);
       const baseDeps = {
         thesisStore,
         signalStore,
@@ -150,7 +151,8 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         runCodex: runCodexPrompt,
         logger,
         runId,
-        preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider,
+        preferredProvider: aiSettings.preferredProvider,
+        allowFallback: aiSettings.allowFallback,
         timeoutMs: agentEnv.agentTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
         pool: pool ?? undefined,
@@ -284,11 +286,15 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   thesisStore,
   signalStore,
   deepDiveStore: pool ? createDeepDiveStore({ pool }) : null,
-  deepDiveAi: {
-    runClaude: runClaudePrompt,
-    runCodex: runCodexPrompt,
-    preferredProvider: resolveAiJudgeSettings(process.env).preferredProvider
-  },
+  deepDiveAi: (() => {
+    const s = resolveAiJudgeSettings(process.env);
+    return {
+      runClaude: runClaudePrompt,
+      runCodex: runCodexPrompt,
+      preferredProvider: s.preferredProvider,
+      allowFallback: s.allowFallback
+    };
+  })(),
   logger: createExecutionLogger({ runId: 'api-services' }),
   getRouterStats: () => modelRouter
     ? { stats: modelRouter.getStats(), enabled: startupEnv.modelRoutingEnabled }

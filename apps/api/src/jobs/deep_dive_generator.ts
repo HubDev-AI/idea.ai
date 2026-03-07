@@ -1,5 +1,6 @@
 import type { RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
 import type { ExecutionLogger } from '../runtime/execution_logger';
+import { parseJsonObject } from './ai_helpers';
 
 export type DeepDiveInput = {
   title: string;
@@ -20,7 +21,8 @@ export type DeepDiveGeneratorDeps = {
   runClaude: (input: RunPromptInput) => Promise<RunPromptResult>;
   runCodex: (input: RunPromptInput) => Promise<RunPromptResult>;
   preferredProvider?: 'claude' | 'codex';
-  logger?: Pick<ExecutionLogger, 'info' | 'debug' | 'error'>;
+  allowFallback?: boolean;
+  logger?: Pick<ExecutionLogger, 'info' | 'warn' | 'debug' | 'error'>;
 };
 
 const TIMEOUT_MS = 60_000;
@@ -46,31 +48,8 @@ Return ONLY valid JSON (no markdown, no code fences):
   "build_suggestions": "Recommended tech approach, MVP scope, and first 3 steps to validate"
 }`;
 
-const stripMarkdownFences = (text: string): string => {
-  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-  return fenceMatch?.[1] ? fenceMatch[1].trim() : text;
-};
-
 const parseDeepDiveJson = (text: string): DeepDiveResult | null => {
-  const trimmed = stripMarkdownFences(text.trim());
-  if (!trimmed) {
-    return null;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return null;
-    }
-    try {
-      parsed = JSON.parse(match[0]);
-    } catch {
-      return null;
-    }
-  }
+  const parsed = parseJsonObject(text);
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return null;
@@ -89,13 +68,13 @@ const parseDeepDiveJson = (text: string): DeepDiveResult | null => {
   return { summary, howItWorks, growthStrategy, buildSuggestions };
 };
 
-const noopLog = { info: async () => {}, debug: async () => {}, error: async () => {} };
+const noopLog = { info: async () => {}, warn: async () => {}, debug: async () => {}, error: async () => {} };
 
 export const generateDeepDive = async (
   input: DeepDiveInput,
   deps: DeepDiveGeneratorDeps
 ): Promise<{ result: DeepDiveResult; provider: string }> => {
-  const { runClaude, runCodex, preferredProvider = 'claude', logger } = deps;
+  const { runClaude, runCodex, preferredProvider = 'claude', allowFallback = true, logger } = deps;
   const log = logger ?? noopLog;
   const prompt = buildPrompt(input);
   const promptInput: RunPromptInput = { prompt, timeoutMs: TIMEOUT_MS };
@@ -125,14 +104,18 @@ export const generateDeepDive = async (
       });
       return { result: parsed, provider: primaryResult.provider };
     }
-    await log.warn('deep_dive', 'primary parse failed, trying fallback', {
+    await log.warn('deep_dive', 'primary parse failed', {
       thesis: input.title, provider: primaryName
     });
   } catch (err) {
-    await log.warn('deep_dive', 'primary provider failed, trying fallback', {
+    await log.warn('deep_dive', 'primary provider failed', {
       thesis: input.title, provider: primaryName,
       error: err instanceof Error ? err.message : String(err)
     });
+  }
+
+  if (!allowFallback) {
+    throw new Error(`deep_dive_generator: ${primaryName} failed and fallback is disabled`);
   }
 
   const fallbackResult = await fallbackRun(promptInput);
