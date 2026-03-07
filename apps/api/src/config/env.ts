@@ -47,6 +47,14 @@ export type RuntimeEnv = {
   cusumThreshold: number;
   cusumDrift: number;
   categoryMinPhraseCount: number;
+  modelRoutingEnabled: boolean;
+  ollamaCheapModel: string;
+  ollamaMediumModel: string;
+  ollamaTaskTimeoutMs: number;
+  weightOptEnabled: boolean;
+  weightOptMinPredictions: number;
+  weightOptMinImprovement: number;
+  weightOptGridStep: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -90,7 +98,15 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     backtestValidateAfterDays: parseNumber(env.BACKTEST_VALIDATE_AFTER_DAYS, 30),
     cusumThreshold: parseNumber(env.CUSUM_THRESHOLD, 5),
     cusumDrift: parseNumber(env.CUSUM_DRIFT, 1),
-    categoryMinPhraseCount: parseNumber(env.CATEGORY_MIN_PHRASE_COUNT, 3)
+    categoryMinPhraseCount: parseNumber(env.CATEGORY_MIN_PHRASE_COUNT, 3),
+    modelRoutingEnabled: env.MODEL_ROUTING_ENABLED === 'true',
+    ollamaCheapModel: env.OLLAMA_CHEAP_MODEL ?? 'llama3.2:3b',
+    ollamaMediumModel: env.OLLAMA_MEDIUM_MODEL ?? 'qwen2.5:7b',
+    ollamaTaskTimeoutMs: parseNumber(env.OLLAMA_TASK_TIMEOUT_MS, 30_000),
+    weightOptEnabled: env.WEIGHT_OPT_ENABLED !== 'false',
+    weightOptMinPredictions: parseNumber(env.WEIGHT_OPT_MIN_PREDICTIONS, 50),
+    weightOptMinImprovement: parseNumber(env.WEIGHT_OPT_MIN_IMPROVEMENT, 0.05),
+    weightOptGridStep: parseNumber(env.WEIGHT_OPT_GRID_STEP, 0.05)
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;

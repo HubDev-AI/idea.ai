@@ -43,6 +43,8 @@ const API_BASE_URL = resolveApiBaseUrl();
 
 export const buildApiUrl = (path: string): string => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
+export const API_BASE = API_BASE_URL;
+
 export type SortField = 'score' | 'newest' | 'virality' | 'demand';
 
 export const fetchSignals = async ({

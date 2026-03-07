@@ -16,6 +16,23 @@ export type ValidationDeps = {
   pool: Pool;
   searchRecentSignals: (thesisKey: string) => Promise<MatchingSignal[]>;
   validateAfterDays?: number;
+  experienceStore?: {
+    insert(entry: {
+      thesis_key: string;
+      signal_summary: string;
+      reasoning_trajectory: string;
+      thesis_output: string;
+      confidence_at_creation: number;
+      confidence_at_validation?: number;
+      outcome_validated: boolean;
+    }): Promise<void>;
+  };
+  getThesisSummary?: (thesisKey: string) => Promise<{
+    title: string;
+    problemStatement: string;
+    evidence: string[];
+    confidence: number;
+  } | null>;
 };
 
 const VALIDATION_SOURCES = new Set([
@@ -54,6 +71,21 @@ export const validatePredictions = async (
        WHERE id = $3`,
       [isValidated, JSON.stringify(validationSignals.slice(0, 10)), prediction.id]
     );
+
+    if (isValidated && deps.experienceStore && deps.getThesisSummary) {
+      const summary = await deps.getThesisSummary(prediction.thesis_key);
+      if (summary) {
+        await deps.experienceStore.insert({
+          thesis_key: prediction.thesis_key,
+          signal_summary: summary.evidence.slice(0, 5).join(' | '),
+          reasoning_trajectory: `Problem: ${summary.problemStatement}. Evidence: ${summary.evidence.slice(0, 3).join('; ')}`,
+          thesis_output: summary.title,
+          confidence_at_creation: prediction.confidence_at_prediction,
+          confidence_at_validation: summary.confidence,
+          outcome_validated: true,
+        });
+      }
+    }
 
     checked++;
     if (isValidated) validated++;

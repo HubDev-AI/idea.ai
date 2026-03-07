@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  API_BASE,
   type ExecutionLogRecord,
   fetchProfiles,
   fetchSignals,
@@ -18,6 +19,7 @@ import {
   triggerAgentRun,
   triggerConnectorRefresh,
 } from './api';
+import { OpportunityMapView } from './components/OpportunityMap';
 import { Sidebar } from './components/Sidebar';
 import { SignalRow } from './components/SignalRow';
 import { ThesisCard } from './components/ThesisCard';
@@ -98,6 +100,7 @@ const App = () => {
   const [profiles, setProfiles] = useState<ProfileDisplay[]>([]);
   const [activeProfile, setActiveProfile] = useState('all');
   const [labelFilter, setLabelFilter] = useState<string>('all');
+  const [omapOpen, setOmapOpen] = useState(false);
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [logComponentFilter, setLogComponentFilter] = useState('all');
@@ -625,6 +628,25 @@ const App = () => {
             </div>
           </section>
         </div>
+
+        {/* Opportunity Map drawer — collapsible bottom */}
+        <section className={`omap-drawer ${omapOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className="omap-drawer-toggle"
+            onClick={() => setOmapOpen((v) => !v)}
+          >
+            <span className="omap-drawer-title">
+              Opportunity Map
+            </span>
+            <span className="omap-drawer-chevron">{omapOpen ? '\u25BC' : '\u25B2'}</span>
+          </button>
+          {omapOpen && (
+            <div className="omap-drawer-scroll">
+              <OpportunityMapView apiUrl={API_BASE} />
+            </div>
+          )}
+        </section>
 
         {/* Log drawer — collapsible bottom */}
         <section className={`log-drawer ${logDrawerOpen ? 'open' : ''}`}>

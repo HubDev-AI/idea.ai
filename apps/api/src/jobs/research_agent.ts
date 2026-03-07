@@ -63,11 +63,19 @@ export type JournalSummary = {
   created_at: string;
 };
 
+export type ExperienceExample = {
+  signal_summary: string;
+  reasoning_trajectory: string;
+  thesis_output: string;
+  outcome_validated: boolean;
+};
+
 export type BroadScanContext = {
   activeTheses: AgentThesisSummary[];
   clusters: ClusterSummary[];
   recentJournal: JournalSummary[];
   trendSummary: AgentTrendSummary[];
+  experienceExamples?: ExperienceExample[];
 };
 
 export type BroadScanOutput = {
@@ -169,7 +177,18 @@ ${clustersBlock}
 
 TREND WINDOWS:
 ${trendsBlock}
-
+${ctx.experienceExamples && ctx.experienceExamples.length > 0
+    ? '\nVALIDATED THESIS EXAMPLES (from past successful predictions):\n' +
+      ctx.experienceExamples.filter(e => e.outcome_validated).map((e, i) =>
+        `Example ${i + 1}:\n  Signals: ${e.signal_summary}\n  Analysis: ${e.reasoning_trajectory}\n  Result: ${e.thesis_output}\n  Outcome: Validated`
+      ).join('\n') +
+      (ctx.experienceExamples.filter(e => !e.outcome_validated).length > 0
+        ? '\n' + ctx.experienceExamples.filter(e => !e.outcome_validated).slice(0, 2).map((e, i) =>
+            `Counter-example ${i + 1}:\n  Signals: ${e.signal_summary}\n  Analysis: ${e.reasoning_trajectory}\n  Result: ${e.thesis_output}\n  Outcome: Not validated`
+          ).join('\n')
+        : '') +
+      '\n\nUse these examples as calibration for your confidence estimates.\n'
+    : ''}
 YOUR TASK:
 1. Analyze signal clusters. What concrete product ideas do they suggest? Do any clusters reinforce or contradict existing theses?
 2. For each relevant thesis, provide a confidence_delta (-20 to +20) with reasoning.

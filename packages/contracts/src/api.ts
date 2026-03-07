@@ -200,3 +200,21 @@ export type InfraStatusRecord = {
     tableSizes: { name: string; sizeMb: number; rows: number }[];
   };
 };
+
+export type OpportunityNode = {
+  id: string;
+  label: string;
+  type: 'market' | 'category' | 'thesis';
+  confidence: number;
+  velocity: number;
+  supply: number;
+  demand: number;
+  supplyDemand?: 'opportunity' | 'competitive' | 'niche' | 'saturated' | null;
+  emerging?: boolean;
+  children?: OpportunityNode[];
+};
+
+export type OpportunityMapRecord = {
+  roots: OpportunityNode[];
+  generatedAt: string;
+};

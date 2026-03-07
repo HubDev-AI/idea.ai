@@ -1,6 +1,8 @@
 import { runClaudePrompt } from '@idea/ai-runtime/src/claude';
 import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import { embedText } from '@idea/ai-runtime/src/ollama';
+import { runOllamaPrompt } from '@idea/ai-runtime/src/ollama_prompt';
+import { createRouter } from '@idea/ai-runtime/src/router';
 import type { AgentStatusRecord } from '@idea/contracts/src/api';
 import type { ClientToServerEvents, ServerToClientEvents } from '@idea/contracts/src/ws';
 import pg from 'pg';
@@ -11,10 +13,13 @@ import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { snapshotPredictions } from './jobs/backtest_snapshot';
 import { validatePredictions } from './jobs/backtest_validate';
 import { resolveAiJudgeSettings } from './jobs/ai_judges';
+import { runWeightOptimization } from './jobs/weight_optimizer_job';
 import { loadProfiles } from './profiles/index.js';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
 import { createDeepDiveStore } from './runtime/deep_dive_store';
+import { createEntityStore } from './runtime/entity_store';
 import { createExecutionLogger } from './runtime/execution_logger';
+import { createExperienceStore } from './runtime/experience_store';
 import { createPostgresJournalStore } from './runtime/journal_store';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresMemoryStore } from './runtime/postgres_memory_store';
@@ -63,6 +68,20 @@ const journalStore = databaseUrl
 
 const agentRunStore: AgentRunStore | null = pool
   ? createAgentRunStore({ pool })
+  : null;
+
+const experienceStore = pool ? createExperienceStore({ pool }) : null;
+const entityStore = pool ? createEntityStore({ pool }) : null;
+
+const modelRouter = startupEnv.modelRoutingEnabled
+  ? createRouter({
+      runOllama: runOllamaPrompt,
+      runCli: runClaudePrompt,
+      ollamaCheapModel: startupEnv.ollamaCheapModel,
+      ollamaMediumModel: startupEnv.ollamaMediumModel,
+      ollamaBaseUrl: startupEnv.ollamaBaseUrl,
+      ollamaTimeoutMs: startupEnv.ollamaTaskTimeoutMs,
+    })
   : null;
 
 let agentStatus: AgentStatusRecord = { isRunning: false, intervalMs: startupEnv.agentIntervalMs, lastRun: null, investigateNext: null };
@@ -249,6 +268,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   triggerAgentRun: executeAgentRun,
   agentRunStore,
   corsOrigins,
+  pool: pool ?? undefined,
   infraStatusDeps: {
     checkPostgres: async () => {
       if (!memoryStore) return false;
@@ -353,6 +373,7 @@ let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let backtestTimer: ReturnType<typeof setInterval> | undefined;
+let weightOptTimer: ReturnType<typeof setInterval> | undefined;
 
 const RETENTION_DAYS = 90;
 
@@ -381,6 +402,7 @@ const shutdown = async () => {
   clearInterval(cleanupTimer);
   clearInterval(refreshTimer);
   clearInterval(backtestTimer);
+  clearInterval(weightOptTimer);
   stateHub.stopPolling();
   io.close();
 
@@ -477,12 +499,45 @@ app
               .map(s => ({ source: s.source, canonical_text: s.canonical_text }));
           },
           validateAfterDays: runtimeEnv.backtestValidateAfterDays,
+          experienceStore: experienceStore ?? undefined,
+          getThesisSummary: async (thesisKey: string) => {
+            const thesis = await thesisStore.getByKey(thesisKey);
+            if (!thesis) return null;
+            return {
+              title: thesis.title,
+              problemStatement: thesis.problemStatement ?? '',
+              evidence: thesis.evidence?.map((e: any) => typeof e === 'string' ? e : (e.snippet ?? '')) ?? [],
+              confidence: thesis.confidence,
+            };
+          },
         });
         console.log(`[backtest] Validated ${valResult.validated}/${valResult.checked} predictions`);
       } catch (err) {
         console.error('[backtest] Error:', err);
       }
     }, runtimeEnv.backtestSnapshotIntervalMs);
+
+    // Monthly weight optimization (runs once per 30 days)
+    if (pool && runtimeEnv.weightOptEnabled) {
+      const WEIGHT_OPT_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+      weightOptTimer = setInterval(async () => {
+        try {
+          const result = await runWeightOptimization({
+            pool: pool!,
+            minPredictions: runtimeEnv.weightOptMinPredictions,
+            minImprovement: runtimeEnv.weightOptMinImprovement,
+            gridStep: runtimeEnv.weightOptGridStep,
+          });
+          if (result.skipped) {
+            console.log(`[weight-opt] Skipped: ${result.reason}`);
+          } else {
+            console.log(`[weight-opt] Updated weights: precision ${((result.precision ?? 0) * 100).toFixed(1)}%`);
+          }
+        } catch (err) {
+          console.error('[weight-opt] Error:', err);
+        }
+      }, WEIGHT_OPT_INTERVAL_MS);
+    }
   })
   .catch((error) => {
     console.error(error);
