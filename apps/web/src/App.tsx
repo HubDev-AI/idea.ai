@@ -719,17 +719,6 @@ const App = () => {
                   >
                     Copy
                   </button>
-                  <button
-                    type="button"
-                    className="log-action-btn"
-                    title="Clear log view"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLogs([]);
-                    }}
-                  >
-                    Clear
-                  </button>
                 </>
               )}
               <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
