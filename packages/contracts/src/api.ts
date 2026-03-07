@@ -159,6 +159,38 @@ export type ThesisDeepDive = {
   createdAt: string;
 };
 
+export type ThesisExplainRecord = {
+  weightBreakdown: {
+    demand: { score: number; weight: number; contribution: number };
+    timing: { score: number; weight: number; contribution: number };
+    buildability: { score: number; weight: number; contribution: number };
+    virality: { score: number; weight: number; contribution: number };
+    blended: number;
+    weightsSource: 'optimized' | 'default';
+  };
+  debate: {
+    bullCase: string;
+    bearCase: string;
+    verdict: string;
+    confidence: number;
+    bullStrength: number;
+    bearStrength: number;
+    missingEvidence: string[];
+    debatedAt: string;
+  } | null;
+  bayesianTrail: {
+    prior: number;
+    posterior: number;
+    updates: { source: string; delta: number; at: string }[];
+  };
+  topEvidence: {
+    signalId: string;
+    text: string;
+    source: string;
+    score: number;
+  }[];
+};
+
 export type AgentRunResult = {
   thesesUpdated: number;
   newCandidates: number;

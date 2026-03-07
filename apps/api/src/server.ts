@@ -13,6 +13,7 @@ import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from '
 import { registerOpportunityMapRoute } from './routes/opportunity_map';
 import { registerProfilesRoute } from './routes/profiles.js';
 import { registerThesesRoute } from './routes/theses';
+import { registerThesisExplainRoute } from './routes/thesis_explain';
 import type { AgentRunStore } from './runtime/agent_run_store';
 import type { DeepDiveStore } from './runtime/deep_dive_store';
 import type { ExecutionLogger } from './runtime/execution_logger';
@@ -156,6 +157,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
       deepDiveStore: resolvedDeps.deepDiveStore ?? null,
       deepDiveAi: resolvedDeps.deepDiveAi ?? null,
       logger: resolvedDeps.logger
+    });
+    registerThesisExplainRoute(app, {
+      store: resolvedDeps.thesisStore,
+      pool: resolvedDeps.pool ?? null,
     });
   }
 

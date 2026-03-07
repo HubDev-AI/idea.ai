@@ -1773,6 +1773,375 @@ a.signal-idea-link:hover {
   border-top: 1px solid var(--glass-border);
 }
 
+/* ── Deep-Dive Tabs ──────────────────────────────────── */
+
+.deep-dive-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--glass-border);
+  padding-bottom: 0.5rem;
+}
+
+.deep-dive-tab {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.deep-dive-tab:hover {
+  background: var(--glass);
+  color: var(--text);
+}
+
+.deep-dive-tab.active {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* ── Explain Tab ─────────────────────────────────────── */
+
+.explain-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.explain-section h3 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem;
+}
+
+/* Weight bars */
+.explain-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.explain-bar-row {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.explain-bar-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.explain-bar-track {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.explain-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.explain-bar-value {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.explain-blended {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--glass-border);
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.explain-blended strong {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  color: var(--accent);
+  font-size: 1rem;
+}
+
+.explain-weights-badge {
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Debate cards */
+.explain-debate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.explain-debate-case {
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  border-left: 3px solid;
+  background: var(--glass);
+}
+
+.explain-debate-case.bull {
+  border-left-color: var(--ok);
+}
+
+.explain-debate-case.bear {
+  border-left-color: var(--err);
+}
+
+.explain-debate-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+.explain-debate-case.bull .explain-debate-label {
+  color: var(--ok);
+}
+
+.explain-debate-case.bear .explain-debate-label {
+  color: var(--err);
+}
+
+.explain-debate-case p {
+  font-size: 0.8rem;
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.explain-debate-strength {
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+  display: block;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+/* Verdict */
+.explain-verdict {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.explain-verdict-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: capitalize;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--glass-border);
+}
+
+.explain-verdict-badge.strong-opportunity {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--ok);
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.explain-verdict-badge.needs-investigation {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.explain-verdict-badge.contested {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--err);
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.explain-verdict-badge.likely-noise {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.explain-verdict-conf {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.explain-missing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  align-items: center;
+}
+
+.explain-missing-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.explain-missing-item {
+  font-size: 0.68rem;
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  color: var(--warn);
+}
+
+/* Trail */
+.explain-trail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.explain-trail-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+}
+
+.explain-trail-arrow {
+  color: var(--muted);
+}
+
+.explain-trail-updates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.explain-trail-update {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  background: var(--glass);
+}
+
+.explain-trail-update.positive {
+  border-left: 2px solid var(--ok);
+}
+
+.explain-trail-update.negative {
+  border-left: 2px solid var(--err);
+}
+
+.explain-trail-source {
+  color: var(--text);
+}
+
+.explain-trail-delta {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-weight: 600;
+}
+
+.explain-trail-update.positive .explain-trail-delta {
+  color: var(--ok);
+}
+
+.explain-trail-update.negative .explain-trail-delta {
+  color: var(--err);
+}
+
+.explain-trail-date {
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.explain-trail-empty {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Evidence list */
+.explain-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.explain-evidence-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--glass);
+  border-radius: 5px;
+  align-items: start;
+}
+
+.explain-evidence-score {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--surface-2);
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.explain-evidence-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.explain-evidence-text {
+  font-size: 0.78rem;
+  color: var(--text);
+  line-height: 1.4;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.explain-evidence-source {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
 /* Toast notifications */
 .toast-container {
   position: fixed;
