@@ -23,7 +23,7 @@ const statusLabel: Record<string, string> = {
 
 type Props = {
   apiUrl: string;
-  onViewThesis?: (canonicalKey: string) => void;
+  onViewThesis?: (canonicalKey: string, title: string) => void;
 };
 
 export const OpportunityMapView: React.FC<Props> = ({ apiUrl, onViewThesis }) => {
@@ -50,66 +50,61 @@ export const OpportunityMapView: React.FC<Props> = ({ apiUrl, onViewThesis }) =>
   return (
     <div className="omap-container">
       <table className="omap-table">
+        <colgroup>
+          <col className="omap-col-idea" />
+          <col className="omap-col-status" />
+          <col className="omap-col-conf" />
+          <col className="omap-col-vel" />
+          <col className="omap-col-signals" />
+          <col className="omap-col-market" />
+        </colgroup>
         <thead>
           <tr>
-            <th className="omap-th-title">Idea</th>
-            <th className="omap-th-narrow">Status</th>
-            <th className="omap-th-narrow">Confidence</th>
-            <th className="omap-th-narrow">Velocity</th>
-            <th className="omap-th-narrow">Signals</th>
-            <th className="omap-th-narrow">Market</th>
+            <th>Idea</th>
+            <th>Status</th>
+            <th className="omap-td-num">Confidence</th>
+            <th className="omap-td-num">Velocity</th>
+            <th className="omap-td-num">Signals</th>
+            <th>Market</th>
           </tr>
         </thead>
         <tbody>
-          {map.roots.map(root => (
-            <React.Fragment key={root.id}>
-              <tr className="omap-group-row">
-                <td colSpan={6}>
-                  <span className="omap-group-label">{root.label}</span>
-                  <span className="omap-group-meta">
-                    {root.children?.length ?? 0} ideas &middot; avg {root.confidence}%
-                    {root.velocity > 0 && <> &middot; {root.velocity.toFixed(1)}x</>}
+          {map.roots.flatMap(root => root.children ?? []).map((node: OpportunityNode) => (
+            <tr
+              key={node.id}
+              className={`omap-idea-row ${onViewThesis ? 'clickable' : ''}`}
+              onClick={() => onViewThesis?.(node.id, node.label)}
+            >
+              <td className="omap-td-title">
+                <span className="omap-idea-name">{node.label}</span>
+                {node.problemStatement && (
+                  <span className="omap-idea-problem">{node.problemStatement}</span>
+                )}
+              </td>
+              <td>
+                {node.status && (
+                  <span className={`omap-status omap-status-${node.status}`}>
+                    {statusLabel[node.status] ?? node.status}
                   </span>
-                </td>
-              </tr>
-              {(root.children ?? []).map((node: OpportunityNode) => (
-                <tr
-                  key={node.id}
-                  className={`omap-idea-row ${onViewThesis ? 'clickable' : ''}`}
-                  onClick={() => onViewThesis?.(node.id)}
-                >
-                  <td className="omap-td-title">
-                    <span className="omap-idea-name">{node.label}</span>
-                    {node.problemStatement && (
-                      <span className="omap-idea-problem">{node.problemStatement}</span>
-                    )}
-                  </td>
-                  <td>
-                    {node.status && (
-                      <span className={`omap-status omap-status-${node.status}`}>
-                        {statusLabel[node.status] ?? node.status}
-                      </span>
-                    )}
-                  </td>
-                  <td className="omap-td-num">{node.confidence}%</td>
-                  <td className="omap-td-num">
-                    {node.velocity > 0 && (
-                      <span className={`omap-vel ${node.velocity >= 2 ? 'fast' : 'moderate'}`}>
-                        {velocityLabel(node.velocity)}
-                      </span>
-                    )}
-                  </td>
-                  <td className="omap-td-num">{node.demand}</td>
-                  <td>
-                    {node.supplyDemand && node.supplyDemand !== 'competitive' && (
-                      <span className={`omap-market omap-market-${node.supplyDemand}`}>
-                        {supplyDemandLabel[node.supplyDemand] ?? node.supplyDemand}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </React.Fragment>
+                )}
+              </td>
+              <td className="omap-td-num">{node.confidence}%</td>
+              <td className="omap-td-num">
+                {node.velocity > 0 && (
+                  <span className={`omap-vel ${node.velocity >= 2 ? 'fast' : 'moderate'}`}>
+                    {velocityLabel(node.velocity)}
+                  </span>
+                )}
+              </td>
+              <td className="omap-td-num">{node.demand}</td>
+              <td>
+                {node.supplyDemand && node.supplyDemand !== 'competitive' && (
+                  <span className={`omap-market omap-market-${node.supplyDemand}`}>
+                    {supplyDemandLabel[node.supplyDemand] ?? node.supplyDemand}
+                  </span>
+                )}
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>

@@ -21,7 +21,7 @@ import type { AgentRunStore } from './runtime/agent_run_store';
 import type { DeepDiveStore } from './runtime/deep_dive_store';
 import type { EntityStore } from './runtime/entity_store';
 import type { ExecutionLogger } from './runtime/execution_logger';
-import type { PostgresMemoryStore } from './runtime/postgres_memory_store';
+import type { PostgresSignalStore } from './runtime/postgres_signal_store';
 import type { ThesisStore } from './runtime/thesis_store';
 
 export type ServerDeps = {
@@ -30,7 +30,7 @@ export type ServerDeps = {
   listLogs: (query: ListLogsQuery) => Promise<ExecutionLogRecord[]>;
   getAiHealth: () => Promise<AiHealthRecord>;
   thesisStore?: ThesisStore;
-  memoryStore?: PostgresMemoryStore | null;
+  signalStore?: PostgresSignalStore | null;
   deepDiveStore?: DeepDiveStore | null;
   deepDiveAi?: DeepDiveGeneratorDeps | null;
   corsOrigins?: string[];
@@ -135,11 +135,11 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   const feedDeps: Parameters<typeof registerFeedRoute>[1] = {
     listSignals: resolvedDeps.listSignals
   };
-  if (resolvedDeps.memoryStore != null) feedDeps.memoryStore = resolvedDeps.memoryStore;
+  if (resolvedDeps.signalStore != null) feedDeps.signalStore = resolvedDeps.signalStore;
   registerFeedRoute(app, feedDeps);
   registerConnectorRoute(app, {
     listConnectors: resolvedDeps.listConnectors,
-    memoryStore: resolvedDeps.memoryStore ?? null,
+    signalStore: resolvedDeps.signalStore ?? null,
     getRefreshMeta: resolvedDeps.getRefreshMeta,
     triggerRefresh: resolvedDeps.triggerRefresh,
     logger: resolvedDeps.logger
@@ -163,7 +163,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   if (resolvedDeps.thesisStore) {
     registerThesesRoute(app, {
       store: resolvedDeps.thesisStore,
-      memoryStore: resolvedDeps.memoryStore ?? null,
+      signalStore: resolvedDeps.signalStore ?? null,
       deepDiveStore: resolvedDeps.deepDiveStore ?? null,
       deepDiveAi: resolvedDeps.deepDiveAi ?? null,
       logger: resolvedDeps.logger

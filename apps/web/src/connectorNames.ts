@@ -27,7 +27,7 @@ export const connectorDisplayName: Record<string, string> = {
   twitter_byo: 'Twitter/X',
 };
 
-/** Maps connector config name to the source key stored in signal_memory */
+/** Maps connector config name to the source key stored in scored_signals */
 export const connectorSourceKey: Record<string, string> = {
   hn: 'hacker_news',
 };

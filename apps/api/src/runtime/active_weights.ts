@@ -31,8 +31,10 @@ export const getActiveWeights = async (
     }>(
       `SELECT demand_weight, timing_weight, buildability_weight, virality_weight
        FROM scoring_weight_history
+       WHERE profile_id = $1
        ORDER BY computed_at DESC
        LIMIT 1`,
+      [profileId],
     );
 
     if (rows.length > 0) {

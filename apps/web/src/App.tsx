@@ -5,6 +5,7 @@ import {
   fetchProfiles,
   fetchSignals,
   fetchTheses,
+  fetchThesis,
   fetchThesisDeepDive,
   generateThesisDeepDive,
   type ProfileDisplay,
@@ -102,6 +103,9 @@ const App = () => {
   const [profiles, setProfiles] = useState<ProfileDisplay[]>([]);
   const [activeProfile, setActiveProfile] = useState('all');
   const [labelFilter, setLabelFilter] = useState<string>('all');
+  const [ideaSearch, setIdeaSearch] = useState('');
+  const [signalSearch, setSignalSearch] = useState('');
+  const [omapSelectedThesis, setOmapSelectedThesis] = useState<ThesisListItem | null>(null);
   const [omapOpen, setOmapOpen] = useState(false);
   const [scoringHealthOpen, setScoringHealthOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
@@ -120,7 +124,7 @@ const App = () => {
     hasNext: false,
     hasPrev: false
   });
-  const [latestSignalAt, setLatestSignalAt] = useState<string | null>(null);
+  // latestSignalAt now comes from ws.latestSignalAt (real-time from DB)
   const logComponents = useMemo(() => {
     const set = new Set<string>();
     for (const entry of ws.logs) set.add(entry.component);
@@ -220,9 +224,6 @@ const App = () => {
           hasNext: result.has_next,
           hasPrev: result.has_prev
         });
-        if (result.page === 1 && result.items.length > 0) {
-          setLatestSignalAt(result.items[0].updated_at);
-        }
         if (result.page !== requestedPage) {
           setRequestedPage(result.page);
         }
@@ -339,6 +340,9 @@ const App = () => {
         setTheses((prev) => prev.map((t) =>
           t.canonicalKey === key ? { ...t, hasDeepDive: true } : t
         ));
+        setOmapSelectedThesis((prev) =>
+          prev && prev.canonicalKey === key ? { ...prev, hasDeepDive: true } : prev
+        );
         showToast(`Deep dive ready: ${thesis.title.slice(0, 50)}`);
       } catch (err) {
         showToast(
@@ -408,8 +412,8 @@ const App = () => {
         agentStatus={ws.agentStatus}
         infraStatus={ws.infraStatus}
         thesisStats={thesisStats}
-        signalCount={Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
-        latestSignalAt={latestSignalAt}
+        signalCount={ws.signalCount || Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
+        latestSignalAt={ws.latestSignalAt}
         signalCounts={ws.signalCounts}
         onRunAgent={handleRunAgent}
         agentRunning={agentRunning}
@@ -437,6 +441,13 @@ const App = () => {
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
               <div className="pane-header-right">
+                <input
+                  type="text"
+                  className="pane-search"
+                  placeholder="Search ideas..."
+                  value={ideaSearch}
+                  onChange={(e) => setIdeaSearch(e.target.value)}
+                />
                 <div className="profile-tabs">
                   <button
                     type="button"
@@ -503,23 +514,32 @@ const App = () => {
               </div>
             </div>
             <div className="pane-scroll">
-              {theses.map((t) => (
+              {(omapSelectedThesis ? [omapSelectedThesis] : theses.filter(t => {
+                if (!ideaSearch) return true;
+                const q = ideaSearch.toLowerCase();
+                return t.title.toLowerCase().includes(q) || t.problemStatement.toLowerCase().includes(q);
+              })).map((t) => (
                 <ThesisCard
                   key={t.canonicalKey}
                   thesis={t}
                   profileDisplay={profiles.find(p => p.id === (t as any).profileId)?.display ?? null}
                   isActive={thesisFilter === t.canonicalKey}
-                  onClick={() => handleThesisFilter(
-                    thesisFilter === t.canonicalKey ? null : t.canonicalKey,
-                    thesisFilter === t.canonicalKey ? '' : t.title
-                  )}
+                  onClick={() => {
+                    if (thesisFilter === t.canonicalKey) {
+                      setOmapSelectedThesis(null);
+                      handleThesisFilter(null, '');
+                    } else {
+                      setOmapSelectedThesis(null);
+                      handleThesisFilter(t.canonicalKey, t.title);
+                    }
+                  }}
                   isGenerating={generatingKeys.has(t.canonicalKey)}
                   onExplore={() => handleExploreThesis(t)}
                   onView={() => handleViewThesis(t)}
                   onLabelChange={(label) => handleLabelChange(t.canonicalKey, label)}
                 />
               ))}
-              {theses.length === 0 && (
+              {theses.length === 0 && !omapSelectedThesis && (
                 <div className="pane-empty">
                   <p>No theses yet</p>
                   <p className="pane-empty-hint">The research agent will synthesize top ideas from incoming signals.</p>
@@ -551,6 +571,13 @@ const App = () => {
             <div className="pane-header">
               <h2 className="pane-title">Signals</h2>
               <div className="pane-header-right">
+                <input
+                  type="text"
+                  className="pane-search"
+                  placeholder="Search signals..."
+                  value={signalSearch}
+                  onChange={(e) => setSignalSearch(e.target.value)}
+                />
                 <select
                   className="source-filter"
                   value={sourceFilter}
@@ -622,7 +649,11 @@ const App = () => {
             </div>
             <div className="pane-scroll">
               <ul className="signal-list">
-                {signals.map((signal) => (
+                {signals.filter(s => {
+                  if (!signalSearch) return true;
+                  const q = signalSearch.toLowerCase();
+                  return s.idea.toLowerCase().includes(q) || s.snippet.toLowerCase().includes(q) || s.top_source.toLowerCase().includes(q);
+                }).map((signal) => (
                   <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
                 ))}
                 {signals.length === 0 && (
@@ -649,9 +680,24 @@ const App = () => {
             <div className="omap-drawer-scroll">
               <OpportunityMapView
                 apiUrl={API_BASE}
-                onViewThesis={(key) => {
-                  const t = theses.find(th => th.canonicalKey === key);
-                  if (t) handleViewThesis(t);
+                onViewThesis={(key, title) => {
+                  if (thesisFilter === key) {
+                    // Toggle off
+                    setOmapSelectedThesis(null);
+                    handleThesisFilter(null, '');
+                    return;
+                  }
+                  // Filter signals by this thesis
+                  handleThesisFilter(key, title);
+                  // Show this thesis in the Top Ideas pane
+                  const cached = theses.find(t => t.canonicalKey === key);
+                  if (cached) {
+                    setOmapSelectedThesis(cached);
+                  } else {
+                    fetchThesis(key)
+                      .then(setOmapSelectedThesis)
+                      .catch(() => setOmapSelectedThesis(null));
+                  }
                 }}
               />
             </div>

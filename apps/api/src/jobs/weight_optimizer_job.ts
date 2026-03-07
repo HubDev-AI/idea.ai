@@ -10,6 +10,7 @@ export type WeightOptDeps = {
   minPredictions: number;
   minImprovement: number;
   gridStep: number;
+  profileId?: string;
 };
 
 type OptResult = {
@@ -51,10 +52,10 @@ export const runWeightOptimization = async (deps: WeightOptDeps): Promise<OptRes
   await deps.pool.query(
     `INSERT INTO scoring_weight_history
        (demand_weight, timing_weight, buildability_weight, virality_weight, velocity_weight,
-        precision_score, recall_score, sample_size)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        precision_score, recall_score, sample_size, profile_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [weights.demand, weights.timing, weights.buildability, weights.virality, 0,
-     precision, null, rows.length]
+     precision, null, rows.length, deps.profileId ?? 'consumer']
   );
 
   return {
