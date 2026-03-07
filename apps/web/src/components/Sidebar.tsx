@@ -246,8 +246,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {aiHealth?.routerStats && (
-        <div className="sidebar-section">
-          <h4 className="sidebar-section-title">Model Routing</h4>
+        <nav className="sidebar-section">
+          <h3 className="sidebar-label">Model Routing</h3>
           <div className="sidebar-row">
             <span className="sidebar-row-name">Status</span>
             <span className={`sidebar-row-detail ${aiHealth.routerStats.routingEnabled ? 'detail-ok' : 'detail-standby'}`}>
@@ -268,7 +268,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="sidebar-row-detail detail-count">{aiHealth.routerStats.fallbacks}</span>
             </div>
           )}
-        </div>
+        </nav>
       )}
 
       <nav className="sidebar-section">
