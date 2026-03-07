@@ -2215,25 +2215,31 @@ a.signal-idea-link:hover {
 .omap-empty { color: var(--muted); padding: 16px; }
 
 .omap-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; table-layout: fixed; }
+.omap-table colgroup .omap-col-idea { width: auto; }
+.omap-table colgroup .omap-col-status { width: 80px; }
+.omap-table colgroup .omap-col-conf { width: 70px; }
+.omap-table colgroup .omap-col-vel { width: 100px; }
+.omap-table colgroup .omap-col-signals { width: 60px; }
+.omap-table colgroup .omap-col-market { width: 80px; }
 .omap-table th {
   text-align: left; padding: 6px 10px; color: var(--muted);
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em;
   font-weight: 500; border-bottom: 1px solid var(--glass-border);
   position: sticky; top: 0; background: var(--surface); z-index: 1;
+  white-space: nowrap;
 }
-.omap-th-title { width: 40%; }
-.omap-th-narrow { width: 12%; white-space: nowrap; text-align: right; }
+.omap-table th.omap-td-num { text-align: right; }
 
-.omap-idea-row td { padding: 8px 10px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.omap-idea-row td { padding: 6px 10px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.03); white-space: nowrap; }
 .omap-idea-row.clickable { cursor: pointer; }
 .omap-idea-row:hover { background: var(--glass); }
-.omap-td-title { vertical-align: top; }
+.omap-idea-row td:first-child { white-space: normal; overflow: hidden; text-overflow: ellipsis; }
 .omap-idea-name { font-weight: 500; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .omap-idea-problem {
   color: var(--muted); font-size: 0.75rem; line-height: 1.35; margin-top: 2px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.omap-td-num { text-align: right; font-variant-numeric: tabular-nums; }
+.omap-td-num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 12px !important; }
 
 .omap-status {
   font-size: 0.72rem; padding: 1px 6px; border-radius: 4px;

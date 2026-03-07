@@ -50,14 +50,22 @@ export const OpportunityMapView: React.FC<Props> = ({ apiUrl, onViewThesis }) =>
   return (
     <div className="omap-container">
       <table className="omap-table">
+        <colgroup>
+          <col className="omap-col-idea" />
+          <col className="omap-col-status" />
+          <col className="omap-col-conf" />
+          <col className="omap-col-vel" />
+          <col className="omap-col-signals" />
+          <col className="omap-col-market" />
+        </colgroup>
         <thead>
           <tr>
-            <th className="omap-th-title">Idea</th>
-            <th className="omap-th-narrow">Status</th>
-            <th className="omap-th-narrow">Confidence</th>
-            <th className="omap-th-narrow">Velocity</th>
-            <th className="omap-th-narrow">Signals</th>
-            <th className="omap-th-narrow">Market</th>
+            <th>Idea</th>
+            <th>Status</th>
+            <th className="omap-td-num">Confidence</th>
+            <th className="omap-td-num">Velocity</th>
+            <th className="omap-td-num">Signals</th>
+            <th>Market</th>
           </tr>
         </thead>
         <tbody>

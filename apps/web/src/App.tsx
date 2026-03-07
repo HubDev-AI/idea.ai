@@ -105,6 +105,7 @@ const App = () => {
   const [labelFilter, setLabelFilter] = useState<string>('all');
   const [ideaSearch, setIdeaSearch] = useState('');
   const [signalSearch, setSignalSearch] = useState('');
+  const [omapSelectedThesis, setOmapSelectedThesis] = useState<ThesisListItem | null>(null);
   const [omapOpen, setOmapOpen] = useState(false);
   const [scoringHealthOpen, setScoringHealthOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
@@ -513,27 +514,32 @@ const App = () => {
               </div>
             </div>
             <div className="pane-scroll">
-              {theses.filter(t => {
+              {(omapSelectedThesis ? [omapSelectedThesis] : theses.filter(t => {
                 if (!ideaSearch) return true;
                 const q = ideaSearch.toLowerCase();
                 return t.title.toLowerCase().includes(q) || t.problemStatement.toLowerCase().includes(q);
-              }).map((t) => (
+              })).map((t) => (
                 <ThesisCard
                   key={t.canonicalKey}
                   thesis={t}
                   profileDisplay={profiles.find(p => p.id === (t as any).profileId)?.display ?? null}
                   isActive={thesisFilter === t.canonicalKey}
-                  onClick={() => handleThesisFilter(
-                    thesisFilter === t.canonicalKey ? null : t.canonicalKey,
-                    thesisFilter === t.canonicalKey ? '' : t.title
-                  )}
+                  onClick={() => {
+                    if (thesisFilter === t.canonicalKey) {
+                      setOmapSelectedThesis(null);
+                      handleThesisFilter(null, '');
+                    } else {
+                      setOmapSelectedThesis(null);
+                      handleThesisFilter(t.canonicalKey, t.title);
+                    }
+                  }}
                   isGenerating={generatingKeys.has(t.canonicalKey)}
                   onExplore={() => handleExploreThesis(t)}
                   onView={() => handleViewThesis(t)}
                   onLabelChange={(label) => handleLabelChange(t.canonicalKey, label)}
                 />
               ))}
-              {theses.length === 0 && (
+              {theses.length === 0 && !omapSelectedThesis && (
                 <div className="pane-empty">
                   <p>No theses yet</p>
                   <p className="pane-empty-hint">The research agent will synthesize top ideas from incoming signals.</p>
@@ -675,10 +681,23 @@ const App = () => {
               <OpportunityMapView
                 apiUrl={API_BASE}
                 onViewThesis={(key, title) => {
-                  handleThesisFilter(
-                    thesisFilter === key ? null : key,
-                    thesisFilter === key ? '' : title
-                  );
+                  if (thesisFilter === key) {
+                    // Toggle off
+                    setOmapSelectedThesis(null);
+                    handleThesisFilter(null, '');
+                    return;
+                  }
+                  // Filter signals by this thesis
+                  handleThesisFilter(key, title);
+                  // Show this thesis in the Top Ideas pane
+                  const cached = theses.find(t => t.canonicalKey === key);
+                  if (cached) {
+                    setOmapSelectedThesis(cached);
+                  } else {
+                    fetchThesis(key)
+                      .then(setOmapSelectedThesis)
+                      .catch(() => setOmapSelectedThesis(null));
+                  }
                 }}
               />
             </div>
