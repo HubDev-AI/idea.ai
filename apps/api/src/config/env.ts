@@ -40,6 +40,13 @@ export type RuntimeEnv = {
   bayesianFloorConfidence: number;
   temporalRagWeight: number;
   temporalRagHalfLifeHours: number;
+  debateConfidenceThreshold: number;
+  debateMaxPerRun: number;
+  backtestSnapshotIntervalMs: number;
+  backtestValidateAfterDays: number;
+  cusumThreshold: number;
+  cusumDrift: number;
+  categoryMinPhraseCount: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -76,7 +83,14 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     bayesianDecayAfterDays: parseNumber(env.BAYESIAN_DECAY_AFTER_DAYS, 14),
     bayesianFloorConfidence: parseNumber(env.BAYESIAN_FLOOR_CONFIDENCE, 5),
     temporalRagWeight: parseNumber(env.TEMPORAL_RAG_WEIGHT, 0.3),
-    temporalRagHalfLifeHours: parseNumber(env.TEMPORAL_RAG_HALF_LIFE_HOURS, 72)
+    temporalRagHalfLifeHours: parseNumber(env.TEMPORAL_RAG_HALF_LIFE_HOURS, 72),
+    debateConfidenceThreshold: parseNumber(env.DEBATE_CONFIDENCE_THRESHOLD, 40),
+    debateMaxPerRun: parseNumber(env.DEBATE_MAX_PER_RUN, 5),
+    backtestSnapshotIntervalMs: parseNumber(env.BACKTEST_SNAPSHOT_INTERVAL_MS, 7 * 24 * 60 * 60 * 1000),
+    backtestValidateAfterDays: parseNumber(env.BACKTEST_VALIDATE_AFTER_DAYS, 30),
+    cusumThreshold: parseNumber(env.CUSUM_THRESHOLD, 5),
+    cusumDrift: parseNumber(env.CUSUM_DRIFT, 1),
+    categoryMinPhraseCount: parseNumber(env.CATEGORY_MIN_PHRASE_COUNT, 3)
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;

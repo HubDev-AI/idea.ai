@@ -1010,6 +1010,32 @@ h1, h2, h3, p {
   color: var(--accent);
 }
 
+/* Debate verdict badges */
+.thesis-verdict-badge {
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0 0.2rem;
+  border-radius: 3px;
+  line-height: 1.4;
+}
+.verdict-strong-opportunity { color: var(--ok); border: 1px solid var(--ok); }
+.verdict-needs-investigation { color: var(--warn); border: 1px solid var(--warn); }
+.verdict-contested { color: var(--warn); border: 1px solid var(--warn); }
+.verdict-likely-noise { color: var(--err); border: 1px solid var(--err); }
+
+/* Category emerging */
+.thesis-category-emerging {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Supply/demand imbalance */
+.thesis-imbalance { font-weight: 600; }
+.imbalance-opportunity { color: var(--ok); }
+.imbalance-niche { color: var(--warn); }
+.imbalance-saturated { color: var(--err); }
+
 /* ── Signal Feed ────────────────────────────────────── */
 
 .signal-list {
