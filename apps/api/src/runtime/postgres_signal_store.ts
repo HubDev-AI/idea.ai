@@ -568,8 +568,8 @@ export const createPostgresSignalStore = ({
   const boostViralityScore = async (signalId: string, boost: number): Promise<void> => {
     await pool.query(
       `UPDATE scored_signals
-       SET virality = LEAST(100, virality + $2),
-           blended = ROUND((0.25 * demand + 0.20 * timing + 0.20 * buildability + 0.35 * LEAST(100, virality + $2))::numeric, 2),
+       SET virality = LEAST(100, COALESCE(virality, 0) + $2),
+           blended = ROUND((0.25 * COALESCE(demand, 0) + 0.20 * COALESCE(timing, 0) + 0.20 * COALESCE(buildability, 0) + 0.35 * LEAST(100, COALESCE(virality, 0) + $2))::numeric, 2),
            updated_at = NOW()
        WHERE signal_id = $1`,
       [signalId, boost]

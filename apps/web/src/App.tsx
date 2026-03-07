@@ -86,6 +86,8 @@ const App = () => {
   const [thesisFilterTitle, setThesisFilterTitle] = useState<string>('');
   const [deepDiveThesis, setDeepDiveThesis] = useState<ThesisListItem | null>(null);
   const [generatingKeys, setGeneratingKeys] = useState<Set<string>>(new Set());
+  const generatingKeysRef = useRef(generatingKeys);
+  generatingKeysRef.current = generatingKeys;
   const deepDiveCache = useRef(new Map<string, ThesisDeepDive>());
   const [toasts, setToasts] = useState<{ id: number; message: string; type: 'success' | 'error' }[]>([]);
   const toastIdRef = useRef(0);
@@ -235,7 +237,8 @@ const App = () => {
     };
     void loadSignals();
     return () => { cancelled = true; };
-  }, [requestedPage, sourceFilter, thesisFilter, sortField]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedPage, sourceFilter, thesisFilter, sortField, ws.signalsUpdatedAt]);
 
   // Fetch theses on page/sort/filter change or when server pushes thesesUpdated
   useEffect(() => {
@@ -264,7 +267,8 @@ const App = () => {
     };
     void loadTheses();
     return () => { isCancelled = true; };
-  }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter, ws.thesesUpdatedAt]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderedLogs+logDrawerOpen trigger scroll-to-bottom
   useEffect(() => {
@@ -324,7 +328,7 @@ const App = () => {
 
   const handleExploreThesis = useCallback((thesis: ThesisListItem) => {
     const key = thesis.canonicalKey;
-    if (generatingKeys.has(key)) return;
+    if (generatingKeysRef.current.has(key)) return;
 
     setGeneratingKeys((prev) => new Set(prev).add(key));
 
@@ -357,7 +361,8 @@ const App = () => {
         });
       }
     })();
-  }, [generatingKeys, showToast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showToast]);
 
   const handleViewThesis = useCallback((thesis: ThesisListItem) => {
     const cached = deepDiveCache.current.get(thesis.canonicalKey);

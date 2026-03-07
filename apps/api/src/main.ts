@@ -528,17 +528,17 @@ app
     void runRetentionCleanup();
 
     // Weekly backtesting: snapshot predictions + validate old ones
-    backtestTimer = setInterval(async () => {
+    if (pool && signalStore) backtestTimer = setInterval(async () => {
       try {
-        const snapResult = await snapshotPredictions({ pool: pool!, thesisStore, confidenceThreshold: 50 });
+        const snapResult = await snapshotPredictions({ pool, thesisStore, confidenceThreshold: 50 });
         console.log(`[backtest] Snapshotted ${snapResult.snapshotted} predictions`);
 
         const valResult = await validatePredictions({
-          pool: pool!,
+          pool,
           searchRecentSignals: async (thesisKey: string) => {
             const thesis = await thesisStore.getByKey(thesisKey);
             if (!thesis) return [];
-            const signals = await signalStore!.listAllSignals(100);
+            const signals = await signalStore.listAllSignals(100);
             return signals
               .filter(s => s.topic === thesis.topic)
               .map(s => ({ source: s.source, canonical_text: s.canonical_text }));
@@ -567,7 +567,7 @@ app
       weightOptTimer = setInterval(async () => {
         try {
           const result = await runWeightOptimization({
-            pool: pool!,
+            pool,
             minPredictions: runtimeEnv.weightOptMinPredictions,
             minImprovement: runtimeEnv.weightOptMinImprovement,
             gridStep: runtimeEnv.weightOptGridStep,
