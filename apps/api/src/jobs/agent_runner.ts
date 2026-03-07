@@ -314,6 +314,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         if (!parsed) throw new Error('Failed to parse broad scan response');
         return parsed;
       },
+      preferred,
       ...(deps.logger ? { logger: deps.logger } : {})
     }
   );
@@ -523,6 +524,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           if (!parsed) throw new Error('Failed to parse deep dive response');
           return parsed;
         },
+        preferred,
         ...(deps.logger ? { logger: deps.logger } : {})
       }
     );

@@ -35,13 +35,13 @@ describe('dual analyst', () => {
   });
 
   describe('dualAnalystRun', () => {
-    it('calls both providers and reconciles', async () => {
+    it('calls preferred provider first and skips fallback on success', async () => {
       const runClaude = vi.fn().mockResolvedValue({
-        text: JSON.stringify({ demand: 80, timing: 60, buildability: 70, virality: 50, reasoning: 'claude' }),
+        text: JSON.stringify({ demand: 80, timing: 60, buildability: 70, virality: 50 }),
         provider: 'claude', meta: {}
       });
       const runCodex = vi.fn().mockResolvedValue({
-        text: JSON.stringify({ demand: 75, timing: 65, buildability: 72, virality: 55, reasoning: 'codex' }),
+        text: JSON.stringify({ demand: 75, timing: 65, buildability: 72, virality: 55 }),
         provider: 'codex', meta: {}
       });
 
@@ -50,26 +50,43 @@ describe('dual analyst', () => {
         { runClaude, runCodex, parseResponse: JSON.parse }
       );
 
-      expect(result.claude).not.toBeNull();
-      expect(result.codex).not.toBeNull();
       expect(runClaude).toHaveBeenCalledOnce();
-      expect(runCodex).toHaveBeenCalledOnce();
+      expect(runCodex).not.toHaveBeenCalled();
+      expect(result.claude).not.toBeNull();
+      expect(result.codex).toBeNull();
     });
 
-    it('handles single provider failure gracefully', async () => {
-      const runClaude = vi.fn().mockResolvedValue({
-        text: JSON.stringify({ demand: 80, timing: 60, buildability: 70, virality: 50, reasoning: 'ok' }),
-        provider: 'claude', meta: {}
+    it('falls back to other provider on primary failure', async () => {
+      const runClaude = vi.fn().mockRejectedValue(new Error('claude down'));
+      const runCodex = vi.fn().mockResolvedValue({
+        text: JSON.stringify({ demand: 80, timing: 60, buildability: 70, virality: 50 }),
+        provider: 'codex', meta: {}
       });
-      const runCodex = vi.fn().mockRejectedValue(new Error('codex down'));
 
       const result = await dualAnalystRun(
         { prompt: 'test', timeoutMs: 10_000 },
         { runClaude, runCodex, parseResponse: JSON.parse }
       );
 
-      expect(result.claude).not.toBeNull();
-      expect(result.codex).toBeNull();
+      expect(result.claude).toBeNull();
+      expect(result.codex).not.toBeNull();
+    });
+
+    it('falls back when primary returns unparseable response', async () => {
+      const runClaude = vi.fn().mockResolvedValue({
+        text: 'not json', provider: 'claude', meta: {}
+      });
+      const runCodex = vi.fn().mockResolvedValue({
+        text: JSON.stringify({ value: 2 }), provider: 'codex', meta: {}
+      });
+
+      const result = await dualAnalystRun(
+        { prompt: 'test', timeoutMs: 10_000 },
+        { runClaude, runCodex, parseResponse: JSON.parse }
+      );
+
+      expect(result.claude).toBeNull();
+      expect(result.codex).toEqual({ value: 2 });
     });
   });
 });
