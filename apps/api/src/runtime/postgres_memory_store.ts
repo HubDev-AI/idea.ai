@@ -243,6 +243,7 @@ export type EmbeddingStats = {
   total: number;
   withEmbedding: number;
   fallbackModel: string;
+  dataSizeMb: number;
 };
 
 export type ConvergentMatch = {
@@ -504,17 +505,19 @@ export const createPostgresMemoryStore = ({
   };
 
   const getEmbeddingStats = async (): Promise<EmbeddingStats> => {
-    const result = await pool.query<{ total: number; with_embedding: number; fallback_model: string | null }>(`
+    const result = await pool.query<{ total: number; with_embedding: number; fallback_model: string | null; data_size_mb: number }>(`
       SELECT
         (SELECT COUNT(*)::int FROM signal_memory) AS total,
         (SELECT COUNT(*)::int FROM signal_embeddings) AS with_embedding,
-        (SELECT model FROM signal_embeddings ORDER BY created_at DESC LIMIT 1) AS fallback_model
+        (SELECT model FROM signal_embeddings ORDER BY created_at DESC LIMIT 1) AS fallback_model,
+        (SELECT ROUND(pg_total_relation_size('signal_embeddings') / 1024.0 / 1024.0, 1)::float) AS data_size_mb
     `);
     const row = result.rows[0];
     return {
       total: row?.total ?? 0,
       withEmbedding: row?.with_embedding ?? 0,
-      fallbackModel: row?.fallback_model ?? 'none'
+      fallbackModel: row?.fallback_model ?? 'none',
+      dataSizeMb: row?.data_size_mb ?? 0
     };
   };
 

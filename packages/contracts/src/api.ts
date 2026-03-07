@@ -234,6 +234,7 @@ export type InfraStatusRecord = {
     total: number;
     withEmbedding: number;
     fallbackModel: string;
+    dataSizeMb?: number;
   };
   diskUsage?: {
     dbSizeMb: number;

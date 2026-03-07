@@ -405,15 +405,15 @@ let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let backtestTimer: ReturnType<typeof setInterval> | undefined;
 let weightOptTimer: ReturnType<typeof setInterval> | undefined;
 
-const RETENTION_DAYS = 90;
-
 const runRetentionCleanup = async () => {
   if (!pool) return;
+  const retentionDays = startupEnv.retentionDays;
+  if (retentionDays <= 0) return; // 0 = disabled
   try {
-    await pool.query(`DELETE FROM signal_memory WHERE observed_at < NOW() - INTERVAL '1 day' * $1`, [RETENTION_DAYS]);
+    await pool.query(`DELETE FROM signal_memory WHERE observed_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
     await pool.query(`DELETE FROM signal_embeddings WHERE signal_id NOT IN (SELECT signal_id FROM signal_memory)`);
-    await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '1 day' * $1`, [RETENTION_DAYS]);
-    await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '1 day' * $1`, [RETENTION_DAYS]);
+    await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
+    await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
   } catch (err) {
     console.error('retention cleanup failed:', err);
   }

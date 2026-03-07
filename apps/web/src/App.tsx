@@ -103,6 +103,8 @@ const App = () => {
   const [profiles, setProfiles] = useState<ProfileDisplay[]>([]);
   const [activeProfile, setActiveProfile] = useState('all');
   const [labelFilter, setLabelFilter] = useState<string>('all');
+  const [ideaSearch, setIdeaSearch] = useState('');
+  const [signalSearch, setSignalSearch] = useState('');
   const [omapOpen, setOmapOpen] = useState(false);
   const [scoringHealthOpen, setScoringHealthOpen] = useState(false);
   const [connectionsOpen, setConnectionsOpen] = useState(false);
@@ -438,6 +440,13 @@ const App = () => {
             <div className="pane-header">
               <h2 className="pane-title">Top Ideas</h2>
               <div className="pane-header-right">
+                <input
+                  type="text"
+                  className="pane-search"
+                  placeholder="Search ideas..."
+                  value={ideaSearch}
+                  onChange={(e) => setIdeaSearch(e.target.value)}
+                />
                 <div className="profile-tabs">
                   <button
                     type="button"
@@ -504,7 +513,11 @@ const App = () => {
               </div>
             </div>
             <div className="pane-scroll">
-              {theses.map((t) => (
+              {theses.filter(t => {
+                if (!ideaSearch) return true;
+                const q = ideaSearch.toLowerCase();
+                return t.title.toLowerCase().includes(q) || t.problemStatement.toLowerCase().includes(q);
+              }).map((t) => (
                 <ThesisCard
                   key={t.canonicalKey}
                   thesis={t}
@@ -552,6 +565,13 @@ const App = () => {
             <div className="pane-header">
               <h2 className="pane-title">Signals</h2>
               <div className="pane-header-right">
+                <input
+                  type="text"
+                  className="pane-search"
+                  placeholder="Search signals..."
+                  value={signalSearch}
+                  onChange={(e) => setSignalSearch(e.target.value)}
+                />
                 <select
                   className="source-filter"
                   value={sourceFilter}
@@ -623,7 +643,11 @@ const App = () => {
             </div>
             <div className="pane-scroll">
               <ul className="signal-list">
-                {signals.map((signal) => (
+                {signals.filter(s => {
+                  if (!signalSearch) return true;
+                  const q = signalSearch.toLowerCase();
+                  return s.idea.toLowerCase().includes(q) || s.snippet.toLowerCase().includes(q) || s.top_source.toLowerCase().includes(q);
+                }).map((signal) => (
                   <SignalRow key={`${signal.idea}-${signal.updated_at}`} signal={signal} />
                 ))}
                 {signals.length === 0 && (
@@ -650,16 +674,11 @@ const App = () => {
             <div className="omap-drawer-scroll">
               <OpportunityMapView
                 apiUrl={API_BASE}
-                onViewThesis={(key) => {
-                  const cached = theses.find(th => th.canonicalKey === key);
-                  if (cached) {
-                    handleViewThesis(cached);
-                    return;
-                  }
-                  // Thesis not on current page — fetch from API
-                  fetchThesis(key)
-                    .then(handleViewThesis)
-                    .catch(err => showToast(`Failed to load thesis: ${err.message}`));
+                onViewThesis={(key, title) => {
+                  handleThesisFilter(
+                    thesisFilter === key ? null : key,
+                    thesisFilter === key ? '' : title
+                  );
                 }}
               />
             </div>

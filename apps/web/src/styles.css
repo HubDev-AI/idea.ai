@@ -698,6 +698,28 @@ h1, h2, h3, p {
   background: var(--accent);
 }
 
+.pane-search {
+  background: var(--surface-2);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.7rem;
+  padding: 0.32rem 0.6rem;
+  width: 120px;
+  transition: background 0.12s, border-color 0.12s, width 0.2s;
+}
+
+.pane-search:focus {
+  outline: none;
+  border-color: var(--accent);
+  width: 160px;
+}
+
+.pane-search::placeholder {
+  color: var(--text-muted);
+}
+
 .source-filter {
   background: var(--surface-2);
   border: 1px solid var(--glass-border);

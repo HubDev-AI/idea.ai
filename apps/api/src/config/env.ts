@@ -32,6 +32,7 @@ export type RuntimeEnv = {
   wsInfraPollMs: number;
   wsLogPollMs: number;
   cleanupIntervalMs: number;
+  retentionDays: number;
   circuitBreakerThreshold: number;
   circuitBreakerCooldownMs: number;
   bayesianPriorDefault: number;
@@ -84,6 +85,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     wsInfraPollMs: parseNumber(env.WS_INFRA_POLL_MS, 10_000),
     wsLogPollMs: parseNumber(env.WS_LOG_POLL_MS, 3_000),
     cleanupIntervalMs: parseNumber(env.CLEANUP_INTERVAL_MS, 6 * 60 * 60 * 1000),
+    retentionDays: parseNumber(env.RETENTION_DAYS, 90),
     circuitBreakerThreshold: parseNumber(env.CIRCUIT_BREAKER_THRESHOLD, 3),
     circuitBreakerCooldownMs: parseNumber(env.CIRCUIT_BREAKER_COOLDOWN_MS, 10 * 60 * 1000),
     bayesianPriorDefault: parseNumber(env.BAYESIAN_PRIOR_DEFAULT, 20),
