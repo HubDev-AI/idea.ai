@@ -19,6 +19,7 @@ import {
   triggerAgentRun,
   triggerConnectorRefresh,
 } from './api';
+import { ConnectionsView } from './components/ConnectionsView';
 import { OpportunityMapView } from './components/OpportunityMap';
 import { ScoringHealth } from './components/ScoringHealth';
 import { Sidebar } from './components/Sidebar';
@@ -103,6 +104,7 @@ const App = () => {
   const [labelFilter, setLabelFilter] = useState<string>('all');
   const [omapOpen, setOmapOpen] = useState(false);
   const [scoringHealthOpen, setScoringHealthOpen] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [logDrawerOpen, setLogDrawerOpen] = useState(false);
   const [logAtBottom, setLogAtBottom] = useState(true);
   const [logComponentFilter, setLogComponentFilter] = useState('all');
@@ -665,6 +667,25 @@ const App = () => {
           {scoringHealthOpen && (
             <div className="omap-drawer-scroll">
               <ScoringHealth apiUrl={API_BASE} />
+            </div>
+          )}
+        </section>
+
+        {/* Connections drawer — collapsible bottom */}
+        <section className={`omap-drawer ${connectionsOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className="omap-drawer-toggle"
+            onClick={() => setConnectionsOpen((v) => !v)}
+          >
+            <span className="omap-drawer-title">
+              Connections
+            </span>
+            <span className="omap-drawer-chevron">{connectionsOpen ? '\u25BC' : '\u25B2'}</span>
+          </button>
+          {connectionsOpen && (
+            <div className="omap-drawer-scroll">
+              <ConnectionsView apiUrl={API_BASE} />
             </div>
           )}
         </section>
