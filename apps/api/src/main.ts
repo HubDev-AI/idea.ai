@@ -519,9 +519,8 @@ app
       }
     }, runtimeEnv.backtestSnapshotIntervalMs);
 
-    // Monthly weight optimization (runs once per 30 days)
+    // Periodic weight optimization (check if enough data has accumulated)
     if (pool && runtimeEnv.weightOptEnabled) {
-      const WEIGHT_OPT_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
       weightOptTimer = setInterval(async () => {
         try {
           const result = await runWeightOptimization({
@@ -538,7 +537,7 @@ app
         } catch (err) {
           console.error('[weight-opt] Error:', err);
         }
-      }, WEIGHT_OPT_INTERVAL_MS);
+      }, runtimeEnv.weightOptIntervalMs);
     }
   })
   .catch((error) => {
