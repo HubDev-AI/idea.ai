@@ -90,7 +90,13 @@ describe('V2 integration', () => {
     expect(result.demand).toBe(80);
   });
 
-  it('dualAnalystRun calls both providers in parallel', async () => {
+  it('dualAnalystRun calls preferred provider first and skips fallback on success', async () => {
+    const runCodex = vi.fn().mockResolvedValue({
+      text: '{"value": 43}',
+      provider: 'codex',
+      meta: {}
+    });
+
     const result = await dualAnalystRun<{ value: number }>(
       { prompt: 'test prompt' },
       {
@@ -99,17 +105,14 @@ describe('V2 integration', () => {
           provider: 'claude',
           meta: {}
         }),
-        runCodex: vi.fn().mockResolvedValue({
-          text: '{"value": 43}',
-          provider: 'codex',
-          meta: {}
-        }),
+        runCodex,
         parseResponse: (text: string) => JSON.parse(text) as { value: number }
       }
     );
 
     expect(result.claude).toEqual({ value: 42 });
-    expect(result.codex).toEqual({ value: 43 });
+    expect(result.codex).toBeNull();
+    expect(runCodex).not.toHaveBeenCalled();
   });
 
   it('dualAnalystRun handles provider failure gracefully', async () => {

@@ -1,5 +1,7 @@
 import { type Cadence, OPEN_CONNECTOR_CADENCE, type RawEventInput } from '@idea/connectors/src/common/http';
-import { blendedScore } from '@idea/pipeline/src/scoring/blend';
+import { blendedScore, blendedScoreWithWeights } from '@idea/pipeline/src/scoring/blend';
+import type { WeightConfig } from '@idea/pipeline/src/scoring/weight_optimizer';
+import { getActiveWeights } from './active_weights';
 import type { RuntimeEnv } from '../config/env';
 import { loadRuntimeEnv } from '../config/env';
 import {
@@ -395,7 +397,11 @@ const buildInitialConnectors = (env: RuntimeEnv): ConnectorStatusRecord[] => {
   ];
 };
 
-export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { persistentStore?: PostgresMemoryStore; circuit?: ProviderCircuitBreaker }) => {
+export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
+  persistentStore?: PostgresMemoryStore;
+  circuit?: ProviderCircuitBreaker;
+  pool?: import('pg').Pool;
+}) => {
   const startedAt = Date.now();
   const initialEnv = loadRuntimeEnv(process.env);
   const initialAiJudgeSettings = resolveAiJudgeSettings(process.env);
@@ -508,6 +514,13 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
 
   const refresh = async (forceCadence?: 'hourly' | 'daily'): Promise<Snapshot> => {
     const env = loadRuntimeEnv(process.env);
+    let activeWeights: WeightConfig | undefined;
+    if (opts?.pool) {
+      try {
+        const aw = await getActiveWeights(opts.pool, 'consumer');
+        activeWeights = { demand: aw.demand, timing: aw.timing, buildability: aw.buildability, virality: aw.virality };
+      } catch { /* use default weights */ }
+    }
     const runId = process.env.RUN_ID ?? createRunId('read_model');
     const logger = createExecutionLogger({ env: process.env, runId });
     sessionRunIds.add(logger.runId);
@@ -707,7 +720,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             source: event.source,
             canonicalText,
             memoryRetriever: retriever,
-            topK: 8
+            topK: 8,
+            ...(activeWeights ? { weights: activeWeights } : {})
           };
           if (aiInsight?.demand !== undefined) scoreArgs.baseDemand = aiInsight.demand;
           if (aiInsight?.timing !== undefined) scoreArgs.baseTiming = aiInsight.timing;
@@ -726,7 +740,9 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: { per
             score.demand = Math.min(100, score.demand + 5);
           }
           if (eng >= 10) {
-            score.blended = blendedScore(score);
+            score.blended = activeWeights
+              ? blendedScoreWithWeights(score, activeWeights)
+              : blendedScore(score);
           }
 
           const blended = applySourceQualityPenalty({

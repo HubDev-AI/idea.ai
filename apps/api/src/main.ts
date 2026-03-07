@@ -61,6 +61,7 @@ const memoryStore = databaseUrl
 const readModel = createLiveReadModel(undefined, {
   ...(memoryStore ? { persistentStore: memoryStore } : {}),
   circuit: providerCircuit,
+  ...(pool ? { pool } : {}),
 });
 
 const journalStore = databaseUrl
