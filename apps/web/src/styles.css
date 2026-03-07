@@ -1814,3 +1814,95 @@ a.signal-idea-link:hover {
   from { opacity: 1; }
   to { opacity: 0; }
 }
+
+/* Opportunity Map */
+.omap-container { padding: 16px 0; }
+.omap-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.omap-header h2 { margin: 0; font-size: 1.1rem; }
+.omap-updated { color: var(--muted); font-size: 0.8rem; }
+.omap-node { margin: 2px 0; }
+.omap-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 6px;
+  cursor: default; font-size: 0.9rem;
+  transition: background 0.15s;
+}
+.omap-row[role="button"] { cursor: pointer; }
+.omap-row[role="button"]:hover { background: var(--card-bg); }
+.omap-type-market { font-weight: 600; }
+.omap-type-category { font-weight: 500; opacity: 0.9; }
+.omap-type-thesis { opacity: 0.85; }
+.omap-toggle { width: 14px; font-size: 0.7rem; color: var(--muted); }
+.omap-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.omap-confidence { font-weight: 600; min-width: 40px; text-align: right; }
+.omap-velocity { font-size: 0.8rem; min-width: 44px; }
+.omap-demand { color: var(--muted); font-size: 0.8rem; min-width: 70px; text-align: right; }
+.omap-imbalance { font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; }
+.omap-emerging { font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; background: var(--ok); color: #000; }
+.omap-error { color: var(--err); padding: 16px; }
+.omap-loading { color: var(--muted); padding: 16px; }
+.omap-empty { color: var(--muted); padding: 16px; }
+.omap-children { border-left: 1px solid var(--border); margin-left: 7px; }
+
+/* Opportunity Map drawer */
+.omap-drawer {
+  flex: 0 0 36px;
+  background: var(--surface);
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  transition: flex-basis 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.omap-drawer.open {
+  flex: 0 0 280px;
+}
+
+.omap-drawer-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.45rem 1.25rem;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  letter-spacing: -0.01em;
+  transition: background 0.12s;
+}
+
+.omap-drawer-toggle:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.omap-drawer-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: 'Geist Mono', 'GeistMono', monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.omap-drawer-chevron {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.omap-drawer-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1.25rem 0.75rem;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-2) transparent;
+}
