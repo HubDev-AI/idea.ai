@@ -10,6 +10,7 @@ import { type FeedRecord, registerFeedRoute } from './routes/feed';
 import { registerHealthRoute } from './routes/health';
 import { type InfraStatusDeps, registerInfraStatusRoute } from './routes/infra_status';
 import { type ExecutionLogRecord, type ListLogsQuery, registerLogsRoute } from './routes/logs';
+import { registerOpportunityMapRoute } from './routes/opportunity_map';
 import { registerProfilesRoute } from './routes/profiles.js';
 import { registerThesesRoute } from './routes/theses';
 import type { AgentRunStore } from './runtime/agent_run_store';
@@ -37,6 +38,7 @@ export type ServerDeps = {
   getRefreshMeta?: () => RefreshMeta;
   triggerRefresh?: (cadence?: 'hourly' | 'daily') => Promise<void>;
   logger?: ExecutionLogger;
+  pool?: import('pg').Pool;
 };
 
 const defaultDeps: ServerDeps = {
@@ -155,6 +157,10 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
       deepDiveAi: resolvedDeps.deepDiveAi ?? null,
       logger: resolvedDeps.logger
     });
+  }
+
+  if (resolvedDeps.pool) {
+    registerOpportunityMapRoute(app, { pool: resolvedDeps.pool });
   }
 
   if (resolvedDeps.infraStatusDeps) {
