@@ -377,10 +377,11 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
 
   const debateResults: Array<{ thesisKey: string; result: DebateResult }> = [];
 
-  for (const thesis of debateCandidates) {
+  for (let di = 0; di < debateCandidates.length; di++) {
+    const thesis = debateCandidates[di];
     try {
       const evidence = thesis.evidence.map(e => e.snippet).filter(Boolean);
-      const useClaude = Date.now() % 2 === 0;
+      const useClaude = di % 2 === 0;
       const result = await runDebate({
         thesisTitle: thesis.title,
         thesisKey: thesis.canonicalKey,
@@ -410,7 +411,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           await deps.pool.query(
             `INSERT INTO thesis_debates (thesis_key, run_id, bull_provider, bear_provider, bull_case, bear_case, moderator_verdict)
              VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [thesis.canonicalKey, deps.runId ?? 'unknown', result.bullProvider, result.bearProvider,
+            [thesis.canonicalKey, runId, result.bullProvider, result.bearProvider,
              result.bullCase, result.bearCase, JSON.stringify(result.verdict)]
           );
         }
@@ -655,13 +656,13 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       }
 
       if (bestMetrics) {
-        // Boost velocity if CUSUM detected acceleration
-        if (topicAccelerating.has(thesis.topic)) {
-          bestMetrics.velocity = Math.min(10, bestMetrics.velocity * 1.5);
-        }
+        // Boost velocity if CUSUM detected acceleration (don't mutate shared map entry)
+        const velocity = topicAccelerating.has(thesis.topic)
+          ? Math.min(10, bestMetrics.velocity * 1.5)
+          : bestMetrics.velocity;
         await deps.thesisStore.upsert({
           ...thesis,
-          velocity: Math.round(bestMetrics.velocity * 100) / 100,
+          velocity: Math.round(velocity * 100) / 100,
           corroborationScore: Math.round(bestMetrics.corroboration * 100) / 100,
         });
         enriched++;

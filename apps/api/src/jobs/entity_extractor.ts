@@ -62,12 +62,16 @@ export const extractEntities = async (input: EntityExtractionInput): Promise<num
       name: entity.name.toLowerCase().trim(),
       description: entity.description,
     });
-    entityIdMap.set(`${entity.type}:${entity.name}`, id);
+    entityIdMap.set(`${entity.type}:${entity.name.toLowerCase().trim()}`, id);
   }
 
   for (const rel of parsed.relations) {
-    const sourceId = entityIdMap.get(rel.source);
-    const targetId = entityIdMap.get(rel.target);
+    const normalizeKey = (key: string) => {
+      const [type, ...rest] = key.split(':');
+      return `${type}:${rest.join(':').toLowerCase().trim()}`;
+    };
+    const sourceId = entityIdMap.get(normalizeKey(rel.source));
+    const targetId = entityIdMap.get(normalizeKey(rel.target));
     if (sourceId && targetId) {
       await input.entityStore.upsertRelation({
         source_entity_id: sourceId,

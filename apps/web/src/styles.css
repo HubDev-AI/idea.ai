@@ -16,6 +16,8 @@
   --warn: #fbbf24;
   --err: #f87171;
   --chip: #1e2129;
+  --card-bg: var(--surface-2);
+  --border: var(--glass-border);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
   --sidebar-w: 240px;

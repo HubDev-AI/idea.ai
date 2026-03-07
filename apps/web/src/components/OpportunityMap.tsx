@@ -1,22 +1,5 @@
+import type { OpportunityMapRecord, OpportunityNode } from '@idea/contracts/src/api';
 import React, { useEffect, useState } from 'react';
-
-type OpportunityNode = {
-  id: string;
-  label: string;
-  type: 'market' | 'category' | 'thesis';
-  confidence: number;
-  velocity: number;
-  supply: number;
-  demand: number;
-  supplyDemand?: 'opportunity' | 'competitive' | 'niche' | 'saturated' | null;
-  emerging?: boolean;
-  children?: OpportunityNode[];
-};
-
-type OpportunityMap = {
-  roots: OpportunityNode[];
-  generatedAt: string;
-};
 
 const velocityColor = (v: number): string => {
   if (v >= 2) return 'var(--ok)';
@@ -69,14 +52,14 @@ const NodeView: React.FC<{ node: OpportunityNode; depth: number }> = ({ node, de
 };
 
 export const OpportunityMapView: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
-  const [map, setMap] = useState<OpportunityMap | null>(null);
+  const [map, setMap] = useState<OpportunityMapRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`${apiUrl}/v1/opportunity-map`)
       .then(res => {
         if (!res.ok) throw new Error(`${res.status}`);
-        return res.json() as Promise<OpportunityMap>;
+        return res.json() as Promise<OpportunityMapRecord>;
       })
       .then(setMap)
       .catch(err => setError(err.message));
