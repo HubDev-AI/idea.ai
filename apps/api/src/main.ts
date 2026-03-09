@@ -265,7 +265,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getRefreshMeta: readModel.getRefreshMeta,
   triggerRefresh: async (cadence) => {
     stateHub.pushRefreshMeta();
-    await readModel.refresh(cadence);
+    await readModel.startRefresh(cadence);
     void stateHub.broadcastAll();
 
     // Entity extraction: run after refresh if both entityStore and modelRouter are available
@@ -514,7 +514,7 @@ app
     const runtimeEnv = loadRuntimeEnv(process.env);
 
     // Trigger initial data refresh and broadcast
-    void readModel.refresh().then(() => stateHub.broadcastAll()).catch(() => {});
+    void readModel.startRefresh().then(() => stateHub.broadcastAll()).catch(() => {});
     // Push refreshMeta immediately so clients see the "refreshing" state
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
@@ -536,7 +536,7 @@ app
     // Periodic connector refresh (was driven by client polling before WebSocket migration)
     refreshTimer = setInterval(() => {
       stateHub.pushRefreshMeta();
-      void readModel.refresh().then(() => stateHub.broadcastAll()).catch((err) => {
+      void readModel.startRefresh().then(() => stateHub.broadcastAll()).catch((err) => {
         console.error('periodic refresh failed:', err);
       });
     }, runtimeEnv.agentIntervalMs);

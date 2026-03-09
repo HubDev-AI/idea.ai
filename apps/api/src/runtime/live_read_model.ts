@@ -966,9 +966,9 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     }
   };
 
-  const startRefresh = (): Promise<Snapshot> => {
+  const startRefresh = (cadence?: 'hourly' | 'daily'): Promise<Snapshot> => {
     if (!refreshInFlight) {
-      refreshInFlight = refresh().finally(() => {
+      refreshInFlight = refresh(cadence).finally(() => {
         refreshInFlight = null;
       });
     }
@@ -1043,7 +1043,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
         return rows.filter((row) => sessionRunIds.has(row.run_id)).slice(0, query.limit);
       })()),
     registerRunId: (runId: string) => { sessionRunIds.add(runId); },
-    refresh,
+    startRefresh,
     close: async (): Promise<void> => {
       if (postgresSignalStore) {
         await postgresSignalStore.close();
