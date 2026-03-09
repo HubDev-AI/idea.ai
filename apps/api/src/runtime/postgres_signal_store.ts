@@ -14,6 +14,16 @@ const WINDOW_INTERVALS: Array<{ window: TrendWindowSnapshot['window']; interval:
   { window: '90d', interval: '90 days' }
 ];
 
+export const sanitizeUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+};
+
 const toVectorLiteral = (embedding: number[]): string =>
   `[${embedding.map((value) => (Number.isFinite(value) ? value : 0)).join(',')}]`;
 
@@ -117,7 +127,7 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
       entry.memoryRecord.buildability,
       entry.memoryRecord.blended,
       entry.memoryRecord.virality,
-      entry.memoryRecord.source_url ?? null
+      sanitizeUrl(entry.memoryRecord.source_url)
     ]
   );
 

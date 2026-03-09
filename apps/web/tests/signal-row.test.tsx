@@ -77,4 +77,11 @@ describe('SignalRow', () => {
     expect(link).toBeTruthy();
     expect(link.getAttribute('href')).toBe('https://example.com');
   });
+
+  it('renders idea as plain text (no link) when source_url has javascript: scheme', () => {
+    render(<SignalRow signal={{ ...baseSignal, source_url: 'javascript:alert(1)' }} />);
+
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByText('SOC2 prep copilot')).toBeTruthy();
+  });
 });
