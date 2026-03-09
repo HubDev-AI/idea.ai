@@ -349,4 +349,20 @@ describe('web app', () => {
     const liveElements = await screen.findAllByText('LIVE');
     expect(liveElements.length).toBeGreaterThan(0);
   });
+
+  it('log drawer header does not nest a button inside a button', async () => {
+    const { container } = render(<App />);
+
+    // Wait for app to load, then open the log drawer so the Copy button renders
+    await screen.findByText('SOC2 prep copilot');
+    const logsButton = screen.getByText(/Logs/i);
+    fireEvent.click(logsButton);
+
+    // Now the drawer is open — assert no button is nested inside .log-drawer-toggle
+    const toggles = container.querySelectorAll('.log-drawer-toggle');
+    for (const toggle of toggles) {
+      const nestedButtons = toggle.querySelectorAll('button');
+      expect(nestedButtons.length).toBe(0);
+    }
+  });
 });

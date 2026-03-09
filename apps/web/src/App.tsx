@@ -749,38 +749,43 @@ const App = () => {
 
         {/* Log drawer — collapsible bottom */}
         <section className={`log-drawer ${logDrawerOpen ? 'open' : ''}`}>
-          <button
-            type="button"
-            className="log-drawer-toggle"
-            onClick={() => setLogDrawerOpen((v) => !v)}
-          >
-            <span className="log-drawer-title">
-              Logs
-              <span className="log-drawer-count">{ws.logs.length}</span>
-              <span className={`log-drawer-status ${ws.connected ? 'live' : ''}`}>
-                {ws.connected ? 'LIVE' : 'DISCONNECTED'}
+          <div className="log-drawer-header">
+            <div
+              className="log-drawer-toggle"
+              role="button"
+              tabIndex={0}
+              aria-expanded={logDrawerOpen}
+              onClick={() => setLogDrawerOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setLogDrawerOpen((v) => !v);
+                }
+              }}
+            >
+              <span className="log-drawer-title">
+                Logs
+                <span className="log-drawer-count">{ws.logs.length}</span>
+                <span className={`log-drawer-status ${ws.connected ? 'live' : ''}`}>
+                  {ws.connected ? 'LIVE' : 'DISCONNECTED'}
+                </span>
               </span>
-            </span>
-            <span className="log-drawer-right">
-              {logDrawerOpen && (
-                <>
-                  <button
-                    type="button"
-                    className="log-action-btn"
-                    title="Copy logs to clipboard"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const text = renderedLogs.map(formatTerminalLine).join('\n');
-                      navigator.clipboard.writeText(text);
-                    }}
-                  >
-                    Copy
-                  </button>
-                </>
-              )}
               <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
-            </span>
-          </button>
+            </div>
+            {logDrawerOpen && (
+              <button
+                type="button"
+                className="log-action-btn"
+                title="Copy logs to clipboard"
+                onClick={() => {
+                  const text = renderedLogs.map(formatTerminalLine).join('\n');
+                  navigator.clipboard.writeText(text);
+                }}
+              >
+                Copy
+              </button>
+            )}
+          </div>
           {logDrawerOpen && (
             <div className="log-scroll-wrapper">
               <div className="log-filters">
