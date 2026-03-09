@@ -73,17 +73,21 @@ export type PaginatedThesisStore = ThesisStore & {
   close: () => Promise<void>;
 };
 
+const THESIS_AGG_COLS = [
+  'COUNT(DISTINCT te.signal_id)::int AS evidence_count',
+  'COUNT(DISTINCT sm.source)::int AS source_count',
+  'ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand',
+  'ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing',
+  'ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability',
+  'ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality',
+].join(',\n             ');
+
 export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedThesisStore => ({
   async list(filter?: ThesisStoreFilter): Promise<ThesisDraft[]> {
     const where = filter?.status ? 'WHERE status = $1' : '';
     const params = filter?.status ? [filter.status] : [];
     const sql = `
-      SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
-             COUNT(DISTINCT sm.source)::int AS source_count,
-             ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
-             ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
-             ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
-             ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
+      SELECT tc.*, ${THESIS_AGG_COLS}
       FROM thesis_candidates tc
       LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
       LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
@@ -97,12 +101,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
 
   async getByKey(canonicalKey: string): Promise<ThesisDraft | null> {
     const result = await pool.query<ThesisRow>(
-      `SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
-              COUNT(DISTINCT sm.source)::int AS source_count,
-              ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
-              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
-              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
-              ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality
+      `SELECT tc.*, ${THESIS_AGG_COLS}
        FROM thesis_candidates tc
        LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
        LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
@@ -115,12 +114,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
 
   async getAsListItem(canonicalKey: string): Promise<ThesisListItem | null> {
     const result = await pool.query<ThesisRow & { has_deep_dive: boolean; debate_verdict: string | null }>(
-      `SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
-              COUNT(DISTINCT sm.source)::int AS source_count,
-              ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
-              ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
-              ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
-              ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality,
+      `SELECT tc.*, ${THESIS_AGG_COLS},
               EXISTS(SELECT 1 FROM thesis_deep_dives dd WHERE dd.canonical_key = tc.canonical_key) AS has_deep_dive,
               dv.debate_verdict
        FROM thesis_candidates tc
@@ -268,12 +262,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     const offsetIdx = params.length + 2;
 
     const sql = `
-      SELECT tc.*, COUNT(DISTINCT te.signal_id)::int AS evidence_count,
-             COUNT(DISTINCT sm.source)::int AS source_count,
-             ROUND(COALESCE(AVG(sm.demand), 0))::int AS avg_demand,
-             ROUND(COALESCE(AVG(sm.timing), 0))::int AS avg_timing,
-             ROUND(COALESCE(AVG(sm.buildability), 0))::int AS avg_buildability,
-             ROUND(COALESCE(AVG(sm.virality), 0))::int AS avg_virality,
+      SELECT tc.*, ${THESIS_AGG_COLS},
              EXISTS(SELECT 1 FROM thesis_deep_dives dd WHERE dd.canonical_key = tc.canonical_key) AS has_deep_dive,
              dv.debate_verdict
       FROM thesis_candidates tc
