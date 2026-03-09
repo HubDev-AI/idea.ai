@@ -721,7 +721,7 @@ const App = () => {
           </button>
           {scoringHealthOpen && (
             <div className="omap-drawer-scroll">
-              <ScoringHealth />
+              <ScoringHealth profiles={profiles} />
             </div>
           )}
         </section>
