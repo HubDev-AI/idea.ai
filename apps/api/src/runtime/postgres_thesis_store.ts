@@ -243,8 +243,10 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
            FROM thesis_candidates tc
            LEFT JOIN thesis_evidence te ON te.thesis_id = tc.id
            LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
+           ${where}
            GROUP BY tc.id, tc.status
-         ) sub`
+         ) sub`,
+        countParams
       )
     ]);
 
