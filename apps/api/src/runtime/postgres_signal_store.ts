@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import pg from 'pg';
 import type { IndexedMemoryEntry } from '../jobs/memory_retriever';
 import type { ExecutionLogger } from './execution_logger';
+import { toVectorLiteral } from './db_utils';
 
 const { Pool: PgPool } = pg;
 
@@ -24,8 +25,6 @@ export const sanitizeUrl = (url: string | null | undefined): string | null => {
   }
 };
 
-const toVectorLiteral = (embedding: number[]): string =>
-  `[${embedding.map((value) => (Number.isFinite(value) ? value : 0)).join(',')}]`;
 
 const toNumber = (value: unknown): number => {
   if (typeof value === 'number') {
