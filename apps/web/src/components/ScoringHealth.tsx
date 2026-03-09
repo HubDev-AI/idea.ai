@@ -1,7 +1,8 @@
 import type { ScoringHealthRecord } from '@idea/contracts/src/api';
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api';
 
-export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
+export const ScoringHealth: React.FC = () => {
   const [data, setData] = useState<ScoringHealthRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState('consumer');
@@ -10,7 +11,7 @@ export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
     let cancelled = false;
     setData(null);
     setError(null);
-    fetch(`${apiUrl}/v1/scoring-health?profile=${profile}`)
+    apiFetch(`/v1/scoring-health?profile=${profile}`)
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json() as Promise<ScoringHealthRecord>;
@@ -18,7 +19,7 @@ export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
       .then((d) => { if (!cancelled) setData(d); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, [apiUrl, profile]);
+  }, [profile]);
 
   if (error) return <div className="scoring-error">Failed to load scoring health: {error}</div>;
   if (!data) return <div className="scoring-loading">Loading scoring health...</div>;

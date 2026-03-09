@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  API_BASE,
   type ExecutionLogRecord,
   fetchProfiles,
   fetchSignals,
@@ -684,7 +683,6 @@ const App = () => {
           {omapOpen && (
             <div className="omap-drawer-scroll">
               <OpportunityMapView
-                apiUrl={API_BASE}
                 onViewThesis={(key, title) => {
                   if (thesisFilter === key) {
                     // Toggle off
@@ -723,7 +721,7 @@ const App = () => {
           </button>
           {scoringHealthOpen && (
             <div className="omap-drawer-scroll">
-              <ScoringHealth apiUrl={API_BASE} />
+              <ScoringHealth />
             </div>
           )}
         </section>
@@ -742,7 +740,7 @@ const App = () => {
           </button>
           {connectionsOpen && (
             <div className="omap-drawer-scroll">
-              <ConnectionsView apiUrl={API_BASE} />
+              <ConnectionsView />
             </div>
           )}
         </section>
