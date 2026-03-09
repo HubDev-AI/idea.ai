@@ -48,9 +48,14 @@ export const useSocket = (): SocketState => {
   const socketRef = useRef<TypedSocket | null>(null);
 
   useEffect(() => {
+    const apiKey =
+      (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+        ?.VITE_API_KEY ?? '';
+
     const socket: TypedSocket = io({
       path: '/socket.io/',
       transports: ['websocket', 'polling'],
+      ...(apiKey ? { auth: { key: apiKey } } : {}),
     });
     socketRef.current = socket;
 

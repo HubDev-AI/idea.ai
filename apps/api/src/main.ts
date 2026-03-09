@@ -39,6 +39,13 @@ const corsOrigins = (process.env.CORS_ORIGINS ?? '')
   .map((s) => s.trim())
   .filter(Boolean);
 const apiKey = process.env.API_KEY || undefined;
+if (!apiKey && host !== '127.0.0.1' && host !== 'localhost') {
+  console.error(
+    `[startup] ERROR: API_KEY is not set but HOST=${host} is not localhost. ` +
+    `Set API_KEY or bind to 127.0.0.1 for local-only mode.`
+  );
+  process.exit(1);
+}
 const databaseUrl = process.env.DATABASE_URL;
 
 const startupEnv = loadRuntimeEnv(process.env);
@@ -362,9 +369,13 @@ if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
 // -- Socket.IO + StateHub -----------------------------------------------
+const allowedOrigins = corsOrigins.length > 0
+  ? corsOrigins
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(app.server, {
   cors: {
-    origin: corsOrigins.length > 0 ? corsOrigins : '*',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
   },
   path: '/socket.io/',
