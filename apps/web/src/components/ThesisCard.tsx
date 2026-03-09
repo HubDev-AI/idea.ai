@@ -1,27 +1,9 @@
 import React from 'react';
+import type { ThesisListItem } from '../api';
 import { relativeTime } from '../relativeTime';
 
 export type ThesisCardProps = {
-  thesis: {
-    canonicalKey: string;
-    title: string;
-    confidence: number;
-    status: string;
-    evidenceCount: number;
-    problemStatement: string;
-    sourceCount: number;
-    estimatedScope?: 'small' | 'medium' | 'large' | null;
-    lastSeenAt?: string;
-    hasDeepDive?: boolean;
-    profileId?: string;
-    label?: 'favourite' | 'later' | 'dismissed' | null;
-    posteriorConfidence?: number;
-    velocity?: number;
-    corroborationScore?: number;
-    debateVerdict?: 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null;
-    categoryEmerging?: boolean;
-    supplyDemand?: 'opportunity' | 'competitive' | 'niche' | 'saturated' | null;
-  };
+  thesis: ThesisListItem;
   profileDisplay?: { badge: string; badgeColor: string } | null;
   isActive?: boolean;
   isGenerating?: boolean;
