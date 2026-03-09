@@ -40,7 +40,7 @@ export class StateHub {
   private lastLogJson = '';
   private lastInfraJson = '';
 
-  constructor(io: IO, deps: StateHubDeps, config: StateHubConfig) {
+  constructor(io: IO, deps: StateHubDeps, config: StateHubConfig, apiKey?: string) {
     this.io = io;
     this.deps = deps;
     this.config = config;
@@ -56,6 +56,17 @@ export class StateHub {
       thesisStats: { total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 },
       logs: [],
     };
+
+    if (apiKey) {
+      io.use((socket, next) => {
+        const provided = (socket.handshake.auth as Record<string, unknown>).key;
+        if (provided !== apiKey) {
+          next(new Error('Unauthorized'));
+        } else {
+          next();
+        }
+      });
+    }
 
     io.on('connection', (socket) => {
       socket.emit('snapshot', this.state);

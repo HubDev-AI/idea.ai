@@ -418,7 +418,7 @@ const stateHub = new StateHub(io, {
 }, {
   infraPollMs: startupEnv.wsInfraPollMs,
   logPollMs: startupEnv.wsLogPollMs,
-});
+}, apiKey);
 
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
