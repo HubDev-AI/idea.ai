@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import pg from 'pg';
 import type { IndexedMemoryEntry } from '../jobs/memory_retriever';
 import type { ExecutionLogger } from './execution_logger';
+import { toVectorLiteral } from './db_utils';
 
 const { Pool: PgPool } = pg;
 
@@ -14,8 +15,16 @@ const WINDOW_INTERVALS: Array<{ window: TrendWindowSnapshot['window']; interval:
   { window: '90d', interval: '90 days' }
 ];
 
-const toVectorLiteral = (embedding: number[]): string =>
-  `[${embedding.map((value) => (Number.isFinite(value) ? value : 0)).join(',')}]`;
+export const sanitizeUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+};
+
 
 const toNumber = (value: unknown): number => {
   if (typeof value === 'number') {
@@ -117,7 +126,7 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
       entry.memoryRecord.buildability,
       entry.memoryRecord.blended,
       entry.memoryRecord.virality,
-      entry.memoryRecord.source_url ?? null
+      sanitizeUrl(entry.memoryRecord.source_url)
     ]
   );
 

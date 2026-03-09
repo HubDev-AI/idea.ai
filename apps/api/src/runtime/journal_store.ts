@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import pg from 'pg';
+import { toVectorLiteral } from './db_utils';
 
 const { Pool: PgPool } = pg;
 
@@ -34,8 +35,6 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const toVectorLiteral = (embedding: number[]): string =>
-  `[${embedding.map((v) => (Number.isFinite(v) ? v : 0)).join(',')}]`;
 
 const rowToEntry = (row: Record<string, unknown>): JournalEntry => ({
   id: toNumber(row.id),

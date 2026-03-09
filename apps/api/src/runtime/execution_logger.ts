@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { EXEC_LOG_DIR } from './db_utils';
 
 export type ExecutionLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -22,8 +23,6 @@ export type ExecutionLogger = {
   error: (component: string, message: string, context?: Record<string, unknown>) => Promise<void>;
 };
 
-const defaultLogDir = (): string => join(process.cwd(), 'logs', 'executions');
-
 const sanitizeFileToken = (value: string): string => value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120);
 
 const normalizeError = (value: unknown): string => {
@@ -43,7 +42,7 @@ export const createRunId = (prefix = 'api'): string => `${sanitizeFileToken(pref
 export const createExecutionLogger = ({
   env = process.env,
   runId = createRunId(),
-  logDir = env.LOG_DIR ?? defaultLogDir()
+  logDir = env.LOG_DIR ?? EXEC_LOG_DIR
 }: {
   env?: NodeJS.ProcessEnv;
   runId?: string;

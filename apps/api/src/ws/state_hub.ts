@@ -40,7 +40,7 @@ export class StateHub {
   private lastLogJson = '';
   private lastInfraJson = '';
 
-  constructor(io: IO, deps: StateHubDeps, config: StateHubConfig) {
+  constructor(io: IO, deps: StateHubDeps, config: StateHubConfig, apiKey?: string) {
     this.io = io;
     this.deps = deps;
     this.config = config;
@@ -56,6 +56,17 @@ export class StateHub {
       thesisStats: { total: 0, promoted: 0, watching: 0, totalEvidence: 0, totalSources: 0 },
       logs: [],
     };
+
+    if (apiKey) {
+      io.use((socket, next) => {
+        const provided = (socket.handshake.auth as Record<string, unknown>).key;
+        if (provided !== apiKey) {
+          next(new Error('Unauthorized'));
+        } else {
+          next();
+        }
+      });
+    }
 
     io.on('connection', (socket) => {
       socket.emit('snapshot', this.state);
@@ -112,6 +123,16 @@ export class StateHub {
     this.io.emit('signalCounts', data);
   }
 
+  emitSignalCount(count: number): void {
+    this.state.signalCount = count;
+    this.io.emit('signalCount', count);
+  }
+
+  emitLatestSignalAt(at: string | null): void {
+    this.state.latestSignalAt = at;
+    this.io.emit('latestSignalAt', at);
+  }
+
   emitThesisStats(data: ThesisStats): void {
     this.state.thesisStats = data;
     this.io.emit('thesisStats', data);
@@ -135,6 +156,8 @@ export class StateHub {
     if (s.infraStatus) this.io.emit('infraStatus', s.infraStatus);
     this.io.emit('refreshMeta', s.refreshMeta);
     this.io.emit('signalCounts', s.signalCounts);
+    this.io.emit('signalCount', s.signalCount);
+    this.io.emit('latestSignalAt', s.latestSignalAt);
     this.io.emit('thesisStats', s.thesisStats);
     this.io.emit('signalsUpdated');
   }

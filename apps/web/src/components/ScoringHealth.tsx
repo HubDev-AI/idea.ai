@@ -1,16 +1,20 @@
 import type { ScoringHealthRecord } from '@idea/contracts/src/api';
 import React, { useEffect, useState } from 'react';
+import type { ProfileDisplay } from '../api';
+import { apiFetch } from '../api';
 
-export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
+export const ScoringHealth: React.FC<{
+  profiles: ProfileDisplay[];
+}> = ({ profiles }) => {
   const [data, setData] = useState<ScoringHealthRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [profile, setProfile] = useState('consumer');
+  const [profile, setProfile] = useState(profiles[0]?.id ?? 'consumer');
 
   useEffect(() => {
     let cancelled = false;
     setData(null);
     setError(null);
-    fetch(`${apiUrl}/v1/scoring-health?profile=${profile}`)
+    apiFetch(`/v1/scoring-health?profile=${profile}`)
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json() as Promise<ScoringHealthRecord>;
@@ -18,7 +22,7 @@ export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
       .then((d) => { if (!cancelled) setData(d); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, [apiUrl, profile]);
+  }, [profile]);
 
   if (error) return <div className="scoring-error">Failed to load scoring health: {error}</div>;
   if (!data) return <div className="scoring-loading">Loading scoring health...</div>;
@@ -29,20 +33,16 @@ export const ScoringHealth: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
   return (
     <div className="scoring-container">
       <div className="profile-tabs" style={{ marginBottom: '0.75rem' }}>
-        <button
-          type="button"
-          className={`profile-tab ${profile === 'consumer' ? 'active' : ''}`}
-          onClick={() => setProfile('consumer')}
-        >
-          Consumer
-        </button>
-        <button
-          type="button"
-          className={`profile-tab ${profile === 'b2b' ? 'active' : ''}`}
-          onClick={() => setProfile('b2b')}
-        >
-          B2B
-        </button>
+        {profiles.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`profile-tab ${profile === p.id ? 'active' : ''}`}
+            onClick={() => setProfile(p.id)}
+          >
+            {p.name}
+          </button>
+        ))}
       </div>
       <div className="scoring-grid">
         {/* Current weights card */}

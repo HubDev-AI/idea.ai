@@ -1279,6 +1279,11 @@ a.signal-idea-link:hover {
   flex: 0 0 40vh;
 }
 
+.log-drawer-header {
+  display: flex;
+  align-items: center;
+}
+
 .log-drawer-toggle {
   display: flex;
   align-items: center;

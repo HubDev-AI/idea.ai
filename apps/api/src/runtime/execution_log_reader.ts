@@ -1,8 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ExecutionLogLevel, ExecutionLogRecord } from '../routes/logs';
-
-const defaultLogDir = (): string => join(process.cwd(), 'logs', 'executions');
+import { EXEC_LOG_DIR } from './db_utils';
 
 const parseLine = (line: string): ExecutionLogRecord | null => {
   try {
@@ -57,7 +56,7 @@ export const readExecutionLogs = async ({
   runId?: string;
   component?: string;
 }): Promise<ExecutionLogRecord[]> => {
-  const logDir = env.LOG_DIR ?? defaultLogDir();
+  const logDir = env.LOG_DIR ?? EXEC_LOG_DIR;
   const fileNames = await readdir(logDir).catch(() => []);
   const jsonlFiles = fileNames.filter((name) => name.endsWith('.jsonl'));
 

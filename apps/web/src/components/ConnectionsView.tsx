@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { EntityInsights, EntityRecord } from '@idea/contracts/src/api';
+import { apiFetch } from '../api';
 
 const ENTITY_TYPES = ['pain_point', 'technology', 'market', 'competitor', 'trend'] as const;
 
@@ -11,7 +12,7 @@ const TYPE_LABELS: Record<string, string> = {
   trend: 'Trend',
 };
 
-export const ConnectionsView: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
+export const ConnectionsView: React.FC = () => {
   const [insights, setInsights] = useState<EntityInsights | null>(null);
   const [entities, setEntities] = useState<EntityRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -24,11 +25,11 @@ export const ConnectionsView: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
     setLoading(true);
 
     Promise.all([
-      fetch(`${apiUrl}/v1/entities/insights`).then(r => {
+      apiFetch('/v1/entities/insights').then(r => {
         if (!r.ok) throw new Error(`${r.status}`);
         return r.json() as Promise<EntityInsights>;
       }),
-      fetch(`${apiUrl}/v1/entities?limit=50`).then(r => {
+      apiFetch('/v1/entities?limit=50').then(r => {
         if (!r.ok) throw new Error(`${r.status}`);
         return r.json() as Promise<EntityRecord[]>;
       }),
@@ -48,7 +49,7 @@ export const ConnectionsView: React.FC<{ apiUrl: string }> = ({ apiUrl }) => {
       });
 
     return () => { cancelled = true; };
-  }, [apiUrl]);
+  }, []);
 
   if (loading) return <div className="conn-loading">Loading knowledge graph...</div>;
   if (error) return <div className="conn-error">Failed to load knowledge graph: {error}</div>;

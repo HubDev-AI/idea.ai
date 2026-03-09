@@ -86,8 +86,7 @@ export const generateDeepDive = async (
 
   await log.info('deep_dive', 'generating deep-dive', {
     thesis: input.title,
-    provider: primaryName,
-    prompt_preview: prompt.slice(0, 300)
+    provider: primaryName
   });
 
   const startMs = Date.now();

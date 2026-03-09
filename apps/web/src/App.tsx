@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  API_BASE,
   type ExecutionLogRecord,
   fetchProfiles,
   fetchSignals,
@@ -684,7 +683,6 @@ const App = () => {
           {omapOpen && (
             <div className="omap-drawer-scroll">
               <OpportunityMapView
-                apiUrl={API_BASE}
                 onViewThesis={(key, title) => {
                   if (thesisFilter === key) {
                     // Toggle off
@@ -723,7 +721,7 @@ const App = () => {
           </button>
           {scoringHealthOpen && (
             <div className="omap-drawer-scroll">
-              <ScoringHealth apiUrl={API_BASE} />
+              <ScoringHealth profiles={profiles} />
             </div>
           )}
         </section>
@@ -742,17 +740,25 @@ const App = () => {
           </button>
           {connectionsOpen && (
             <div className="omap-drawer-scroll">
-              <ConnectionsView apiUrl={API_BASE} />
+              <ConnectionsView />
             </div>
           )}
         </section>
 
         {/* Log drawer — collapsible bottom */}
         <section className={`log-drawer ${logDrawerOpen ? 'open' : ''}`}>
-          <button
-            type="button"
+          <div
             className="log-drawer-toggle"
+            role="button"
+            tabIndex={0}
+            aria-expanded={logDrawerOpen}
             onClick={() => setLogDrawerOpen((v) => !v)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setLogDrawerOpen((v) => !v);
+              }
+            }}
           >
             <span className="log-drawer-title">
               Logs
@@ -763,24 +769,22 @@ const App = () => {
             </span>
             <span className="log-drawer-right">
               {logDrawerOpen && (
-                <>
-                  <button
-                    type="button"
-                    className="log-action-btn"
-                    title="Copy logs to clipboard"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const text = renderedLogs.map(formatTerminalLine).join('\n');
-                      navigator.clipboard.writeText(text);
-                    }}
-                  >
-                    Copy
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="log-action-btn"
+                  title="Copy logs to clipboard"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const text = renderedLogs.map(formatTerminalLine).join('\n');
+                    navigator.clipboard.writeText(text);
+                  }}
+                >
+                  Copy
+                </button>
               )}
               <span className="log-drawer-chevron">{logDrawerOpen ? '\u25BC' : '\u25B2'}</span>
             </span>
-          </button>
+          </div>
           {logDrawerOpen && (
             <div className="log-scroll-wrapper">
               <div className="log-filters">

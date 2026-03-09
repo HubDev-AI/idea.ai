@@ -222,8 +222,7 @@ const analyzeChunk = async ({
             requested_signals: chunk.length,
             attempt,
             max_attempts: maxAttempts,
-            will_retry: willRetry,
-            raw_preview: result.text.slice(0, 200)
+            will_retry: willRetry
           });
           continue;
         }

@@ -966,9 +966,14 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     }
   };
 
-  const startRefresh = (): Promise<Snapshot> => {
+  /**
+   * Guarded refresh: if a refresh is already in-flight, returns the same promise.
+   * Note: when a refresh is in-flight, concurrent calls with a different cadence
+   * are coalesced into the first — the cadence arg is dropped for the second caller.
+   */
+  const startRefresh = (cadence?: 'hourly' | 'daily'): Promise<Snapshot> => {
     if (!refreshInFlight) {
-      refreshInFlight = refresh().finally(() => {
+      refreshInFlight = refresh(cadence).finally(() => {
         refreshInFlight = null;
       });
     }
@@ -1043,7 +1048,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
         return rows.filter((row) => sessionRunIds.has(row.run_id)).slice(0, query.limit);
       })()),
     registerRunId: (runId: string) => { sessionRunIds.add(runId); },
-    refresh,
+    startRefresh,
     close: async (): Promise<void> => {
       if (postgresSignalStore) {
         await postgresSignalStore.close();
