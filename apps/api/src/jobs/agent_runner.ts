@@ -303,8 +303,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   });
   await log.debug('agent_runner', 'broad scan prompt sent', {
     provider: preferred,
-    prompt_length: broadPrompt.length,
-    prompt_preview: broadPrompt.slice(0, 300)
+    prompt_length: broadPrompt.length
   });
   const broadResult = await dualAnalystRun<BroadScanOutput>(
     { prompt: broadPrompt, timeoutMs: timeoutMs },
@@ -514,8 +513,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     await log.debug('agent_runner', 'deep dive prompt sent', {
       topic: dig.topic,
       provider: preferred,
-      prompt_length: divePrompt.length,
-      prompt_preview: divePrompt.slice(0, 300)
+      prompt_length: divePrompt.length
     });
     const diveResult = await dualAnalystRun<DeepDiveOutput>(
       { prompt: divePrompt, timeoutMs: timeoutMs },
