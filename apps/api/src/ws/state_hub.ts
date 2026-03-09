@@ -123,6 +123,16 @@ export class StateHub {
     this.io.emit('signalCounts', data);
   }
 
+  emitSignalCount(count: number): void {
+    this.state.signalCount = count;
+    this.io.emit('signalCount', count);
+  }
+
+  emitLatestSignalAt(at: string | null): void {
+    this.state.latestSignalAt = at;
+    this.io.emit('latestSignalAt', at);
+  }
+
   emitThesisStats(data: ThesisStats): void {
     this.state.thesisStats = data;
     this.io.emit('thesisStats', data);
@@ -146,6 +156,8 @@ export class StateHub {
     if (s.infraStatus) this.io.emit('infraStatus', s.infraStatus);
     this.io.emit('refreshMeta', s.refreshMeta);
     this.io.emit('signalCounts', s.signalCounts);
+    this.io.emit('signalCount', s.signalCount);
+    this.io.emit('latestSignalAt', s.latestSignalAt);
     this.io.emit('thesisStats', s.thesisStats);
     this.io.emit('signalsUpdated');
   }

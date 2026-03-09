@@ -81,6 +81,8 @@ export const useSocket = (): SocketState => {
     socket.on('infraStatus', setInfraStatus);
     socket.on('refreshMeta', setRefreshMeta);
     socket.on('signalCounts', setSignalCounts);
+    socket.on('signalCount', setSignalCount);
+    socket.on('latestSignalAt', setLatestSignalAt);
     socket.on('thesisStats', setThesisStats);
     socket.on('logs', setLogs);
     socket.on('signalsUpdated', () => setSignalsUpdatedAt(Date.now()));
