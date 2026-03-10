@@ -60,6 +60,7 @@ export type RuntimeEnv = {
   aiProviderPrimary: 'claude' | 'codex';
   aiProviderFallback: boolean;
   aiProviderRetries: number;
+  connectorConcurrency: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -117,6 +118,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     aiProviderPrimary: env.AI_PROVIDER_PRIMARY?.toLowerCase() === 'codex' ? 'codex' : 'claude',
     aiProviderFallback: env.AI_PROVIDER_FALLBACK === 'true',
     aiProviderRetries: parseNumber(env.AI_PROVIDER_RETRIES, 1),
+    connectorConcurrency: parseNumber(env.CONNECTOR_CONCURRENCY, 5),
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;

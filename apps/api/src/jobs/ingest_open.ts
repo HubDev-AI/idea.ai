@@ -43,6 +43,7 @@ type OpenIngestionDeps = {
   logger?: ExecutionLogger;
   enabledConnectors?: OpenConnectorName[];
   loaders?: Partial<Record<OpenConnectorName, OpenConnectorLoader>>;
+  concurrency?: number;
 };
 
 const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews', 'npm_trends', 'semantic_scholar'];
@@ -78,6 +79,29 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   semantic_scholar: () => fetchSemanticScholar()
 };
 
+const pLimit = (concurrency: number) => {
+  let active = 0;
+  const queue: (() => void)[] = [];
+  const next = () => {
+    while (queue.length > 0 && active < concurrency) {
+      active++;
+      queue.shift()!();
+    }
+  };
+  return <T>(fn: () => Promise<T>): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+      const run = () =>
+        fn()
+          .then(resolve, reject)
+          .finally(() => {
+            active--;
+            next();
+          });
+      queue.push(run);
+      next();
+    });
+};
+
 const toErrorMessage = (error: unknown): string => (error instanceof Error ? error.message : 'Unknown error');
 
 const resolveEnabledSet = (cadence: Cadence, enabledConnectors?: OpenConnectorName[]): Set<OpenConnectorName> => {
@@ -96,41 +120,29 @@ export const runOpenConnectorIngestionDetailed = async (
   const statuses: OpenConnectorStatus[] = [];
   const events: RawEventInput[] = [];
 
-  for (const connector of CONNECTOR_ORDER) {
-    if (OPEN_CONNECTOR_CADENCE[connector] !== cadence || !enabledSet.has(connector)) {
-      continue;
-    }
+  const limit = pLimit(deps.concurrency ?? 5);
 
-    const loader = deps.loaders?.[connector] ?? defaultLoaders[connector];
+  const connectorTasks = CONNECTOR_ORDER
+    .filter((connector) => OPEN_CONNECTOR_CADENCE[connector] === cadence && enabledSet.has(connector))
+    .map((connector) => limit(async () => {
+      const loader = deps.loaders?.[connector] ?? defaultLoaders[connector];
+      try {
+        const loaded = await loader();
+        events.push(...loaded);
+        statuses.push({ name: connector, cadence, status: 'active' });
+        await deps.logger?.info('ingest_open', 'connector completed', {
+          connector, cadence, events: loaded.length
+        });
+      } catch (error) {
+        const message = toErrorMessage(error);
+        statuses.push({ name: connector, cadence, status: 'error', last_error: message });
+        await deps.logger?.error('ingest_open', 'connector failed', {
+          connector, cadence, error: message
+        });
+      }
+    }));
 
-    try {
-      const loaded = await loader();
-      events.push(...loaded);
-      statuses.push({
-        name: connector,
-        cadence,
-        status: 'active'
-      });
-      await deps.logger?.info('ingest_open', 'connector completed', {
-        connector,
-        cadence,
-        events: loaded.length
-      });
-    } catch (error) {
-      const message = toErrorMessage(error);
-      statuses.push({
-        name: connector,
-        cadence,
-        status: 'error',
-        last_error: message
-      });
-      await deps.logger?.error('ingest_open', 'connector failed', {
-        connector,
-        cadence,
-        error: message
-      });
-    }
-  }
+  await Promise.allSettled(connectorTasks);
 
   return { events, statuses };
 };
