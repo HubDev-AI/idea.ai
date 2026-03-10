@@ -338,9 +338,8 @@ export const createPostgresSignalStore = ({
   const retriever: MemoryRetriever = {
     findSimilar: async (query: MemoryQuery): Promise<SimilarSignalMatch[]> => {
       const limit = query.topK ?? 8;
-      const queryEmbedding = embedText
-        ? await embedText(query.canonicalText)
-        : null;
+      const queryEmbedding = query.embedding
+        ?? (embedText ? await embedText(query.canonicalText) : null);
       if (!queryEmbedding) return [];
       const result = await pool.query<SimilarRow>(similarSql, [
         toVectorLiteral(queryEmbedding),
