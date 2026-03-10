@@ -283,6 +283,7 @@ export type PostgresSignalStore = {
   getEmbeddings: (signalIds: string[]) => Promise<Map<string, number[]>>;
   getEmbeddingStats: () => Promise<EmbeddingStats>;
   findConvergentSignals: (signalId: string, embedding: number[], source: string) => Promise<ConvergentMatch[]>;
+  findDuplicatesByEmbedding: (signalId: string, source: string, embedding: number[], distanceThreshold?: number) => Promise<{ signal_id: string; source: string; distance: number }[]>;
   boostViralityScore: (signalId: string, targetVirality: number, weights?: { demand: number; timing: number; buildability: number; virality: number }) => Promise<void>;
   listSignalsWithoutEmbeddings: (limit: number) => Promise<{ signal_id: string; canonical_text: string }[]>;
   saveEmbedding: (signalId: string, embedding: number[], model: string) => Promise<void>;
@@ -573,6 +574,31 @@ export const createPostgresSignalStore = ({
     }));
   };
 
+  const findDuplicatesByEmbedding = async (
+    signalId: string,
+    source: string,
+    embedding: number[],
+    distanceThreshold = 0.08
+  ): Promise<{ signal_id: string; source: string; distance: number }[]> => {
+    const result = await pool.query<{ signal_id: string; source: string; distance: number | string }>(
+      `SELECT se.signal_id, sm.source, (se.embedding <=> $1::vector) AS distance
+       FROM signal_embeddings se
+       JOIN scored_signals sm ON sm.signal_id = se.signal_id
+       WHERE sm.signal_id != $2
+         AND sm.source != $3
+         AND sm.observed_at >= NOW() - INTERVAL '48 hours'
+         AND (se.embedding <=> $1::vector) < $4
+       ORDER BY distance
+       LIMIT 5`,
+      [toVectorLiteral(embedding), signalId, source, distanceThreshold]
+    );
+    return result.rows.map((row) => ({
+      signal_id: row.signal_id,
+      source: row.source,
+      distance: toNumber(row.distance)
+    }));
+  };
+
   const boostViralityScore = async (
     signalId: string,
     targetVirality: number,
@@ -689,6 +715,7 @@ export const createPostgresSignalStore = ({
     getEmbeddings,
     getEmbeddingStats,
     findConvergentSignals,
+    findDuplicatesByEmbedding,
     boostViralityScore,
     listSignalsWithoutEmbeddings,
     saveEmbedding,
