@@ -1,5 +1,18 @@
 import { type RawEventInput, withRetry } from './common/http';
 
+const ENTITIES: Record<string, string> = {
+  '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"',
+  '&#39;': "'", '&apos;': "'", '&#x27;': "'", '&#x2F;': '/',
+};
+
+const decodeEntities = (text: string): string =>
+  text.replace(/&(?:#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match) => {
+    if (ENTITIES[match]) return ENTITIES[match];
+    if (match.startsWith('&#x')) return String.fromCharCode(parseInt(match.slice(3, -1), 16));
+    if (match.startsWith('&#')) return String.fromCharCode(parseInt(match.slice(2, -1), 10));
+    return match;
+  });
+
 type ProductHuntLoaderFn = (limit: number) => Promise<RawEventInput[]>;
 
 const defaultLoader: ProductHuntLoaderFn = async (limit) => {
@@ -24,8 +37,7 @@ const defaultLoader: ProductHuntLoaderFn = async (limit) => {
     const published = entry.match(/<published>(.*?)<\/published>/)?.[1] ?? '';
 
     if (title) {
-      const cleanContent = content
-        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+      const cleanContent = decodeEntities(content)
         .replace(/<[^>]*>/g, '').trim();
 
       results.push({
