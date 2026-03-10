@@ -1,3 +1,5 @@
+import { clampRange } from '../utils';
+
 export type SignalEvidenceType =
   | 'multi_source_convergence'
   | 'single_high_quality'
@@ -35,21 +37,18 @@ const LIKELIHOOD_RATIOS: Record<SignalEvidenceType, { confirming: number; contra
   weak_noisy:               { confirming: 1.1, contradicting: 0.9 },
 };
 
-const clamp = (v: number, min: number, max: number): number =>
-  Math.max(min, Math.min(max, v));
-
 export const bayesianUpdate = (
   priorConfidence: number,
   evidence: SignalEvidence,
   _config: BayesianConfig = DEFAULT_BAYESIAN_CONFIG,
 ): number => {
-  const prior = clamp(priorConfidence, 0, 100) / 100;
+  const prior = clampRange(priorConfidence, 0, 100) / 100;
   const ratios = LIKELIHOOD_RATIOS[evidence.type] ?? LIKELIHOOD_RATIOS.weak_noisy;
   const lr = evidence.confirming ? ratios.confirming : ratios.contradicting;
   const numerator = prior * lr;
   const denominator = numerator + (1 - prior);
   const posterior = denominator > 0 ? numerator / denominator : prior;
-  return clamp(Math.round(posterior * 10000) / 100, 0, 100);
+  return clampRange(Math.round(posterior * 10000) / 100, 0, 100);
 };
 
 export const computeDecay = (

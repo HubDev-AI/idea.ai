@@ -1,6 +1,6 @@
-const PAIN_KEYWORDS = ['urgent', 'pain', 'manual', 'costly', 'churn', 'friction', 'broken'];
+import { clamp } from '../utils';
 
-const clamp = (value: number): number => Math.min(100, Math.max(0, value));
+const PAIN_KEYWORDS = ['urgent', 'pain', 'manual', 'costly', 'churn', 'friction', 'broken'];
 
 export const scorePain = (text: string): number => {
   const normalized = text.toLowerCase();

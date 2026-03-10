@@ -1,7 +1,5 @@
 import type { MemoryWindow, TrendWindowSnapshot } from '@idea/contracts/src/memory';
-
-const clamp = (value: number): number => Math.min(100, Math.max(0, value));
-const round2 = (value: number): number => Math.round(value * 100) / 100;
+import { clamp, round2 } from '../utils';
 
 const trendByWindow = (windows: TrendWindowSnapshot[]): Partial<Record<MemoryWindow, TrendWindowSnapshot>> =>
   windows.reduce<Partial<Record<MemoryWindow, TrendWindowSnapshot>>>((acc, snapshot) => {

@@ -1,4 +1,5 @@
 import type { MemoryWindow, SignalMemoryRecord, TrendWindowSnapshot } from '@idea/contracts/src/memory';
+import { round2 } from '../utils';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WINDOWS: Array<{ name: MemoryWindow; days: number }> = [
@@ -6,8 +7,6 @@ const WINDOWS: Array<{ name: MemoryWindow; days: number }> = [
   { name: '30d', days: 30 },
   { name: '90d', days: 90 }
 ];
-
-const round2 = (value: number): number => Math.round(value * 100) / 100;
 
 export const buildTrendWindows = (
   history: SignalMemoryRecord[],

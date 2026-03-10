@@ -1,6 +1,6 @@
-const TIMING_KEYWORDS = ['now', 'deadline', 'regulation', 'launch', 'trend', 'market', 'shift'];
+import { clamp } from '../utils';
 
-const clamp = (value: number): number => Math.min(100, Math.max(0, value));
+const TIMING_KEYWORDS = ['now', 'deadline', 'regulation', 'launch', 'trend', 'market', 'shift'];
 
 export const scoreTiming = (text: string): number => {
   const normalized = text.toLowerCase();

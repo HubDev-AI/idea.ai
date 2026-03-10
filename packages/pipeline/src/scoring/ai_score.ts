@@ -1,4 +1,5 @@
 import type { RunPromptResult } from '@idea/ai-runtime/src/types';
+import { clamp } from '../utils';
 
 export type AiScoreResult = {
   demand: number;
@@ -6,8 +7,6 @@ export type AiScoreResult = {
   buildability: number;
   reasoning: string;
 };
-
-const clamp = (v: number) => Math.min(100, Math.max(0, v));
 
 const SCORE_PROMPT = `You are a product opportunity analyst. Score this signal on three dimensions (0-100 each):
 

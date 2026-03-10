@@ -1,4 +1,4 @@
-const clamp = (value: number): number => Math.min(100, Math.max(0, value));
+import { clamp } from '../utils';
 
 export const medianOfThree = (scores: [number, number, number] | number[]): number => {
   if (scores.length !== 3) {
