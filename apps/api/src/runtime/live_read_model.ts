@@ -1046,6 +1046,20 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       })()),
     registerRunId: (runId: string) => { sessionRunIds.add(runId); },
     startRefresh,
+    /**
+     * Hydrate refresh timestamps from DB without running a full refresh.
+     * Returns the persisted state so callers can decide whether a refresh is needed.
+     */
+    peekState: async (): Promise<{ lastHourlyRunAt: number; lastDailyRunAt: number; refreshedAt: number }> => {
+      const env = loadRuntimeEnv(process.env);
+      const logger = createExecutionLogger({});
+      await hydrateRefreshState(env, logger);
+      return {
+        lastHourlyRunAt: snapshot.lastHourlyRunAt,
+        lastDailyRunAt: snapshot.lastDailyRunAt,
+        refreshedAt: snapshot.refreshedAt,
+      };
+    },
     close: async (): Promise<void> => {
       if (postgresSignalStore) {
         await postgresSignalStore.close();
