@@ -34,9 +34,9 @@ export const fetchAppStoreTrending = async (options?: {
       for (const entry of data.feed.entry ?? []) {
         results.push({
           source: 'appstore_trending',
-          source_item_id: `appstore:${entry.id.attributes['im:id']}`,
+          source_item_id: `appstore:${entry?.id?.attributes?.['im:id'] ?? 'unknown'}`,
           source_timestamp: entry['im:releaseDate']?.label ?? new Date().toISOString(),
-          text: `${entry['im:name'].label}\n${entry.summary.label}`.slice(0, 2000),
+          text: `${entry['im:name']?.label ?? ''}\n${entry?.summary?.label ?? ''}`.slice(0, 2000),
           url: entry.link?.[0]?.attributes?.href ?? ''
         });
       }
