@@ -39,6 +39,7 @@ export type RuntimeEnv = {
   bayesianDecayRate: number;
   bayesianDecayAfterDays: number;
   bayesianFloorConfidence: number;
+  debateEnabled: boolean;
   debateConfidenceThreshold: number;
   debateMaxPerRun: number;
   backtestSnapshotIntervalMs: number;
@@ -60,6 +61,7 @@ export type RuntimeEnv = {
   aiProviderPrimary: 'claude' | 'codex';
   aiProviderFallback: boolean;
   aiProviderRetries: number;
+  connectorConcurrency: number;
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -96,6 +98,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     bayesianDecayRate: parseNumber(env.BAYESIAN_DECAY_RATE, 0.97),
     bayesianDecayAfterDays: parseNumber(env.BAYESIAN_DECAY_AFTER_DAYS, 14),
     bayesianFloorConfidence: parseNumber(env.BAYESIAN_FLOOR_CONFIDENCE, 5),
+    debateEnabled: env.DEBATE_ENABLED !== 'false',
     debateConfidenceThreshold: parseNumber(env.DEBATE_CONFIDENCE_THRESHOLD, 40),
     debateMaxPerRun: parseNumber(env.DEBATE_MAX_PER_RUN, 5),
     backtestSnapshotIntervalMs: parseNumber(env.BACKTEST_SNAPSHOT_INTERVAL_MS, 7 * 24 * 60 * 60 * 1000),
@@ -117,6 +120,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     aiProviderPrimary: env.AI_PROVIDER_PRIMARY?.toLowerCase() === 'codex' ? 'codex' : 'claude',
     aiProviderFallback: env.AI_PROVIDER_FALLBACK === 'true',
     aiProviderRetries: parseNumber(env.AI_PROVIDER_RETRIES, 1),
+    connectorConcurrency: parseNumber(env.CONNECTOR_CONCURRENCY, 5),
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;

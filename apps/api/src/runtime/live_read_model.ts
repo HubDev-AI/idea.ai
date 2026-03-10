@@ -403,6 +403,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   persistentStore?: PostgresSignalStore;
   circuit?: ProviderCircuitBreaker;
   pool?: import('pg').Pool;
+  byoSpendStore?: { record(connector: string, amount: number): Promise<void>; getSpent(connector: string): Promise<number> };
 }) => {
   const startedAt = Date.now();
   const initialEnv = loadRuntimeEnv(process.env);
@@ -415,6 +416,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   let hydrationPromise: Promise<void> | null = null;
   let refreshInFlight: Promise<Snapshot> | null = null;
   let refreshingCadence: 'hourly' | 'daily' | null = null;
+  let shutdownController = new AbortController();
   const sessionRunIds = new Set<string>();
   let aiHealth: AiHealthRecord = createAiHealthSnapshot({
     env: process.env,
@@ -551,6 +553,11 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     refreshingCadence = dailyDue ? 'daily' : 'hourly';
     const cadenceLabel = dailyDue ? 'daily_refresh' : 'hourly_refresh';
 
+    if (shutdownController.signal.aborted) {
+      await logger.info(cadenceLabel, 'refresh aborted during shutdown');
+      return snapshot;
+    }
+
     await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH START ===`, {
       run_id: logger.runId
     });
@@ -573,8 +580,13 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
           : Promise.resolve(emptyIngestion),
         forceCadence
           ? Promise.resolve({ connectors: { exa: { status: 'skipped' as const, events: [] }, perigon: { status: 'skipped' as const, events: [] }, twitter: { status: 'skipped' as const, events: [] } } })
-          : runByoConnectorIngestion(process.env, { logger })
+          : runByoConnectorIngestion(process.env, { logger, spendStore: opts?.byoSpendStore ?? undefined })
       ]);
+
+      if (shutdownController.signal.aborted) {
+        await logger.info(cadenceLabel, 'refresh aborted during shutdown');
+        return snapshot;
+      }
 
       const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events, ...byo.connectors.twitter.events]);
       const highSignalEvents = events.filter((event) => !isLowValueRecruitingEvent(event));
@@ -690,6 +702,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
 
       let scoringProgressLogged = 0;
       for (const input of selectedSignalInputs) {
+        if (shutdownController.signal.aborted) break;
         const { event, signalId, topic, ideaDraft } = input;
         try {
           const aiInsight = aiPostScrapeInsights.get(signalId);
@@ -839,9 +852,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
                 );
                 if (convergent.length > 0) {
                   const convergenceBoost = Math.min(25, 15 + convergent.length * 5);
-                  // Boost the current signal
-                  await persistentStore.boostViralityScore(indexedEntry.memoryRecord.signal_id, convergenceBoost);
-                  // Boost the matched signals too
+                  // Compute target virality for current signal (organic + boost)
+                  const currentSignalTarget = (score.virality ?? 0) + convergenceBoost;
+                  await persistentStore.boostViralityScore(indexedEntry.memoryRecord.signal_id, currentSignalTarget);
+                  // For matched signals, use boost as a floor — GREATEST ensures no lowering
                   for (const match of convergent) {
                     await persistentStore.boostViralityScore(match.signal_id, convergenceBoost);
                   }
@@ -1130,6 +1144,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       };
     },
     close: async (): Promise<void> => {
+      shutdownController.abort();
       if (postgresSignalStore) {
         await postgresSignalStore.close();
       }

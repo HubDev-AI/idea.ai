@@ -196,9 +196,9 @@ describe('V2 integration', () => {
     expect(merged).toHaveLength(2);
   });
 
-  it('cross-source dedup finds duplicates', () => {
+  it('cross-source dedup finds duplicates', async () => {
     const vec = Array.from({ length: 10 }, (_, i) => i * 0.1);
-    const dupes = findDuplicates([
+    const dupes = await findDuplicates([
       { signal_id: 'hn-1', source: 'hn', embedding: vec },
       { signal_id: 'gh-1', source: 'github_issues', embedding: vec.map(v => v + 0.0001) }
     ], { threshold: 0.99 });
@@ -209,9 +209,9 @@ describe('V2 integration', () => {
     expect(dupes[0]!.similarity).toBeGreaterThanOrEqual(0.99);
   });
 
-  it('cross-source dedup skips same-source signals', () => {
+  it('cross-source dedup skips same-source signals', async () => {
     const vec = Array.from({ length: 10 }, (_, i) => i * 0.1);
-    const dupes = findDuplicates([
+    const dupes = await findDuplicates([
       { signal_id: 'hn-1', source: 'hn', embedding: vec },
       { signal_id: 'hn-2', source: 'hn', embedding: vec }
     ], { threshold: 0.99 });
@@ -219,10 +219,10 @@ describe('V2 integration', () => {
     expect(dupes).toHaveLength(0);
   });
 
-  it('cross-source dedup ignores dissimilar signals', () => {
+  it('cross-source dedup ignores dissimilar signals', async () => {
     const vecA = Array.from({ length: 10 }, (_, i) => i * 0.1);
     const vecB = Array.from({ length: 10 }, (_, i) => (10 - i) * 0.1);
-    const dupes = findDuplicates([
+    const dupes = await findDuplicates([
       { signal_id: 'hn-1', source: 'hn', embedding: vecA },
       { signal_id: 'gh-1', source: 'github_issues', embedding: vecB }
     ], { threshold: 0.99 });

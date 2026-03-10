@@ -17,6 +17,7 @@ import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { runWeightOptimization } from './jobs/weight_optimizer_job';
 import { loadProfiles } from './profiles/index.js';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
+import { createByoSpendStore } from './runtime/byo_spend_store';
 import { createDeepDiveStore } from './runtime/deep_dive_store';
 import { createEntityStore } from './runtime/entity_store';
 import { createExecutionLogger } from './runtime/execution_logger';
@@ -54,6 +55,7 @@ const providerCircuit = createProviderCircuitBreaker({
   cooldownMs: startupEnv.circuitBreakerCooldownMs,
 });
 const pool = databaseUrl ? new pg.Pool({ connectionString: databaseUrl, max: 4 }) : null;
+const byoSpendStore = pool ? createByoSpendStore({ pool }) : null;
 
 const thesisStore = pool
   ? createPostgresThesisStore({ pool })
@@ -69,6 +71,7 @@ const readModel = createLiveReadModel(undefined, {
   ...(signalStore ? { persistentStore: signalStore } : {}),
   circuit: providerCircuit,
   ...(pool ? { pool } : {}),
+  ...(byoSpendStore ? { byoSpendStore } : {}),
 });
 
 const journalStore = databaseUrl
@@ -163,6 +166,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         timeoutMs: agentEnv.agentTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
         pool: pool ?? undefined,
+        debateEnabled: agentEnv.debateEnabled,
         debateConfidenceThreshold: agentEnv.debateConfidenceThreshold,
         debateMaxPerRun: agentEnv.debateMaxPerRun,
         cusumThreshold: agentEnv.cusumThreshold,

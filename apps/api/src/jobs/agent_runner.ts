@@ -43,6 +43,7 @@ export type AgentRunnerDeps = {
   maxClusters?: number;
   profile?: AgentProfile;
   pool?: import('pg').Pool;
+  debateEnabled?: boolean;
   debateConfidenceThreshold?: number;
   debateMaxPerRun?: number;
   cusumThreshold?: number;
@@ -371,10 +372,11 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   }
 
   // === Phase 1.5: Adversarial Debate on top theses ===
-  // Debate requires both Claude (moderator) and Codex. Skip when only one provider is enabled.
+  // Debate requires both Claude and Codex. Skip when disabled or only one provider is available.
   const debateThreshold = deps.debateConfidenceThreshold ?? 40;
   const debateMax = deps.debateMaxPerRun ?? 5;
-  const debateCandidates = deps.allowFallback
+  const debateEnabled = (deps.debateEnabled ?? true) && deps.allowFallback;
+  const debateCandidates = debateEnabled
     ? (await deps.thesisStore.list())
         .filter(t => t.confidence >= debateThreshold)
         .sort((a, b) => b.confidence - a.confidence)

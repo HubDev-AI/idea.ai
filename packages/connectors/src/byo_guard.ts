@@ -28,12 +28,14 @@ export const evaluateByoGuard = ({
   connector,
   apiKey,
   budgetValue,
-  fallbackBudget
+  fallbackBudget,
+  spentUsd,
 }: {
   connector: string;
   apiKey?: string;
   budgetValue?: string;
   fallbackBudget: number;
+  spentUsd?: number;
 }):
   | { allowed: true; budgetUsd: number }
   | { allowed: false; reason: ByoSkipReason; budgetUsd: number; telemetry: ConnectorTelemetry } => {
@@ -53,7 +55,7 @@ export const evaluateByoGuard = ({
     };
   }
 
-  if (budgetUsd <= 0) {
+  if (budgetUsd - (spentUsd ?? 0) <= 0) {
     return {
       allowed: false,
       reason: 'budget_exhausted',
