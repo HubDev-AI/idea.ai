@@ -5,7 +5,7 @@ const preview = async () => {
   const readModel = createLiveReadModel(0);
 
   try {
-    const snapshot = await readModel.refresh();
+    const snapshot = await readModel.startRefresh();
     const openConnectors = snapshot.connectors.filter((connector) => !connector.name.endsWith('_byo'));
     const byoConnectors = snapshot.connectors.filter((connector) => connector.name.endsWith('_byo'));
 

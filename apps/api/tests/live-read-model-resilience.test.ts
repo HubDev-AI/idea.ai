@@ -245,6 +245,49 @@ describe('live read model resilience', () => {
     expect(second).toEqual(first);
   });
 
+  it('concurrent startRefresh calls only trigger one underlying refresh', async () => {
+    let refreshCallCount = 0;
+
+    vi.doMock('../src/jobs/ingest_open', () => ({
+      runOpenConnectorIngestionDetailed: vi.fn(async (cadence: 'hourly' | 'daily') => {
+        if (cadence === 'daily') {
+          return { events: [], statuses: [] };
+        }
+
+        refreshCallCount += 1;
+
+        return {
+          events: [],
+          statuses: [
+            { name: 'hn', cadence: 'hourly', status: 'active' }
+          ]
+        };
+      })
+    }));
+
+    vi.doMock('../src/jobs/ingest_byo', () => ({
+      runByoConnectorIngestion: vi.fn(async () => ({
+        connectors: {
+          exa: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'exa_byo', skipped: true, reason: 'missing_credentials', budget_usd: 5 } },
+          perigon: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'perigon_byo', skipped: true, reason: 'missing_credentials', budget_usd: 5 } },
+          twitter: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'twitter_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } }
+        }
+      }))
+    }));
+
+    const { createLiveReadModel } = await import('../src/runtime/live_read_model');
+    const readModel = createLiveReadModel(0);
+
+    // Fire two concurrent startRefresh calls without awaiting between them
+    const [snap1, snap2] = await Promise.all([
+      readModel.startRefresh(),
+      readModel.startRefresh(),
+    ]);
+
+    expect(snap1).toBe(snap2);
+    expect(refreshCallCount).toBe(1);
+  });
+
   it('loads refresh state from database and skips daily connectors when recently run', async () => {
     const recentDailyRun = Date.now() - 60_000; // 1 minute ago
 

@@ -17,7 +17,11 @@ describe('ThesisCard', () => {
           status: 'promoted',
           evidenceCount: 12,
           problemStatement: 'Compliance is painful',
-          sourceCount: 3
+          sourceCount: 3,
+          estimatedScope: null,
+          lastSeenAt: '',
+          hasDeepDive: false,
+          label: null
         }}
       />
     );
@@ -37,7 +41,11 @@ describe('ThesisCard', () => {
           status: 'watching',
           evidenceCount: 2,
           problemStatement: 'Test problem',
-          sourceCount: 1
+          sourceCount: 1,
+          estimatedScope: null,
+          lastSeenAt: '',
+          hasDeepDive: false,
+          label: null
         }}
         isActive={true}
       />
@@ -57,7 +65,11 @@ describe('ThesisCard', () => {
           status: 'watching',
           evidenceCount: 1,
           problemStatement: 'Click me',
-          sourceCount: 1
+          sourceCount: 1,
+          estimatedScope: null,
+          lastSeenAt: '',
+          hasDeepDive: false,
+          label: null
         }}
         onClick={handleClick}
       />
@@ -78,7 +90,10 @@ describe('ThesisCard', () => {
           evidenceCount: 8,
           problemStatement: 'p',
           sourceCount: 2,
-          estimatedScope: 'small'
+          estimatedScope: 'small',
+          lastSeenAt: '',
+          hasDeepDive: false,
+          label: null
         }}
       />
     );
@@ -94,7 +109,10 @@ describe('ThesisCard', () => {
           evidenceCount: 3,
           problemStatement: 'p',
           sourceCount: 1,
-          estimatedScope: 'medium'
+          estimatedScope: 'medium',
+          lastSeenAt: '',
+          hasDeepDive: false,
+          label: null
         }}
       />
     );
@@ -110,7 +128,10 @@ describe('ThesisCard', () => {
           evidenceCount: 1,
           problemStatement: 'p',
           sourceCount: 1,
-          estimatedScope: 'large'
+          estimatedScope: 'large',
+          lastSeenAt: '',
+          hasDeepDive: false,
+          label: null
         }}
       />
     );
@@ -128,7 +149,10 @@ describe('ThesisCard', () => {
           evidenceCount: 1,
           problemStatement: 'p',
           sourceCount: 1,
-          estimatedScope: null
+          estimatedScope: null,
+          lastSeenAt: '',
+          hasDeepDive: false,
+          label: null
         }}
       />
     );
@@ -148,7 +172,11 @@ describe('ThesisCard', () => {
           status: 'promoted',
           evidenceCount: 15,
           problemStatement: 'p',
-          sourceCount: 5
+          sourceCount: 5,
+          estimatedScope: null,
+          lastSeenAt: '',
+          hasDeepDive: false,
+          label: null
         }}
       />
     );

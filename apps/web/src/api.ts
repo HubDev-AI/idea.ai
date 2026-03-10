@@ -45,6 +45,17 @@ const API_BASE_URL = resolveApiBaseUrl();
 
 export const buildApiUrl = (path: string): string => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 
+const getApiKey = (): string =>
+  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+    ?.VITE_API_KEY ?? '';
+
+export const apiFetch = (path: string, init: RequestInit = {}): Promise<Response> => {
+  const key = getApiKey();
+  const headers = new Headers(init.headers);
+  if (key) headers.set('x-api-key', key);
+  return fetch(buildApiUrl(path), { ...init, headers });
+};
+
 export const API_BASE = API_BASE_URL;
 
 export type SortField = 'score' | 'newest' | 'virality' | 'demand';
@@ -71,13 +82,13 @@ export const fetchSignals = async ({
   if (source) params.set('source', source);
   if (thesisKey) params.set('thesis_key', thesisKey);
   if (sort) params.set('sort', sort);
-  const res = await fetch(buildApiUrl(`/v1/signals?${params.toString()}`));
+  const res = await apiFetch(`/v1/signals?${params.toString()}`);
   if (!res.ok) throw new Error(`fetchSignals failed: ${res.status}`);
   return res.json();
 };
 
 export const fetchConnectors = async (): Promise<ConnectorRecord[]> => {
-  const response = await fetch(buildApiUrl('/v1/connectors'));
+  const response = await apiFetch('/v1/connectors');
   if (!response.ok) {
     throw new Error('Failed to load connectors');
   }
@@ -112,7 +123,7 @@ export const fetchLogs = async ({
     params.set('component', component);
   }
 
-  const response = await fetch(buildApiUrl(`/v1/logs?${params.toString()}`));
+  const response = await apiFetch(`/v1/logs?${params.toString()}`);
   if (!response.ok) {
     throw new Error('Failed to load execution logs');
   }
@@ -121,7 +132,7 @@ export const fetchLogs = async ({
 };
 
 export const fetchAiHealth = async (): Promise<AiHealthRecord> => {
-  const response = await fetch(buildApiUrl('/v1/ai-health'));
+  const response = await apiFetch('/v1/ai-health');
   if (!response.ok) {
     throw new Error('Failed to load ai health');
   }
@@ -153,7 +164,7 @@ export const fetchTheses = async ({
   if (sort !== 'score') params.set('sort', sort);
   if (profile && profile !== 'all') params.set('profile', profile);
   if (label) params.set('label', label);
-  const response = await fetch(buildApiUrl(`/v1/theses?${params.toString()}`));
+  const response = await apiFetch(`/v1/theses?${params.toString()}`);
   if (!response.ok) throw new Error('Failed to load theses');
   const data = await response.json();
 
@@ -174,13 +185,13 @@ export const fetchTheses = async ({
 };
 
 export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
-  const response = await fetch(buildApiUrl('/v1/agent/status'));
+  const response = await apiFetch('/v1/agent/status');
   if (!response.ok) throw new Error('Failed to load agent status');
   return response.json() as Promise<AgentStatusRecord>;
 };
 
 export const triggerAgentRun = async (): Promise<AgentRunResult> => {
-  const response = await fetch(buildApiUrl('/v1/agent/run'), {
+  const response = await apiFetch('/v1/agent/run', {
     method: 'POST',
     signal: AbortSignal.timeout(300_000)
   });
@@ -189,41 +200,41 @@ export const triggerAgentRun = async (): Promise<AgentRunResult> => {
 };
 
 export const fetchSignalCounts = async (): Promise<Record<string, number>> => {
-  const response = await fetch(buildApiUrl('/v1/signals/counts'));
+  const response = await apiFetch('/v1/signals/counts');
   if (!response.ok) throw new Error('Failed to load signal counts');
   return response.json() as Promise<Record<string, number>>;
 };
 
 export const fetchInfraStatus = async (): Promise<InfraStatusRecord> => {
-  const response = await fetch(buildApiUrl('/v1/infra/status'));
+  const response = await apiFetch('/v1/infra/status');
   if (!response.ok) throw new Error('Failed to load infra status');
   return response.json() as Promise<InfraStatusRecord>;
 };
 
 export const fetchRefreshMeta = async (): Promise<RefreshMeta> => {
-  const response = await fetch(buildApiUrl('/v1/connectors/refresh-meta'));
+  const response = await apiFetch('/v1/connectors/refresh-meta');
   if (!response.ok) throw new Error('Failed to load refresh meta');
   return response.json() as Promise<RefreshMeta>;
 };
 
 export const triggerConnectorRefresh = async (cadence?: 'hourly' | 'daily'): Promise<void> => {
-  const url = cadence
-    ? buildApiUrl(`/v1/connectors/refresh?cadence=${cadence}`)
-    : buildApiUrl('/v1/connectors/refresh');
-  const response = await fetch(url, { method: 'POST' });
+  const path = cadence
+    ? `/v1/connectors/refresh?cadence=${cadence}`
+    : '/v1/connectors/refresh';
+  const response = await apiFetch(path, { method: 'POST' });
   if (!response.ok) throw new Error('Failed to trigger refresh');
 };
 
 export const fetchThesisDeepDive = async (canonicalKey: string): Promise<ThesisDeepDive | null> => {
-  const response = await fetch(buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/deep-dive`));
+  const response = await apiFetch(`/v1/theses/${encodeURIComponent(canonicalKey)}/deep-dive`);
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`fetchThesisDeepDive failed: ${response.status}`);
   return response.json() as Promise<ThesisDeepDive>;
 };
 
 export const generateThesisDeepDive = async (canonicalKey: string): Promise<ThesisDeepDive> => {
-  const response = await fetch(
-    buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/deep-dive`),
+  const response = await apiFetch(
+    `/v1/theses/${encodeURIComponent(canonicalKey)}/deep-dive`,
     { method: 'POST', signal: AbortSignal.timeout(120_000) }
   );
   if (!response.ok) throw new Error(`generateThesisDeepDive failed: ${response.status}`);
@@ -233,8 +244,8 @@ export const generateThesisDeepDive = async (canonicalKey: string): Promise<Thes
 export type ThesisLabel = 'favourite' | 'later' | 'dismissed' | null;
 
 export const setThesisLabel = async (canonicalKey: string, label: ThesisLabel): Promise<{ label: ThesisLabel }> => {
-  const response = await fetch(
-    buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/label`),
+  const response = await apiFetch(
+    `/v1/theses/${encodeURIComponent(canonicalKey)}/label`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -253,19 +264,19 @@ export type ProfileDisplay = {
 };
 
 export const fetchProfiles = async (): Promise<ProfileDisplay[]> => {
-  const response = await fetch(buildApiUrl('/v1/profiles'));
+  const response = await apiFetch('/v1/profiles');
   if (!response.ok) throw new Error('Failed to load profiles');
   return response.json() as Promise<ProfileDisplay[]>;
 };
 
 export const fetchThesis = async (canonicalKey: string): Promise<ThesisListItem> => {
-  const response = await fetch(buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}`));
+  const response = await apiFetch(`/v1/theses/${encodeURIComponent(canonicalKey)}`);
   if (!response.ok) throw new Error(`fetchThesis failed: ${response.status}`);
   return response.json() as Promise<ThesisListItem>;
 };
 
 export const fetchThesisExplain = async (canonicalKey: string): Promise<ThesisExplainRecord> => {
-  const response = await fetch(buildApiUrl(`/v1/theses/${encodeURIComponent(canonicalKey)}/explain`));
+  const response = await apiFetch(`/v1/theses/${encodeURIComponent(canonicalKey)}/explain`);
   if (!response.ok) throw new Error(`fetchThesisExplain failed: ${response.status}`);
   return response.json() as Promise<ThesisExplainRecord>;
 };

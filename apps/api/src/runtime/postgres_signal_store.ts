@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from 'pg';
 import pg from 'pg';
 import type { IndexedMemoryEntry } from '../jobs/memory_retriever';
 import type { ExecutionLogger } from './execution_logger';
+import { toVectorLiteral } from './db_utils';
 
 const { Pool: PgPool } = pg;
 
@@ -14,8 +15,16 @@ const WINDOW_INTERVALS: Array<{ window: TrendWindowSnapshot['window']; interval:
   { window: '90d', interval: '90 days' }
 ];
 
-const toVectorLiteral = (embedding: number[]): string =>
-  `[${embedding.map((value) => (Number.isFinite(value) ? value : 0)).join(',')}]`;
+export const sanitizeUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+};
+
 
 const toNumber = (value: unknown): number => {
   if (typeof value === 'number') {
@@ -117,7 +126,7 @@ const upsertSignalMemory = async (client: PoolClient, entry: IndexedMemoryEntry)
       entry.memoryRecord.buildability,
       entry.memoryRecord.blended,
       entry.memoryRecord.virality,
-      entry.memoryRecord.source_url ?? null
+      sanitizeUrl(entry.memoryRecord.source_url)
     ]
   );
 
@@ -274,7 +283,8 @@ export type PostgresSignalStore = {
   getEmbeddings: (signalIds: string[]) => Promise<Map<string, number[]>>;
   getEmbeddingStats: () => Promise<EmbeddingStats>;
   findConvergentSignals: (signalId: string, embedding: number[], source: string) => Promise<ConvergentMatch[]>;
-  boostViralityScore: (signalId: string, boost: number) => Promise<void>;
+  findDuplicatesByEmbedding: (signalId: string, source: string, embedding: number[], distanceThreshold?: number) => Promise<{ signal_id: string; source: string; distance: number }[]>;
+  boostViralityScore: (signalId: string, targetVirality: number, weights?: { demand: number; timing: number; buildability: number; virality: number }) => Promise<void>;
   listSignalsWithoutEmbeddings: (limit: number) => Promise<{ signal_id: string; canonical_text: string }[]>;
   saveEmbedding: (signalId: string, embedding: number[], model: string) => Promise<void>;
   loadRefreshState: () => Promise<RefreshState>;
@@ -329,9 +339,8 @@ export const createPostgresSignalStore = ({
   const retriever: MemoryRetriever = {
     findSimilar: async (query: MemoryQuery): Promise<SimilarSignalMatch[]> => {
       const limit = query.topK ?? 8;
-      const queryEmbedding = embedText
-        ? await embedText(query.canonicalText)
-        : null;
+      const queryEmbedding = query.embedding
+        ?? (embedText ? await embedText(query.canonicalText) : null);
       if (!queryEmbedding) return [];
       const result = await pool.query<SimilarRow>(similarSql, [
         toVectorLiteral(queryEmbedding),
@@ -565,14 +574,44 @@ export const createPostgresSignalStore = ({
     }));
   };
 
-  const boostViralityScore = async (signalId: string, boost: number): Promise<void> => {
+  const findDuplicatesByEmbedding = async (
+    signalId: string,
+    source: string,
+    embedding: number[],
+    distanceThreshold = 0.08
+  ): Promise<{ signal_id: string; source: string; distance: number }[]> => {
+    const result = await pool.query<{ signal_id: string; source: string; distance: number | string }>(
+      `SELECT se.signal_id, sm.source, (se.embedding <=> $1::vector) AS distance
+       FROM signal_embeddings se
+       JOIN scored_signals sm ON sm.signal_id = se.signal_id
+       WHERE sm.signal_id != $2
+         AND sm.source != $3
+         AND sm.observed_at >= NOW() - INTERVAL '48 hours'
+         AND (se.embedding <=> $1::vector) < $4
+       ORDER BY distance
+       LIMIT 5`,
+      [toVectorLiteral(embedding), signalId, source, distanceThreshold]
+    );
+    return result.rows.map((row) => ({
+      signal_id: row.signal_id,
+      source: row.source,
+      distance: toNumber(row.distance)
+    }));
+  };
+
+  const boostViralityScore = async (
+    signalId: string,
+    targetVirality: number,
+    weights?: { demand: number; timing: number; buildability: number; virality: number }
+  ): Promise<void> => {
+    const w = weights ?? { demand: 0.25, timing: 0.20, buildability: 0.20, virality: 0.35 };
     await pool.query(
       `UPDATE scored_signals
-       SET virality = LEAST(100, COALESCE(virality, 0) + $2),
-           blended = ROUND((0.25 * COALESCE(demand, 0) + 0.20 * COALESCE(timing, 0) + 0.20 * COALESCE(buildability, 0) + 0.35 * LEAST(100, COALESCE(virality, 0) + $2))::numeric, 2),
+       SET virality = GREATEST(COALESCE(virality, 0), LEAST(100, $2)),
+           blended = ROUND(($3 * COALESCE(demand, 0) + $4 * COALESCE(timing, 0) + $5 * COALESCE(buildability, 0) + $6 * GREATEST(COALESCE(virality, 0), LEAST(100, $2)))::numeric, 2),
            updated_at = NOW()
        WHERE signal_id = $1`,
-      [signalId, boost]
+      [signalId, targetVirality, w.demand, w.timing, w.buildability, w.virality]
     );
   };
 
@@ -676,6 +715,7 @@ export const createPostgresSignalStore = ({
     getEmbeddings,
     getEmbeddingStats,
     findConvergentSignals,
+    findDuplicatesByEmbedding,
     boostViralityScore,
     listSignalsWithoutEmbeddings,
     saveEmbedding,

@@ -1,4 +1,6 @@
+import { embedText } from '@idea/ai-runtime/src/ollama';
 import { type Cadence, OPEN_CONNECTOR_CADENCE, type RawEventInput } from '@idea/connectors/src/common/http';
+import type { TrendWindowSnapshot } from '@idea/contracts/src/memory';
 import { blendedScore, blendedScoreWithWeights } from '@idea/pipeline/src/scoring/blend';
 import type { WeightConfig } from '@idea/pipeline/src/scoring/weight_optimizer';
 import { getActiveWeights } from './active_weights';
@@ -401,6 +403,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   persistentStore?: PostgresSignalStore;
   circuit?: ProviderCircuitBreaker;
   pool?: import('pg').Pool;
+  byoSpendStore?: { record(connector: string, amount: number): Promise<void>; getSpent(connector: string): Promise<number> };
 }) => {
   const startedAt = Date.now();
   const initialEnv = loadRuntimeEnv(process.env);
@@ -410,8 +413,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   const memoryEntries: IndexedMemoryEntry[] = [];
   let postgresSignalStore: PostgresSignalStore | null | undefined = opts?.persistentStore ?? undefined;
   let snapshotHydrated = false;
+  let hydrationPromise: Promise<void> | null = null;
   let refreshInFlight: Promise<Snapshot> | null = null;
   let refreshingCadence: 'hourly' | 'daily' | null = null;
+  let shutdownController = new AbortController();
   const sessionRunIds = new Set<string>();
   let aiHealth: AiHealthRecord = createAiHealthSnapshot({
     env: process.env,
@@ -436,28 +441,34 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       return;
     }
 
-    snapshotHydrated = true;
+    // Share a single promise across concurrent callers so they all wait for the
+    // same DB load rather than racing past the snapshotHydrated flag.
+    if (!hydrationPromise) {
+      hydrationPromise = (async () => {
+        const store = await resolvePostgresSignalStore(env, logger);
+        if (!store) return;
 
-    const store = await resolvePostgresSignalStore(env, logger);
-    if (!store) {
-      return;
+        try {
+          const state = await store.loadRefreshState();
+          snapshot.lastHourlyRunAt = state.lastHourlyRunAt;
+          snapshot.lastDailyRunAt = state.lastDailyRunAt;
+          snapshot.refreshedAt = state.refreshedAt;
+          await logger.info('live_read_model', 'loaded refresh state from database', {
+            refreshed_at: state.refreshedAt > 0 ? new Date(state.refreshedAt).toISOString() : null,
+            last_hourly: state.lastHourlyRunAt > 0 ? new Date(state.lastHourlyRunAt).toISOString() : null,
+            last_daily: state.lastDailyRunAt > 0 ? new Date(state.lastDailyRunAt).toISOString() : null,
+          });
+        } catch (error) {
+          await logger.warn('live_read_model', 'failed to load refresh state from database', {
+            error: toErrorMessage(error)
+          });
+        } finally {
+          snapshotHydrated = true;
+        }
+      })();
     }
 
-    try {
-      const state = await store.loadRefreshState();
-      snapshot.lastHourlyRunAt = state.lastHourlyRunAt;
-      snapshot.lastDailyRunAt = state.lastDailyRunAt;
-      snapshot.refreshedAt = state.refreshedAt;
-      await logger.info('live_read_model', 'loaded refresh state from database', {
-        refreshed_at: state.refreshedAt > 0 ? new Date(state.refreshedAt).toISOString() : null,
-        last_hourly: state.lastHourlyRunAt > 0 ? new Date(state.lastHourlyRunAt).toISOString() : null,
-        last_daily: state.lastDailyRunAt > 0 ? new Date(state.lastDailyRunAt).toISOString() : null,
-      });
-    } catch (error) {
-      await logger.warn('live_read_model', 'failed to load refresh state from database', {
-        error: toErrorMessage(error)
-      });
-    }
+    await hydrationPromise;
   };
 
   const persistRefreshState = async (
@@ -542,6 +553,11 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     refreshingCadence = dailyDue ? 'daily' : 'hourly';
     const cadenceLabel = dailyDue ? 'daily_refresh' : 'hourly_refresh';
 
+    if (shutdownController.signal.aborted) {
+      await logger.info(cadenceLabel, 'refresh aborted during shutdown');
+      return snapshot;
+    }
+
     await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH START ===`, {
       run_id: logger.runId
     });
@@ -549,16 +565,13 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     try {
       const refreshStartedAt = Date.now();
 
-      const skipHourly = forceCadence === 'daily';
       const emptyIngestion = { events: [] as RawEventInput[], statuses: [] as OpenConnectorIngestionResult['statuses'] } as OpenConnectorIngestionResult;
 
       const [hourly, daily, byo] = await Promise.all([
-        skipHourly
-          ? Promise.resolve(emptyIngestion)
-          : runOpenConnectorIngestionDetailed('hourly', {
-              enabledConnectors: enabledOpenConnectors('hourly', env),
-              logger
-            }),
+        runOpenConnectorIngestionDetailed('hourly', {
+          enabledConnectors: enabledOpenConnectors('hourly', env),
+          logger
+        }),
         dailyDue
           ? runOpenConnectorIngestionDetailed('daily', {
               enabledConnectors: enabledOpenConnectors('daily', env),
@@ -567,8 +580,13 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
           : Promise.resolve(emptyIngestion),
         forceCadence
           ? Promise.resolve({ connectors: { exa: { status: 'skipped' as const, events: [] }, perigon: { status: 'skipped' as const, events: [] }, twitter: { status: 'skipped' as const, events: [] } } })
-          : runByoConnectorIngestion(process.env, { logger })
+          : runByoConnectorIngestion(process.env, { logger, spendStore: opts?.byoSpendStore ?? undefined })
       ]);
+
+      if (shutdownController.signal.aborted) {
+        await logger.info(cadenceLabel, 'refresh aborted during shutdown');
+        return snapshot;
+      }
 
       const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events, ...byo.connectors.twitter.events]);
       const highSignalEvents = events.filter((event) => !isLowValueRecruitingEvent(event));
@@ -635,7 +653,56 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       }
       const noiseFilteredBySource: Record<string, number> = {};
 
+      // Pre-embed all canonical texts in parallel batches to avoid 740 sequential Ollama calls
+      const embeddingCache = new Map<string, number[]>();
+      if (persistentStore) {
+        const EMBED_BATCH = 50;
+        const embedInputs = selectedSignalInputs.map((input) => ({
+          signalId: input.signalId,
+          canonicalText: buildRetrieverQueryText({
+            idea: input.ideaDraft,
+            snippet: input.event.text.slice(0, 160),
+            text: input.event.text,
+            topic: input.topic
+          })
+        }));
+        for (let bi = 0; bi < embedInputs.length; bi += EMBED_BATCH) {
+          const batch = embedInputs.slice(bi, bi + EMBED_BATCH);
+          const results = await Promise.allSettled(
+            batch.map((e) => embedText(e.canonicalText, { fallbackToNull: true }))
+          );
+          for (let ri = 0; ri < results.length; ri++) {
+            const r = results[ri];
+            if (r.status === 'fulfilled' && r.value) {
+              embeddingCache.set(batch[ri].signalId, r.value);
+            }
+          }
+        }
+        await logger.info(cadenceLabel, 'embeddings pre-computed', {
+          total: embedInputs.length,
+          cached: embeddingCache.size
+        });
+      }
+
+      // Memoize trendWindows by (topic:source) to avoid N+1 DB queries for repeated combos
+      const trendWindowsCache = new Map<string, TrendWindowSnapshot[]>();
+      const memoizedRetriever = persistentStore
+        ? {
+            ...persistentStore.retriever,
+            getTrendWindows: async (query: Parameters<typeof persistentStore.retriever.getTrendWindows>[0]) => {
+              const key = `${query.topic}:${query.source}`;
+              const cached = trendWindowsCache.get(key);
+              if (cached) return cached;
+              const result = await persistentStore.retriever.getTrendWindows(query);
+              trendWindowsCache.set(key, result);
+              return result;
+            }
+          }
+        : undefined;
+
+      let scoringProgressLogged = 0;
       for (const input of selectedSignalInputs) {
+        if (shutdownController.signal.aborted) break;
         const { event, signalId, topic, ideaDraft } = input;
         try {
           const aiInsight = aiPostScrapeInsights.get(signalId);
@@ -668,7 +735,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
           }
 
           const idea = aiInsight?.idea && aiInsight.idea.length > 0 ? aiInsight.idea : ideaDraft;
-          const retriever = persistentStore?.retriever ?? createInMemoryRetriever(memoryEntries);
+          const retriever = memoizedRetriever ?? createInMemoryRetriever(memoryEntries);
           const canonicalText = buildRetrieverQueryText({
             idea,
             snippet: event.text.slice(0, 160),
@@ -713,6 +780,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
             aiHealth = runAiHealth;
           }
 
+          const precomputedEmbedding = embeddingCache.get(signalId);
           const scoreArgs: Parameters<typeof scoreSignalWithRetriever>[0] = {
             text: event.text,
             judgeScores,
@@ -721,7 +789,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
             canonicalText,
             memoryRetriever: retriever,
             topK: 8,
-            ...(activeWeights ? { weights: activeWeights } : {})
+            ...(activeWeights ? { weights: activeWeights } : {}),
+            ...(precomputedEmbedding ? { precomputedEmbedding } : {})
           };
           if (aiInsight?.demand !== undefined) scoreArgs.baseDemand = aiInsight.demand;
           if (aiInsight?.timing !== undefined) scoreArgs.baseTiming = aiInsight.timing;
@@ -783,9 +852,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
                 );
                 if (convergent.length > 0) {
                   const convergenceBoost = Math.min(25, 15 + convergent.length * 5);
-                  // Boost the current signal
-                  await persistentStore.boostViralityScore(indexedEntry.memoryRecord.signal_id, convergenceBoost);
-                  // Boost the matched signals too
+                  // Compute target virality for current signal (organic + boost)
+                  const currentSignalTarget = (score.virality ?? 0) + convergenceBoost;
+                  await persistentStore.boostViralityScore(indexedEntry.memoryRecord.signal_id, currentSignalTarget);
+                  // For matched signals, use boost as a floor — GREATEST ensures no lowering
                   for (const match of convergent) {
                     await persistentStore.boostViralityScore(match.signal_id, convergenceBoost);
                   }
@@ -817,6 +887,16 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
             virality: score.virality ?? aiInsight?.virality ?? 0,
             blended
           });
+
+          scoringProgressLogged += 1;
+          if (scoringProgressLogged % 100 === 0) {
+            await logger.info(cadenceLabel, 'scoring progress', {
+              scored: scoringProgressLogged,
+              total: selectedSignalInputs.length,
+              embed_cache_hits: embeddingCache.size,
+              trend_window_cache_size: trendWindowsCache.size
+            });
+          }
         } catch (error) {
           await logger.error(cadenceLabel, 'signal scoring failed', {
             source: event.source,
@@ -966,9 +1046,14 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     }
   };
 
-  const startRefresh = (): Promise<Snapshot> => {
+  /**
+   * Guarded refresh: if a refresh is already in-flight, returns the same promise.
+   * Note: when a refresh is in-flight, concurrent calls with a different cadence
+   * are coalesced into the first — the cadence arg is dropped for the second caller.
+   */
+  const startRefresh = (cadence?: 'hourly' | 'daily'): Promise<Snapshot> => {
     if (!refreshInFlight) {
-      refreshInFlight = refresh().finally(() => {
+      refreshInFlight = refresh(cadence).finally(() => {
         refreshInFlight = null;
       });
     }
@@ -1043,8 +1128,23 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
         return rows.filter((row) => sessionRunIds.has(row.run_id)).slice(0, query.limit);
       })()),
     registerRunId: (runId: string) => { sessionRunIds.add(runId); },
-    refresh,
+    startRefresh,
+    /**
+     * Hydrate refresh timestamps from DB without running a full refresh.
+     * Returns the persisted state so callers can decide whether a refresh is needed.
+     */
+    peekState: async (): Promise<{ lastHourlyRunAt: number; lastDailyRunAt: number; refreshedAt: number }> => {
+      const env = loadRuntimeEnv(process.env);
+      const logger = createExecutionLogger({});
+      await hydrateRefreshState(env, logger);
+      return {
+        lastHourlyRunAt: snapshot.lastHourlyRunAt,
+        lastDailyRunAt: snapshot.lastDailyRunAt,
+        refreshedAt: snapshot.refreshedAt,
+      };
+    },
     close: async (): Promise<void> => {
+      shutdownController.abort();
       if (postgresSignalStore) {
         await postgresSignalStore.close();
       }

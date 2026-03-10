@@ -5,6 +5,8 @@ export type MemoryQuery = {
   source: string;
   canonicalText: string;
   topK?: number;
+  /** Pre-computed embedding vector — when provided, findSimilar skips the Ollama call */
+  embedding?: number[];
 };
 
 export type MemoryRetriever = {

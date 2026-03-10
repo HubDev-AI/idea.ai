@@ -3,6 +3,16 @@ import React, { useState } from 'react';
 import type { SignalRecord } from '../api';
 import { relativeTime } from '../relativeTime';
 
+const safeHref = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+};
+
 type SignalRowProps = {
   signal: SignalRecord;
 };
@@ -18,8 +28,8 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
   return (
     <li className="signal-row">
       <div className="signal-top">
-        {signal.source_url ? (
-          <a className="signal-idea signal-idea-link" href={signal.source_url} target="_blank" rel="noreferrer">
+        {safeHref(signal.source_url) ? (
+          <a className="signal-idea signal-idea-link" href={safeHref(signal.source_url)!} target="_blank" rel="noreferrer">
             {signal.idea.split('|')[0].trim()}
           </a>
         ) : (
@@ -44,8 +54,8 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
           )}
           <span className="signal-time">{relativeTime(signal.updated_at)}</span>
         </div>
-        {signal.source_url ? (
-          <a className="source-link" href={signal.source_url} target="_blank" rel="noreferrer">
+        {safeHref(signal.source_url) ? (
+          <a className="source-link" href={safeHref(signal.source_url)!} target="_blank" rel="noreferrer">
             Source
           </a>
         ) : null}

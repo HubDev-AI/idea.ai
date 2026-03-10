@@ -1,5 +1,6 @@
 import type { OpportunityMapRecord, OpportunityNode } from '@idea/contracts/src/api';
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../api';
 
 const velocityLabel = (v: number): string => {
   if (v >= 2) return '\u2191 accelerating';
@@ -22,23 +23,22 @@ const statusLabel: Record<string, string> = {
 };
 
 type Props = {
-  apiUrl: string;
   onViewThesis?: (canonicalKey: string, title: string) => void;
 };
 
-export const OpportunityMapView: React.FC<Props> = ({ apiUrl, onViewThesis }) => {
+export const OpportunityMapView: React.FC<Props> = ({ onViewThesis }) => {
   const [map, setMap] = useState<OpportunityMapRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${apiUrl}/v1/opportunity-map`)
+    apiFetch('/v1/opportunity-map')
       .then(res => {
         if (!res.ok) throw new Error(`${res.status}`);
         return res.json() as Promise<OpportunityMapRecord>;
       })
       .then(setMap)
       .catch(err => setError(err.message));
-  }, [apiUrl]);
+  }, []);
 
   if (error) return <div className="omap-error">Failed to load opportunity map: {error}</div>;
   if (!map) return <div className="omap-loading">Loading opportunity map...</div>;

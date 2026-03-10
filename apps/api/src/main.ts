@@ -17,6 +17,7 @@ import { resolveAiJudgeSettings } from './jobs/ai_judges';
 import { runWeightOptimization } from './jobs/weight_optimizer_job';
 import { loadProfiles } from './profiles/index.js';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
+import { createByoSpendStore } from './runtime/byo_spend_store';
 import { createDeepDiveStore } from './runtime/deep_dive_store';
 import { createEntityStore } from './runtime/entity_store';
 import { createExecutionLogger } from './runtime/execution_logger';
@@ -32,13 +33,20 @@ import { StateHub } from './ws/state_hub';
 
 loadEnvFile();
 
-const host = process.env.HOST ?? '0.0.0.0';
+const host = process.env.HOST ?? '127.0.0.1';
 const port = Number(process.env.PORT ?? 3000);
 const corsOrigins = (process.env.CORS_ORIGINS ?? '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 const apiKey = process.env.API_KEY || undefined;
+if (!apiKey && host !== '127.0.0.1' && host !== 'localhost') {
+  console.error(
+    `[startup] ERROR: API_KEY is not set but HOST=${host} is not localhost. ` +
+    `Set API_KEY or bind to 127.0.0.1 for local-only mode.`
+  );
+  process.exit(1);
+}
 const databaseUrl = process.env.DATABASE_URL;
 
 const startupEnv = loadRuntimeEnv(process.env);
@@ -47,6 +55,7 @@ const providerCircuit = createProviderCircuitBreaker({
   cooldownMs: startupEnv.circuitBreakerCooldownMs,
 });
 const pool = databaseUrl ? new pg.Pool({ connectionString: databaseUrl, max: 4 }) : null;
+const byoSpendStore = pool ? createByoSpendStore({ pool }) : null;
 
 const thesisStore = pool
   ? createPostgresThesisStore({ pool })
@@ -62,6 +71,7 @@ const readModel = createLiveReadModel(undefined, {
   ...(signalStore ? { persistentStore: signalStore } : {}),
   circuit: providerCircuit,
   ...(pool ? { pool } : {}),
+  ...(byoSpendStore ? { byoSpendStore } : {}),
 });
 
 const journalStore = databaseUrl
@@ -156,6 +166,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         timeoutMs: agentEnv.agentTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
         pool: pool ?? undefined,
+        debateEnabled: agentEnv.debateEnabled,
         debateConfidenceThreshold: agentEnv.debateConfidenceThreshold,
         debateMaxPerRun: agentEnv.debateMaxPerRun,
         cusumThreshold: agentEnv.cusumThreshold,
@@ -258,7 +269,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getRefreshMeta: readModel.getRefreshMeta,
   triggerRefresh: async (cadence) => {
     stateHub.pushRefreshMeta();
-    await readModel.refresh(cadence);
+    await readModel.startRefresh(cadence);
     void stateHub.broadcastAll();
 
     // Entity extraction: run after refresh if both entityStore and modelRouter are available
@@ -362,9 +373,13 @@ if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
 // -- Socket.IO + StateHub -----------------------------------------------
+const allowedOrigins = corsOrigins.length > 0
+  ? corsOrigins
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(app.server, {
   cors: {
-    origin: corsOrigins.length > 0 ? corsOrigins : '*',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
   },
   path: '/socket.io/',
@@ -418,7 +433,7 @@ const stateHub = new StateHub(io, {
 }, {
   infraPollMs: startupEnv.wsInfraPollMs,
   logPollMs: startupEnv.wsLogPollMs,
-});
+}, apiKey);
 
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
@@ -502,9 +517,15 @@ app
     stateHub.startPolling();
     const runtimeEnv = loadRuntimeEnv(process.env);
 
-    // Trigger initial data refresh and broadcast
-    void readModel.refresh().then(() => stateHub.broadcastAll()).catch(() => {});
-    // Push refreshMeta immediately so clients see the "refreshing" state
+    // Only refresh on startup if data is actually stale (avoids re-ingesting on every restart)
+    void (async () => {
+      const state = await readModel.peekState();
+      const isStale = state.lastHourlyRunAt === 0 || Date.now() - state.lastHourlyRunAt > runtimeEnv.agentIntervalMs;
+      if (isStale) {
+        await readModel.startRefresh();
+      }
+      stateHub.broadcastAll();
+    })().catch(() => {});
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
     // If overdue from a previous session, run immediately then start the regular interval
@@ -525,7 +546,7 @@ app
     // Periodic connector refresh (was driven by client polling before WebSocket migration)
     refreshTimer = setInterval(() => {
       stateHub.pushRefreshMeta();
-      void readModel.refresh().then(() => stateHub.broadcastAll()).catch((err) => {
+      void readModel.startRefresh().then(() => stateHub.broadcastAll()).catch((err) => {
         console.error('periodic refresh failed:', err);
       });
     }, runtimeEnv.agentIntervalMs);
