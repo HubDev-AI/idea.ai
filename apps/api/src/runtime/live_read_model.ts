@@ -403,6 +403,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   persistentStore?: PostgresSignalStore;
   circuit?: ProviderCircuitBreaker;
   pool?: import('pg').Pool;
+  byoSpendStore?: { record(connector: string, amount: number): Promise<void>; getSpent(connector: string): Promise<number> };
 }) => {
   const startedAt = Date.now();
   const initialEnv = loadRuntimeEnv(process.env);
@@ -579,7 +580,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
           : Promise.resolve(emptyIngestion),
         forceCadence
           ? Promise.resolve({ connectors: { exa: { status: 'skipped' as const, events: [] }, perigon: { status: 'skipped' as const, events: [] }, twitter: { status: 'skipped' as const, events: [] } } })
-          : runByoConnectorIngestion(process.env, { logger })
+          : runByoConnectorIngestion(process.env, { logger, spendStore: opts?.byoSpendStore ?? undefined })
       ]);
 
       if (shutdownController.signal.aborted) {
