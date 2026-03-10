@@ -1,4 +1,6 @@
+import { embedText } from '@idea/ai-runtime/src/ollama';
 import { type Cadence, OPEN_CONNECTOR_CADENCE, type RawEventInput } from '@idea/connectors/src/common/http';
+import type { TrendWindowSnapshot } from '@idea/contracts/src/memory';
 import { blendedScore, blendedScoreWithWeights } from '@idea/pipeline/src/scoring/blend';
 import type { WeightConfig } from '@idea/pipeline/src/scoring/weight_optimizer';
 import { getActiveWeights } from './active_weights';
@@ -632,6 +634,54 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       }
       const noiseFilteredBySource: Record<string, number> = {};
 
+      // Pre-embed all canonical texts in parallel batches to avoid 740 sequential Ollama calls
+      const embeddingCache = new Map<string, number[]>();
+      if (persistentStore) {
+        const EMBED_BATCH = 50;
+        const embedInputs = selectedSignalInputs.map((input) => ({
+          signalId: input.signalId,
+          canonicalText: buildRetrieverQueryText({
+            idea: input.ideaDraft,
+            snippet: input.event.text.slice(0, 160),
+            text: input.event.text,
+            topic: input.topic
+          })
+        }));
+        for (let bi = 0; bi < embedInputs.length; bi += EMBED_BATCH) {
+          const batch = embedInputs.slice(bi, bi + EMBED_BATCH);
+          const results = await Promise.allSettled(
+            batch.map((e) => embedText(e.canonicalText, { fallbackToNull: true }))
+          );
+          for (let ri = 0; ri < results.length; ri++) {
+            const r = results[ri];
+            if (r.status === 'fulfilled' && r.value) {
+              embeddingCache.set(batch[ri].signalId, r.value);
+            }
+          }
+        }
+        await logger.info(cadenceLabel, 'embeddings pre-computed', {
+          total: embedInputs.length,
+          cached: embeddingCache.size
+        });
+      }
+
+      // Memoize trendWindows by (topic:source) to avoid N+1 DB queries for repeated combos
+      const trendWindowsCache = new Map<string, TrendWindowSnapshot[]>();
+      const memoizedRetriever = persistentStore
+        ? {
+            ...persistentStore.retriever,
+            getTrendWindows: async (query: Parameters<typeof persistentStore.retriever.getTrendWindows>[0]) => {
+              const key = `${query.topic}:${query.source}`;
+              const cached = trendWindowsCache.get(key);
+              if (cached) return cached;
+              const result = await persistentStore.retriever.getTrendWindows(query);
+              trendWindowsCache.set(key, result);
+              return result;
+            }
+          }
+        : undefined;
+
+      let scoringProgressLogged = 0;
       for (const input of selectedSignalInputs) {
         const { event, signalId, topic, ideaDraft } = input;
         try {
@@ -665,7 +715,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
           }
 
           const idea = aiInsight?.idea && aiInsight.idea.length > 0 ? aiInsight.idea : ideaDraft;
-          const retriever = persistentStore?.retriever ?? createInMemoryRetriever(memoryEntries);
+          const retriever = memoizedRetriever ?? createInMemoryRetriever(memoryEntries);
           const canonicalText = buildRetrieverQueryText({
             idea,
             snippet: event.text.slice(0, 160),
@@ -710,6 +760,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
             aiHealth = runAiHealth;
           }
 
+          const precomputedEmbedding = embeddingCache.get(signalId);
           const scoreArgs: Parameters<typeof scoreSignalWithRetriever>[0] = {
             text: event.text,
             judgeScores,
@@ -718,7 +769,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
             canonicalText,
             memoryRetriever: retriever,
             topK: 8,
-            ...(activeWeights ? { weights: activeWeights } : {})
+            ...(activeWeights ? { weights: activeWeights } : {}),
+            ...(precomputedEmbedding ? { precomputedEmbedding } : {})
           };
           if (aiInsight?.demand !== undefined) scoreArgs.baseDemand = aiInsight.demand;
           if (aiInsight?.timing !== undefined) scoreArgs.baseTiming = aiInsight.timing;
@@ -814,6 +866,16 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
             virality: score.virality ?? aiInsight?.virality ?? 0,
             blended
           });
+
+          scoringProgressLogged += 1;
+          if (scoringProgressLogged % 100 === 0) {
+            await logger.info(cadenceLabel, 'scoring progress', {
+              scored: scoringProgressLogged,
+              total: selectedSignalInputs.length,
+              embed_cache_hits: embeddingCache.size,
+              trend_window_cache_size: trendWindowsCache.size
+            });
+          }
         } catch (error) {
           await logger.error(cadenceLabel, 'signal scoring failed', {
             source: event.source,

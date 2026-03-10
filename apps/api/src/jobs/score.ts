@@ -81,7 +81,8 @@ export const scoreSignalWithRetriever = async ({
   baseDemand,
   baseTiming,
   baseVirality,
-  weights
+  weights,
+  precomputedEmbedding
 }: {
   text: string;
   judgeScores: [number, number, number];
@@ -94,9 +95,12 @@ export const scoreSignalWithRetriever = async ({
   baseTiming?: number;
   baseVirality?: number;
   weights?: WeightConfig;
+  /** Pre-computed embedding — forwarded to findSimilar to skip the per-signal Ollama call */
+  precomputedEmbedding?: number[];
 }) => {
   const memoryQuery: Parameters<typeof loadMemoryContext>[1] = { topic, source, canonicalText };
   if (topK !== undefined) memoryQuery.topK = topK;
+  if (precomputedEmbedding) memoryQuery.embedding = precomputedEmbedding;
   const memoryContext = await loadMemoryContext(memoryRetriever, memoryQuery);
 
   const scoreInput: ScoreSignalInput = { text, judgeScores, memoryContext };
