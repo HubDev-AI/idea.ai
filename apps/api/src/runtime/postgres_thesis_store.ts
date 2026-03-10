@@ -187,18 +187,23 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
 
     if (draft.evidence.length > 0 && result.rows[0]) {
       const thesisId = result.rows[0].id;
+      const values: unknown[] = [];
+      const placeholders: string[] = [];
+      let idx = 1;
       for (const ev of draft.evidence) {
-        await pool.query(
-          `INSERT INTO thesis_evidence (thesis_id, signal_id, relation, weight, snippet, observed_at)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (thesis_id, signal_id) DO UPDATE SET
-             relation = EXCLUDED.relation,
-             weight = EXCLUDED.weight,
-             snippet = EXCLUDED.snippet,
-             observed_at = EXCLUDED.observed_at`,
-          [thesisId, ev.signal_id, ev.relation, ev.weight, ev.snippet, ev.observed_at]
-        );
+        placeholders.push(`($${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++})`);
+        values.push(thesisId, ev.signal_id, ev.relation, ev.weight, ev.snippet, ev.observed_at);
       }
+      await pool.query(
+        `INSERT INTO thesis_evidence (thesis_id, signal_id, relation, weight, snippet, observed_at)
+         VALUES ${placeholders.join(', ')}
+         ON CONFLICT (thesis_id, signal_id) DO UPDATE SET
+           relation = EXCLUDED.relation,
+           weight = EXCLUDED.weight,
+           snippet = EXCLUDED.snippet,
+           observed_at = EXCLUDED.observed_at`,
+        values
+      );
     }
   },
 
