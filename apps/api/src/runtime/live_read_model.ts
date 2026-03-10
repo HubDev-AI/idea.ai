@@ -549,16 +549,13 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     try {
       const refreshStartedAt = Date.now();
 
-      const skipHourly = forceCadence === 'daily';
       const emptyIngestion = { events: [] as RawEventInput[], statuses: [] as OpenConnectorIngestionResult['statuses'] } as OpenConnectorIngestionResult;
 
       const [hourly, daily, byo] = await Promise.all([
-        skipHourly
-          ? Promise.resolve(emptyIngestion)
-          : runOpenConnectorIngestionDetailed('hourly', {
-              enabledConnectors: enabledOpenConnectors('hourly', env),
-              logger
-            }),
+        runOpenConnectorIngestionDetailed('hourly', {
+          enabledConnectors: enabledOpenConnectors('hourly', env),
+          logger
+        }),
         dailyDue
           ? runOpenConnectorIngestionDetailed('daily', {
               enabledConnectors: enabledOpenConnectors('daily', env),
@@ -1049,6 +1046,20 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       })()),
     registerRunId: (runId: string) => { sessionRunIds.add(runId); },
     startRefresh,
+    /**
+     * Hydrate refresh timestamps from DB without running a full refresh.
+     * Returns the persisted state so callers can decide whether a refresh is needed.
+     */
+    peekState: async (): Promise<{ lastHourlyRunAt: number; lastDailyRunAt: number; refreshedAt: number }> => {
+      const env = loadRuntimeEnv(process.env);
+      const logger = createExecutionLogger({});
+      await hydrateRefreshState(env, logger);
+      return {
+        lastHourlyRunAt: snapshot.lastHourlyRunAt,
+        lastDailyRunAt: snapshot.lastDailyRunAt,
+        refreshedAt: snapshot.refreshedAt,
+      };
+    },
     close: async (): Promise<void> => {
       if (postgresSignalStore) {
         await postgresSignalStore.close();

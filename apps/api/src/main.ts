@@ -513,9 +513,15 @@ app
     stateHub.startPolling();
     const runtimeEnv = loadRuntimeEnv(process.env);
 
-    // Trigger initial data refresh and broadcast
-    void readModel.startRefresh().then(() => stateHub.broadcastAll()).catch(() => {});
-    // Push refreshMeta immediately so clients see the "refreshing" state
+    // Only refresh on startup if data is actually stale (avoids re-ingesting on every restart)
+    void (async () => {
+      const state = await readModel.peekState();
+      const isStale = state.lastHourlyRunAt === 0 || Date.now() - state.lastHourlyRunAt > runtimeEnv.agentIntervalMs;
+      if (isStale) {
+        await readModel.startRefresh();
+      }
+      stateHub.broadcastAll();
+    })().catch(() => {});
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
     // If overdue from a previous session, run immediately then start the regular interval
