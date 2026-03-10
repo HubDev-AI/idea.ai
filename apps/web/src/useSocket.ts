@@ -52,7 +52,10 @@ export const useSocket = (): SocketState => {
       (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
         ?.VITE_API_KEY ?? '';
 
-    const socket: TypedSocket = io({
+    const maybeEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+    const apiUrl = maybeEnv?.VITE_API_URL ?? '';
+
+    const socket: TypedSocket = io(apiUrl || undefined, {
       path: '/socket.io/',
       transports: ['websocket', 'polling'],
       ...(apiKey ? { auth: { key: apiKey } } : {}),

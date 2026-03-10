@@ -1282,13 +1282,17 @@ a.signal-idea-link:hover {
 .log-drawer-header {
   display: flex;
   align-items: center;
+  gap: 0.45rem;
+  padding-right: 0.75rem;
+  flex-shrink: 0;
 }
 
 .log-drawer-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 0.45rem 1.25rem;
   background: transparent;
   border: none;
@@ -1297,7 +1301,6 @@ a.signal-idea-link:hover {
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  flex-shrink: 0;
   letter-spacing: -0.01em;
   transition: background 0.12s;
 }
@@ -1337,12 +1340,6 @@ a.signal-idea-link:hover {
 .log-drawer-chevron {
   font-size: 0.65rem;
   color: var(--muted);
-}
-
-.log-drawer-right {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
 }
 
 .log-action-btn {
