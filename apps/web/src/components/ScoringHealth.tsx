@@ -22,7 +22,7 @@ export const ScoringHealth: React.FC<{
       .then((d) => { if (!cancelled) setData(d); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, [profile]);
+  }, [apiUrl, profile]);
 
   if (error) return <div className="scoring-error">Failed to load scoring health: {error}</div>;
   if (!data) return <div className="scoring-loading">Loading scoring health...</div>;
