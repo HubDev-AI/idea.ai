@@ -30,6 +30,7 @@ export type CommandResult = {
 export type CommandRunner = (spec: CommandSpec) => Promise<CommandResult>;
 
 const DEFAULT_TIMEOUT_MS = 20_000;
+const MAX_BUFFER = 1_048_576; // 1MB
 
 export const spawnCommand: CommandRunner = ({ cmd, args, timeoutMs = DEFAULT_TIMEOUT_MS }) =>
   new Promise((resolve, reject) => {
@@ -42,6 +43,7 @@ export const spawnCommand: CommandRunner = ({ cmd, args, timeoutMs = DEFAULT_TIM
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let bufferExceeded = false;
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -49,11 +51,25 @@ export const spawnCommand: CommandRunner = ({ cmd, args, timeoutMs = DEFAULT_TIM
     }, timeoutMs);
 
     child.stdout.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
+      if (bufferExceeded) return;
+      const str = chunk.toString();
+      stdout += str;
+      if (stdout.length > MAX_BUFFER) {
+        stdout = stdout.slice(0, MAX_BUFFER);
+        bufferExceeded = true;
+        child.kill('SIGTERM');
+      }
     });
 
     child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
+      if (bufferExceeded) return;
+      const str = chunk.toString();
+      stderr += str;
+      if (stderr.length > MAX_BUFFER) {
+        stderr = stderr.slice(0, MAX_BUFFER);
+        bufferExceeded = true;
+        child.kill('SIGTERM');
+      }
     });
 
     child.on('error', (error) => {
