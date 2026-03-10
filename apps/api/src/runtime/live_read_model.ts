@@ -57,16 +57,11 @@ type Snapshot = {
 };
 
 const resolveProviderSetting = (env: NodeJS.ProcessEnv): 'claude' | 'codex' | 'both' => {
-  const providerRaw = env.AI_PROVIDER?.toLowerCase();
-  if (providerRaw === 'codex') {
-    return 'codex';
-  }
-
-  if (providerRaw === 'both') {
-    return 'both';
-  }
-
-  return 'claude';
+  const primary = (env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase();
+  const fallback = (env.AI_FALLBACK ?? '').toLowerCase();
+  const hasFallback = fallback === 'claude' || fallback === 'codex' || env.AI_PROVIDER_FALLBACK === 'true';
+  if (hasFallback) return 'both';
+  return primary === 'codex' ? 'codex' : 'claude';
 };
 
 const isProviderEnabled = (providerSetting: 'claude' | 'codex' | 'both', provider: 'claude' | 'codex'): boolean => {

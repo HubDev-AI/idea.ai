@@ -43,7 +43,7 @@ tail`;
   it('analyzes a batch via AI runner and falls back gracefully', async () => {
     const settings = resolveAiPostScrapeSettings({
       NODE_ENV: 'development',
-      AI_PROVIDER: 'codex',
+      AI_PRIMARY: 'codex',
       AI_POST_SCRAPE_MAX_SIGNALS: '4'
     });
 
