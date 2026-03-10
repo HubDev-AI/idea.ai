@@ -117,7 +117,7 @@ export const registerFeedRoute = (
     // Validate window param if present
     if (windowParam !== undefined && !VALID_WINDOWS.has(windowParam)) {
       reply.code(400);
-      return { error: `Invalid window value: ${windowParam}. Must be one of: ${[...VALID_WINDOWS].join(', ')}` };
+      return { error: `Invalid window value. Must be one of: ${[...VALID_WINDOWS].join(', ')}` };
     }
 
     const sourceParam = request.query.source;
