@@ -371,12 +371,15 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   }
 
   // === Phase 1.5: Adversarial Debate on top theses ===
+  // Debate requires both Claude (moderator) and Codex. Skip when only one provider is enabled.
   const debateThreshold = deps.debateConfidenceThreshold ?? 40;
   const debateMax = deps.debateMaxPerRun ?? 5;
-  const debateCandidates = (await deps.thesisStore.list())
-    .filter(t => t.confidence >= debateThreshold)
-    .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, debateMax);
+  const debateCandidates = deps.allowFallback
+    ? (await deps.thesisStore.list())
+        .filter(t => t.confidence >= debateThreshold)
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, debateMax)
+    : [];
 
   const debateResults: Array<{ thesisKey: string; result: DebateResult }> = [];
 
