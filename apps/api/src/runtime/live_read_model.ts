@@ -415,6 +415,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   let hydrationPromise: Promise<void> | null = null;
   let refreshInFlight: Promise<Snapshot> | null = null;
   let refreshingCadence: 'hourly' | 'daily' | null = null;
+  let shutdownController = new AbortController();
   const sessionRunIds = new Set<string>();
   let aiHealth: AiHealthRecord = createAiHealthSnapshot({
     env: process.env,
@@ -551,6 +552,11 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     refreshingCadence = dailyDue ? 'daily' : 'hourly';
     const cadenceLabel = dailyDue ? 'daily_refresh' : 'hourly_refresh';
 
+    if (shutdownController.signal.aborted) {
+      await logger.info(cadenceLabel, 'refresh aborted during shutdown');
+      return snapshot;
+    }
+
     await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH START ===`, {
       run_id: logger.runId
     });
@@ -575,6 +581,11 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
           ? Promise.resolve({ connectors: { exa: { status: 'skipped' as const, events: [] }, perigon: { status: 'skipped' as const, events: [] }, twitter: { status: 'skipped' as const, events: [] } } })
           : runByoConnectorIngestion(process.env, { logger })
       ]);
+
+      if (shutdownController.signal.aborted) {
+        await logger.info(cadenceLabel, 'refresh aborted during shutdown');
+        return snapshot;
+      }
 
       const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events, ...byo.connectors.twitter.events]);
       const highSignalEvents = events.filter((event) => !isLowValueRecruitingEvent(event));
@@ -690,6 +701,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
 
       let scoringProgressLogged = 0;
       for (const input of selectedSignalInputs) {
+        if (shutdownController.signal.aborted) break;
         const { event, signalId, topic, ideaDraft } = input;
         try {
           const aiInsight = aiPostScrapeInsights.get(signalId);
@@ -1130,6 +1142,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       };
     },
     close: async (): Promise<void> => {
+      shutdownController.abort();
       if (postgresSignalStore) {
         await postgresSignalStore.close();
       }
