@@ -123,6 +123,11 @@ export const fetchYcCompanyEvents = async (
   limit = OPEN_CONNECTOR_LIMITS.yc_companies
 ): Promise<RawEventInput[]> => {
   const config = await withRetry(() => loadConfig());
+
+  if (!/^[A-Za-z0-9]{6,}$/.test(config.app)) {
+    throw new Error('Invalid Algolia app ID format');
+  }
+
   const hits = await withRetry(() => loadHits(config, limit));
 
   return hits.slice(0, limit).map((hit, index) => ({

@@ -16,7 +16,6 @@ export type AgentRunRow = {
   investigate_next: string | null;
   provider: string | null;
   error_message: string | null;
-  error_stack: string | null;
 };
 
 export type AgentRunStore = {
@@ -26,6 +25,10 @@ export type AgentRunStore = {
   latest(): Promise<AgentRunRow | null>;
   list(limit?: number): Promise<AgentRunRow[]>;
 };
+
+const SAFE_COLUMNS = `id, run_id, status, started_at, finished_at, duration_ms,
+  clusters_analyzed, deep_dives_performed, theses_updated, new_candidates,
+  journal_entries_written, investigate_next, provider, error_message, created_at`;
 
 export const createAgentRunStore = ({ pool }: { pool: Pool }): AgentRunStore => ({
   async create(runId: string): Promise<void> {
@@ -79,14 +82,14 @@ export const createAgentRunStore = ({ pool }: { pool: Pool }): AgentRunStore => 
 
   async latest(): Promise<AgentRunRow | null> {
     const result = await pool.query<AgentRunRow>(
-      `SELECT * FROM agent_runs ORDER BY started_at DESC LIMIT 1`
+      `SELECT ${SAFE_COLUMNS} FROM agent_runs ORDER BY started_at DESC LIMIT 1`
     );
     return result.rows[0] ?? null;
   },
 
   async list(limit = 20): Promise<AgentRunRow[]> {
     const result = await pool.query<AgentRunRow>(
-      `SELECT * FROM agent_runs ORDER BY started_at DESC LIMIT $1`,
+      `SELECT ${SAFE_COLUMNS} FROM agent_runs ORDER BY started_at DESC LIMIT $1`,
       [limit]
     );
     return result.rows;

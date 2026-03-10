@@ -125,9 +125,7 @@ export const generateDeepDive = async (
       providers: `${primaryName}+${fallbackName}`,
       duration_ms: Date.now() - startMs
     });
-    throw new Error(
-      `deep_dive_generator: failed to parse AI response from both providers. Preview: ${fallbackResult.text.slice(0, 200)}`
-    );
+    throw new Error('deep_dive_generator: failed to parse AI response from both providers');
   }
 
   await log.info('deep_dive', 'deep-dive complete (fallback)', {

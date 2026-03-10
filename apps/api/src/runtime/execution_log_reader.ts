@@ -60,9 +60,29 @@ export const readExecutionLogs = async ({
   const fileNames = await readdir(logDir).catch(() => []);
   const jsonlFiles = fileNames.filter((name) => name.endsWith('.jsonl'));
 
+  if (runId) {
+    const targetFile = jsonlFiles.find((name) => name.includes(runId));
+    if (!targetFile) return [];
+    const filePath = join(logDir, targetFile);
+    const content = await readFile(filePath, 'utf8').catch(() => '');
+    if (!content) return [];
+    return content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map(parseLine)
+      .filter((entry): entry is ExecutionLogRecord => entry !== null)
+      .filter((entry) => (!level || entry.level === level) && (!component || entry.component === component))
+      .sort((a, b) => toTimestamp(b.ts) - toTimestamp(a.ts))
+      .slice(0, limit);
+  }
+
+  const MAX_LOG_FILES = 50;
+  const recentFiles = jsonlFiles.sort().slice(-MAX_LOG_FILES);
+
   const all: ExecutionLogRecord[] = [];
 
-  for (const file of jsonlFiles) {
+  for (const file of recentFiles) {
     const filePath = join(logDir, file);
     const content = await readFile(filePath, 'utf8').catch(() => '');
     if (!content) {
