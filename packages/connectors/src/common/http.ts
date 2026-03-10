@@ -96,12 +96,17 @@ export const fetchJsonWithRetry = async <T>(
     backoffMs?: number;
     init?: RequestInit;
     fetchImpl?: typeof fetch;
+    timeoutMs?: number;
   } = {}
 ): Promise<T> => {
   const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 15_000;
 
   return withRetry(async () => {
-    const response = await fetchImpl(url, options.init);
+    const response = await fetchImpl(url, {
+      ...options.init,
+      signal: AbortSignal.timeout(timeoutMs)
+    });
 
     if (!response.ok) {
       throw new Error(`Request failed (${response.status}) for ${url}`);

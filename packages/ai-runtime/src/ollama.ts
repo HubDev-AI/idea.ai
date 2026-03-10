@@ -7,6 +7,7 @@ export type EmbedOptions = {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   fallbackToNull?: boolean;
+  timeoutMs?: number;
 };
 
 export const embedText = async (
@@ -21,7 +22,8 @@ export const embedText = async (
     const response = await fetchImpl(`${baseUrl}/api/embed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, input: text })
+      body: JSON.stringify({ model, input: text }),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 10_000)
     });
 
     if (!response.ok) {
