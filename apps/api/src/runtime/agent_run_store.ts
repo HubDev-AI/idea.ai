@@ -40,7 +40,7 @@ export const createAgentRunStore = ({ pool }: { pool: Pool }): AgentRunStore => 
       `UPDATE agent_runs SET
         status = 'completed',
         finished_at = now(),
-        duration_ms = EXTRACT(EPOCH FROM (now() - started_at))::int * 1000,
+        duration_ms = (EXTRACT(EPOCH FROM (now() - started_at)) * 1000)::int,
         clusters_analyzed = $2,
         deep_dives_performed = $3,
         theses_updated = $4,
@@ -69,7 +69,7 @@ export const createAgentRunStore = ({ pool }: { pool: Pool }): AgentRunStore => 
       `UPDATE agent_runs SET
         status = 'failed',
         finished_at = now(),
-        duration_ms = EXTRACT(EPOCH FROM (now() - started_at))::int * 1000,
+        duration_ms = (EXTRACT(EPOCH FROM (now() - started_at)) * 1000)::int,
         error_message = $2,
         error_stack = $3
       WHERE run_id = $1`,
