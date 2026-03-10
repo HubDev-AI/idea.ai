@@ -2,9 +2,10 @@
 
 ## Scheduling
 
-- Hourly connectors: `HOURLY_CONNECTORS` (default `hn,github_issues`) on cron `0 * * * *`.
-- Daily connectors: `DAILY_CONNECTORS` (default `greenhouse,lever,yc_companies,exa_byo,perigon_byo`) on cron `0 0 * * *`.
-- BYO connectors are skipped unless API credentials are set.
+- Hourly connectors: `HOURLY_CONNECTORS` (default `hn,github_issues,showhn`), run every `DEFAULT_REFRESH_MS` (1 hour).
+- Daily connectors: `DAILY_CONNECTORS`, run every 24 hours.
+- Connectors execute in parallel with configurable concurrency (`CONNECTOR_CONCURRENCY`, default 5).
+- BYO connectors are skipped unless API credentials are set and monthly budget allows.
 
 ## Connector Configuration
 
@@ -12,194 +13,123 @@
 - `LEVER_SITE`: required if `lever` is enabled.
 - `EXA_API_KEY`: required for `exa_byo`.
 - `PERIGON_API_KEY`: required for `perigon_byo`.
+- `X_BEARER_TOKEN`: required for `twitter_byo`.
 
 If required connector config is missing, ingestion logs an error and skips that connector while continuing others.
+
+### BYO Budget Enforcement
+
+BYO connectors track spend per connector per month in the `byo_spend` database table:
+
+- `EXA_DAILY_BUDGET_USD`, `PERIGON_DAILY_BUDGET_USD`, `X_DAILY_BUDGET_USD`: monthly budget cap per connector.
+- Set budget to `0` to hard-disable paid BYO connector execution.
+- Spend is recorded after each successful connector call and checked before the next.
 
 ## Reliability Guardrails
 
 - Connector timeout: 15s.
 - Retry attempts: 2 with backoff.
-- Raw payload retention: 30 days.
 - Per-connector failure isolation: one source failure does not abort the full refresh.
 - Snapshot fallback: if a refresh fails after a previous success, API serves the last successful snapshot.
+- Graceful shutdown: `AbortController` cancels in-flight refreshes on SIGTERM — checks before ingestion, after connectors, and in the scoring loop.
+- Convergence boost: idempotent via `GREATEST` SQL — repeated boosts don't accumulate virality.
 
-## Persistent RAG Memory
+## Persistent Storage
 
-- Set `DATABASE_URL` to enable PostgreSQL-backed memory across executions.
+- Set `DATABASE_URL` to enable PostgreSQL-backed storage.
 - Required extension: `pgvector` (`CREATE EXTENSION IF NOT EXISTS vector;`).
 - Docker infra file: `docker-compose.infra.yml`.
-  - PostgreSQL (`pgvector`) host port: `5917` -> container `5432`
-  - Redis host port: `6391` -> container `6379`
-- Apply migrations:
-  - `apps/api/db/migrations/0001_init.sql`
-  - `apps/api/db/migrations/0002_memory.sql`
+  - PostgreSQL (`pgvector`) host port: `5917` → container `5432`
+  - Redis host port: `6391` → container `6379`
+- Apply migrations: `bash scripts/db-migrate.sh` (runs all `apps/api/db/migrations/*.sql` in order).
+- Current migrations: `0001_init.sql` through `0029_byo_spend.sql`.
 - Runtime behavior:
-  - each scored signal is upserted into `signal_memory` + `signal_embeddings`
-  - similarity retrieval uses vector cosine distance from persisted embeddings
-  - trend windows are computed from persisted history on each scoring pass
+  - Each scored signal is upserted into `scored_signals` + `signal_embeddings`.
+  - Similarity retrieval uses pgvector cosine distance.
+  - Trend windows are computed from persisted history on each scoring pass.
+  - Duplicate detection delegates to pgvector when available (JS fallback for non-DB mode).
+  - Cadence timestamps stored in `refresh_state` DB table.
 
 ## Execution Logs
 
 - `LOG_DIR` controls where JSONL execution logs are persisted (default `./logs/executions`).
 - Each refresh uses a run id and appends structured entries to `LOG_DIR/<run_id>.jsonl`.
 - Key fields: `run_id`, `level`, `component`, `message`, `context`.
-- `/v1/logs` defaults to current process session logs (`scope=session`) so stale/test history does not pollute the live UI.
-- Use `/v1/logs?scope=all` for full historical logs across past sessions.
+- `/v1/logs` defaults to current process session logs (`scope=session`).
+- Use `/v1/logs?scope=all` for full historical logs.
 - Optional: set `RUN_ID` to force a fixed id for a single debug session.
-- Example:
-
-```bash
-tail -f logs/executions/*.jsonl
-curl -s "http://127.0.0.1:3000/v1/logs?limit=100" | jq
-```
 
 Restart behavior:
 - API loads cadence timestamps from the `refresh_state` database table at startup, so daily connectors are not re-fetched unnecessarily after a restart.
 
-## AI Judge Runtime
+## AI Provider Runtime
 
-- `AI_PROVIDER`: `claude`, `codex`, or `both`.
-- `AI_PROVIDER_PRIMARY`: optional (`claude` or `codex`) to set provider order when `AI_PROVIDER=both`.
-- `AI_PROVIDER_MODE`: `single` (default) or `ensemble` (calls both providers per judged signal).
-- `AI_PROVIDER_FALLBACK`: set `true` to attempt the other provider if primary fails.
-- `AI_PROVIDER_RETRIES`: retry attempts per provider call after the initial attempt.
-- `AI_POST_SCRAPE_ENABLED`: enable AI batch analysis immediately after scraping.
-- `AI_POST_SCRAPE_MAX_SIGNALS`: max scraped signals per refresh in one AI batch call.
-- `AI_POST_SCRAPE_TIMEOUT_MS`: timeout per AI post-scrape batch call.
-- Recommended defaults: `AI_POST_SCRAPE_MAX_SIGNALS=6`, `AI_POST_SCRAPE_TIMEOUT_MS=120000`.
-- `AI_JUDGE_MAX_SIGNALS`: max signals per refresh that attempt per-signal CLI AI judging (recommended default `0`).
-- `AI_JUDGE_TIMEOUT_MS`: timeout per AI judge call (recommended default `120000`).
-- Key log entries:
-  - `ai post-scrape analysis succeeded`
-  - `ai post-scrape analysis parse failed`
-  - `signal skipped by ai post-scrape noise filter`
-  - `ai judge summary`
-  - `ai judge call failed for provider`
-  - `ai response parse failed for provider`
-  - `ai judge calls unavailable in ensemble mode, using fallback judge scores`
-- Health API:
-  - `GET /v1/ai-health` returns latest execution health for Claude/Codex (status, attempts, failures, retries, last error).
+See `docs/operations/provider-policy.md` for full provider configuration.
 
-## Cost Guardrails
+Key env vars:
 
-- Enforce `EXA_DAILY_BUDGET_USD` and `PERIGON_DAILY_BUDGET_USD`.
-- Set budget to `0` to hard-disable paid BYO connector execution.
+| Var | Default | Description |
+|-----|---------|-------------|
+| `AI_PROVIDER` | `claude` | Primary provider |
+| `AI_PROVIDER_FALLBACK` | `true` | Enable fallback to other provider |
+| `AI_PROVIDER_RETRIES` | `1` | Retries per provider per call |
+| `AI_POST_SCRAPE_ENABLED` | `true` | Enable AI batch analysis after scraping |
+| `AI_POST_SCRAPE_MAX_SIGNALS` | `80` | Max signals per AI batch |
+| `AI_POST_SCRAPE_TIMEOUT_MS` | `180000` | Timeout per AI call |
+| `AI_JUDGE_MAX_SIGNALS` | `0` | Per-signal AI judging (0 = disabled) |
+| `DEBATE_ENABLED` | `true` | Adversarial debate on top theses |
+| `CONNECTOR_CONCURRENCY` | `5` | Max parallel connector fetches |
 
-## Disable Switches
+Key log entries:
+- `ai post-scrape analysis succeeded`
+- `ai post-scrape call failed for provider`
+- `signal skipped by ai post-scrape noise filter`
 
-- Remove connector names from `HOURLY_CONNECTORS` / `DAILY_CONNECTORS`.
-- Unset `EXA_API_KEY` / `PERIGON_API_KEY` to disable BYO connectors.
+Health API: `GET /v1/ai-health` returns provider status, circuit breaker state, attempts, failures.
 
----
+## Ollama Setup
 
-## Ollama Setup (V2)
-
-Ollama provides local embedding generation via `nomic-embed-text`, removing the need for external embedding APIs.
-
-### Install & Start
+Ollama provides local embedding generation via `nomic-embed-text`.
 
 ```bash
-# macOS
 brew install ollama
-ollama serve          # starts the HTTP server on :11434
-
-# Pull the embedding model
+ollama serve
 ollama pull nomic-embed-text
 ```
 
-### Verify
+Verify: `curl -s http://localhost:11434/api/embeddings -d '{"model":"nomic-embed-text","prompt":"hello"}' | jq '.embedding | length'` → `768`
 
-```bash
-curl -s http://localhost:11434/api/embeddings \
-  -d '{"model":"nomic-embed-text","prompt":"hello"}' | jq '.embedding | length'
-# Expected: 768
-```
+| Var | Default | Description |
+|-----|---------|-------------|
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding model |
 
-### Environment Variables
+## Research Agent
 
-- `OLLAMA_BASE_URL`: base URL for the Ollama server (default `http://localhost:11434`).
-- `OLLAMA_EMBED_MODEL`: model name used for embedding generation (default `nomic-embed-text`).
+The research agent runs on a configurable interval (default 1 hour) and orchestrates: cluster analysis → thesis synthesis → deep dives → debate.
 
-If Ollama is unreachable at startup, the memory indexer logs a warning and skips embedding generation until the next cycle.
+| Var | Default | Description |
+|-----|---------|-------------|
+| `AGENT_INTERVAL_MS` | `3600000` | Interval between agent runs |
+| `AGENT_TIMEOUT_MS` | `180000` | Timeout per AI call in agent |
+| `AGENT_MAX_CLUSTERS` | `50` | Max signal clusters sent to AI |
 
-## Research Agent (V2)
+Profiles run in parallel via `Promise.allSettled` (consumer + B2B). Configure profiles in `apps/api/src/profiles/`.
 
-The research agent is a scheduled job that orchestrates the full V2 pipeline: ingest, score, embed, and synthesize theses.
-
-### Schedule
-
-- Controlled by `AGENT_SCHEDULE_CRON` (default `0 6 * * *` -- daily at 06:00 UTC).
-- Each run triggers: connector ingestion -> noise gate -> AI scoring -> memory indexing -> thesis synthesis.
-
-### Monitoring
-
-- Key log entries:
-  - `research agent cycle started`
-  - `research agent cycle completed`
-  - `research agent cycle failed`
-- The agent emits a structured summary at the end of each cycle with signal counts, thesis updates, and timing.
-- Health: check `GET /v1/ai-health` for provider status and `GET /v1/feed` for freshness.
-
-### Configuration
-
-- `AGENT_DUAL_ANALYST`: when `true`, enables dual-analyst mode (see below).
-- `NOISE_GATE_BATCH_SIZE`: number of signals processed per noise-gate batch (default `15`).
-
-## Thesis Lifecycle (V2)
-
-Theses represent synthesized investment or opportunity ideas derived from recurring signal patterns.
-
-### States
+## Thesis Lifecycle
 
 | State | Description |
 |-------|-------------|
-| `candidate` | Newly synthesized thesis that has not yet accumulated enough supporting evidence. |
-| `watching` | Thesis with moderate confidence; actively tracking for additional supporting or contradicting signals. |
-| `promoted` | High-confidence thesis that has crossed the promotion threshold and is surfaced in the feed. |
-| `stale` | Thesis that has not received new supporting signals within its freshness window. |
-| `rejected` | Thesis explicitly rejected by contradicting evidence or user dismissal. |
+| `candidate` | Newly synthesized, insufficient evidence |
+| `watching` | Moderate confidence, actively tracking |
+| `promoted` | High confidence, surfaced in feed |
+| `stale` | No new signals within freshness window |
+| `rejected` | Contradicted by evidence or user dismissal |
 
-### Confidence Thresholds
+Confidence thresholds: candidate→watching at 0.4, watching→promoted at 0.7, stale after 14 days.
 
-- `candidate` -> `watching`: confidence >= 0.4
-- `watching` -> `promoted`: confidence >= 0.7
-- Any state -> `stale`: no new supporting signal for 14 days
-- Any state -> `rejected`: contradicting evidence score > supporting score, or manual rejection
+## Connectors (20 active)
 
-### Storage
-
-- Theses are persisted in PostgreSQL (migration: `apps/api/db/migrations/0003_thesis.sql`).
-- Each thesis tracks: title, summary, confidence, state, supporting signal IDs, timestamps.
-
-## New Connectors (V2)
-
-### Reddit
-
-- Type: **open** (public API, no authentication required).
-- Subreddits configured via `REDDIT_SUBREDDITS` (comma-separated, default `SaaS,startups,smallbusiness,Entrepreneur`).
-- Polls the public `.json` endpoint for each subreddit on the hourly schedule.
-- Rate limits: respects Reddit's public API rate limit (no token needed).
-
-### ProductHunt
-
-- Type: **BYO** (requires API token).
-- Set `PH_API_TOKEN` to enable.
-- Queries the ProductHunt GraphQL API for new product launches.
-- Skipped automatically if `PH_API_TOKEN` is unset (same behavior as other BYO connectors).
-
-## Dual-Analyst Mode (V2)
-
-When `AGENT_DUAL_ANALYST=true`, the scoring step sends each signal to **both** Claude and Codex for independent analysis.
-
-### Behavior
-
-- Each provider returns an independent score and rationale.
-- **Agreement**: when both providers score within 0.15 of each other, the average score is used and confidence is boosted.
-- **Disagreement**: when scores diverge by more than 0.15, both rationales are preserved and the signal is flagged for review. The lower score is used as a conservative default.
-- Dual-analyst results are visible in the signal detail view and in execution logs.
-
-### When to Use
-
-- Recommended for production deployments where scoring accuracy matters.
-- Increases API cost (two calls per signal) but significantly reduces false positives.
-- Disable by setting `AGENT_DUAL_ANALYST=false` or `AI_PROVIDER` to a single provider.
+- **Hourly**: hn, github_issues, showhn
+- **Daily**: greenhouse, lever, reddit, yc_companies, producthunt, appstore_trending, indiehackers, lobsters, devto, mastodon, homebrew, google_trends, stackoverflow, g2_reviews, npm_trends, semantic_scholar
+- **BYO** (need API keys): exa, perigon, twitter, crunchbase
