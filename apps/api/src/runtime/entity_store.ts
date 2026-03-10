@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { toVectorLiteral } from './db_utils';
 
 export type EntityType = 'pain_point' | 'technology' | 'market' | 'competitor' | 'trend';
 export type RelationType = 'causes' | 'enables' | 'competes_with' | 'addresses' | 'depends_on' | 'part_of';
@@ -34,7 +35,7 @@ export type EntityStore = {
 
 export const createEntityStore = (deps: { pool: Pool }): EntityStore => ({
   async upsertEntity(input) {
-    const embVal = input.embedding ? `[${input.embedding.join(',')}]` : null;
+    const embVal = input.embedding ? toVectorLiteral(input.embedding) : null;
     const { rows } = await deps.pool.query<{ id: number }>(
       `INSERT INTO entities (entity_type, name, description, embedding)
        VALUES ($1, $2, $3, $4::vector)

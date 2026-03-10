@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { toVectorLiteral } from './db_utils';
 
 export type ExperienceEntry = {
   id?: number;
@@ -23,7 +24,7 @@ export type ExperienceStore = {
 export const createExperienceStore = (deps: { pool: Pool }): ExperienceStore => ({
   async insert(entry) {
     const embeddingVal = entry.embedding
-      ? `[${entry.embedding.join(',')}]`
+      ? toVectorLiteral(entry.embedding)
       : null;
 
     await deps.pool.query(
@@ -74,7 +75,7 @@ export const createExperienceStore = (deps: { pool: Pool }): ExperienceStore => 
   },
 
   async findSimilar(embedding, limit) {
-    const embStr = `[${embedding.join(',')}]`;
+    const embStr = toVectorLiteral(embedding);
     const { rows } = await deps.pool.query<ExperienceEntry>(
       `SELECT id, thesis_key, signal_summary, reasoning_trajectory, thesis_output,
               outcome_validated, confidence_at_creation, confidence_at_validation
