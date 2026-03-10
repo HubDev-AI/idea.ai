@@ -434,6 +434,12 @@ const stateHub = new StateHub(io, {
   logPollMs: startupEnv.wsLogPollMs,
 }, apiKey);
 
+// Push refresh state (including refreshingCadence=null) to WebSocket clients
+// after any background refresh completes (e.g. fire-and-forget from ensureFresh)
+readModel.setOnRefreshComplete(() => {
+  stateHub.pushRefreshMeta();
+});
+
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;

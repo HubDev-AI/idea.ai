@@ -405,6 +405,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   const initialAiJudgeSettings = resolveAiJudgeSettings(process.env);
   const initialAiPostScrapeSettings = resolveAiPostScrapeSettings(process.env);
   const circuit = opts?.circuit;
+  let onRefreshComplete: (() => void) | null = null;
   const memoryEntries: IndexedMemoryEntry[] = [];
   let postgresSignalStore: PostgresSignalStore | null | undefined = opts?.persistentStore ?? undefined;
   let snapshotHydrated = false;
@@ -1050,6 +1051,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     if (!refreshInFlight) {
       refreshInFlight = refresh(cadence).finally(() => {
         refreshInFlight = null;
+        onRefreshComplete?.();
       });
     }
 
@@ -1123,6 +1125,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
         return rows.filter((row) => sessionRunIds.has(row.run_id)).slice(0, query.limit);
       })()),
     registerRunId: (runId: string) => { sessionRunIds.add(runId); },
+    setOnRefreshComplete: (cb: () => void) => { onRefreshComplete = cb; },
     startRefresh,
     /**
      * Hydrate refresh timestamps from DB without running a full refresh.
