@@ -25,7 +25,21 @@ export const registerThesesRoute = (
   const deps: ThesesRouteDeps =
     'store' in storeOrDeps ? storeOrDeps : { store: storeOrDeps };
 
-  app.get('/v1/theses', async (request) => {
+  app.get('/v1/theses', {
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          page: { type: 'string', pattern: '^[0-9]+$' },
+          page_size: { type: 'string', pattern: '^[0-9]+$' },
+          status: { type: 'string', enum: ['promoted', 'watching', 'demoted', 'new'] },
+          sort: { type: 'string', enum: ['score', 'latest', 'evidence', 'newest'] },
+          profile: { type: 'string' },
+          label: { type: 'string', enum: ['favourite', 'later', 'dismissed'] }
+        }
+      }
+    }
+  }, async (request) => {
     const query = request.query as { page?: string; page_size?: string; status?: string; sort?: string; profile?: string; label?: string };
     const validSorts = ['score', 'latest', 'evidence', 'newest'] as const;
     const sort = validSorts.includes(query.sort as typeof validSorts[number])
