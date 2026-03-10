@@ -171,6 +171,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
          profile_id = EXCLUDED.profile_id,
          velocity = COALESCE(EXCLUDED.velocity, thesis_candidates.velocity),
          corroboration_score = COALESCE(EXCLUDED.corroboration_score, thesis_candidates.corroboration_score),
+         posterior_confidence = EXCLUDED.confidence,
          last_seen_at = NOW(),
          updated_at = NOW()
        RETURNING id`,
