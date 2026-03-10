@@ -283,7 +283,7 @@ export type PostgresSignalStore = {
   getEmbeddings: (signalIds: string[]) => Promise<Map<string, number[]>>;
   getEmbeddingStats: () => Promise<EmbeddingStats>;
   findConvergentSignals: (signalId: string, embedding: number[], source: string) => Promise<ConvergentMatch[]>;
-  boostViralityScore: (signalId: string, boost: number) => Promise<void>;
+  boostViralityScore: (signalId: string, targetVirality: number, weights?: { demand: number; timing: number; buildability: number; virality: number }) => Promise<void>;
   listSignalsWithoutEmbeddings: (limit: number) => Promise<{ signal_id: string; canonical_text: string }[]>;
   saveEmbedding: (signalId: string, embedding: number[], model: string) => Promise<void>;
   loadRefreshState: () => Promise<RefreshState>;
@@ -573,14 +573,19 @@ export const createPostgresSignalStore = ({
     }));
   };
 
-  const boostViralityScore = async (signalId: string, boost: number): Promise<void> => {
+  const boostViralityScore = async (
+    signalId: string,
+    targetVirality: number,
+    weights?: { demand: number; timing: number; buildability: number; virality: number }
+  ): Promise<void> => {
+    const w = weights ?? { demand: 0.25, timing: 0.20, buildability: 0.20, virality: 0.35 };
     await pool.query(
       `UPDATE scored_signals
-       SET virality = LEAST(100, COALESCE(virality, 0) + $2),
-           blended = ROUND((0.25 * COALESCE(demand, 0) + 0.20 * COALESCE(timing, 0) + 0.20 * COALESCE(buildability, 0) + 0.35 * LEAST(100, COALESCE(virality, 0) + $2))::numeric, 2),
+       SET virality = GREATEST(COALESCE(virality, 0), LEAST(100, $2)),
+           blended = ROUND(($3 * COALESCE(demand, 0) + $4 * COALESCE(timing, 0) + $5 * COALESCE(buildability, 0) + $6 * GREATEST(COALESCE(virality, 0), LEAST(100, $2)))::numeric, 2),
            updated_at = NOW()
        WHERE signal_id = $1`,
-      [signalId, boost]
+      [signalId, targetVirality, w.demand, w.timing, w.buildability, w.virality]
     );
   };
 

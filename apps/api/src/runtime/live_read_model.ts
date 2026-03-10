@@ -851,9 +851,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
                 );
                 if (convergent.length > 0) {
                   const convergenceBoost = Math.min(25, 15 + convergent.length * 5);
-                  // Boost the current signal
-                  await persistentStore.boostViralityScore(indexedEntry.memoryRecord.signal_id, convergenceBoost);
-                  // Boost the matched signals too
+                  // Compute target virality for current signal (organic + boost)
+                  const currentSignalTarget = (score.virality ?? 0) + convergenceBoost;
+                  await persistentStore.boostViralityScore(indexedEntry.memoryRecord.signal_id, currentSignalTarget);
+                  // For matched signals, use boost as a floor — GREATEST ensures no lowering
                   for (const match of convergent) {
                     await persistentStore.boostViralityScore(match.signal_id, convergenceBoost);
                   }
