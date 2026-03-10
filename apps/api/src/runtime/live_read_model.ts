@@ -412,6 +412,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   const memoryEntries: IndexedMemoryEntry[] = [];
   let postgresSignalStore: PostgresSignalStore | null | undefined = opts?.persistentStore ?? undefined;
   let snapshotHydrated = false;
+  let hydrationPromise: Promise<void> | null = null;
   let refreshInFlight: Promise<Snapshot> | null = null;
   let refreshingCadence: 'hourly' | 'daily' | null = null;
   const sessionRunIds = new Set<string>();
@@ -438,28 +439,34 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       return;
     }
 
-    snapshotHydrated = true;
+    // Share a single promise across concurrent callers so they all wait for the
+    // same DB load rather than racing past the snapshotHydrated flag.
+    if (!hydrationPromise) {
+      hydrationPromise = (async () => {
+        const store = await resolvePostgresSignalStore(env, logger);
+        if (!store) return;
 
-    const store = await resolvePostgresSignalStore(env, logger);
-    if (!store) {
-      return;
+        try {
+          const state = await store.loadRefreshState();
+          snapshot.lastHourlyRunAt = state.lastHourlyRunAt;
+          snapshot.lastDailyRunAt = state.lastDailyRunAt;
+          snapshot.refreshedAt = state.refreshedAt;
+          await logger.info('live_read_model', 'loaded refresh state from database', {
+            refreshed_at: state.refreshedAt > 0 ? new Date(state.refreshedAt).toISOString() : null,
+            last_hourly: state.lastHourlyRunAt > 0 ? new Date(state.lastHourlyRunAt).toISOString() : null,
+            last_daily: state.lastDailyRunAt > 0 ? new Date(state.lastDailyRunAt).toISOString() : null,
+          });
+        } catch (error) {
+          await logger.warn('live_read_model', 'failed to load refresh state from database', {
+            error: toErrorMessage(error)
+          });
+        } finally {
+          snapshotHydrated = true;
+        }
+      })();
     }
 
-    try {
-      const state = await store.loadRefreshState();
-      snapshot.lastHourlyRunAt = state.lastHourlyRunAt;
-      snapshot.lastDailyRunAt = state.lastDailyRunAt;
-      snapshot.refreshedAt = state.refreshedAt;
-      await logger.info('live_read_model', 'loaded refresh state from database', {
-        refreshed_at: state.refreshedAt > 0 ? new Date(state.refreshedAt).toISOString() : null,
-        last_hourly: state.lastHourlyRunAt > 0 ? new Date(state.lastHourlyRunAt).toISOString() : null,
-        last_daily: state.lastDailyRunAt > 0 ? new Date(state.lastDailyRunAt).toISOString() : null,
-      });
-    } catch (error) {
-      await logger.warn('live_read_model', 'failed to load refresh state from database', {
-        error: toErrorMessage(error)
-      });
-    }
+    await hydrationPromise;
   };
 
   const persistRefreshState = async (
