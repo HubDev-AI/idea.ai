@@ -549,16 +549,13 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     try {
       const refreshStartedAt = Date.now();
 
-      const skipHourly = forceCadence === 'daily';
       const emptyIngestion = { events: [] as RawEventInput[], statuses: [] as OpenConnectorIngestionResult['statuses'] } as OpenConnectorIngestionResult;
 
       const [hourly, daily, byo] = await Promise.all([
-        skipHourly
-          ? Promise.resolve(emptyIngestion)
-          : runOpenConnectorIngestionDetailed('hourly', {
-              enabledConnectors: enabledOpenConnectors('hourly', env),
-              logger
-            }),
+        runOpenConnectorIngestionDetailed('hourly', {
+          enabledConnectors: enabledOpenConnectors('hourly', env),
+          logger
+        }),
         dailyDue
           ? runOpenConnectorIngestionDetailed('daily', {
               enabledConnectors: enabledOpenConnectors('daily', env),
