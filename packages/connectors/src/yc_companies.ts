@@ -123,7 +123,7 @@ export const fetchYcCompanyEvents = async (
   limit = OPEN_CONNECTOR_LIMITS.yc_companies
 ): Promise<RawEventInput[]> => {
   const config = await withRetry(() => loadConfig());
-  const hits = await withRetry(() => loadHits(config, limit));
+  const hits = await loadHits(config, limit);
 
   return hits.slice(0, limit).map((hit, index) => ({
     source: 'yc_companies',

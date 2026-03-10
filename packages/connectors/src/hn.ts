@@ -1,4 +1,4 @@
-import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput, withRetry } from './common/http';
+import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput } from './common/http';
 
 type HnItem = {
   objectID: string;
@@ -23,7 +23,7 @@ export const fetchHnEvents = async (
   loadItems: HnLoader = defaultHnLoader,
   limit = OPEN_CONNECTOR_LIMITS.hn
 ): Promise<RawEventInput[]> => {
-  const items = await withRetry(() => loadItems(limit));
+  const items = await loadItems(limit);
 
   return items
     .slice(0, limit)

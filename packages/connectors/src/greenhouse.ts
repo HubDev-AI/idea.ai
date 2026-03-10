@@ -1,4 +1,4 @@
-import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput, withRetry } from './common/http';
+import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput } from './common/http';
 
 type GreenhouseJob = {
   id: number;
@@ -31,7 +31,7 @@ export const fetchGreenhouseJobEvents = async (
     throw new Error('GREENHOUSE_BOARD_TOKEN is required for greenhouse connector');
   }
 
-  const response = await withRetry(() => loader(limit));
+  const response = await loader(limit);
 
   return response.jobs.slice(0, limit).map((job) => ({
     source: 'greenhouse',

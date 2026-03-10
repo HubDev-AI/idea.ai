@@ -1,4 +1,4 @@
-import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput, withRetry } from './common/http';
+import { fetchJsonWithRetry, OPEN_CONNECTOR_LIMITS, type RawEventInput } from './common/http';
 
 type LeverJob = {
   id: string;
@@ -27,7 +27,7 @@ export const fetchLeverJobEvents = async (
     throw new Error('LEVER_SITE is required for lever connector');
   }
 
-  const jobs = await withRetry(() => loader(limit));
+  const jobs = await loader(limit);
 
   return jobs.slice(0, limit).map((job) => ({
     source: 'lever',
