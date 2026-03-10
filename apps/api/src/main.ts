@@ -166,6 +166,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         timeoutMs: agentEnv.agentTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
         pool: pool ?? undefined,
+        debateEnabled: agentEnv.debateEnabled,
         debateConfidenceThreshold: agentEnv.debateConfidenceThreshold,
         debateMaxPerRun: agentEnv.debateMaxPerRun,
         cusumThreshold: agentEnv.cusumThreshold,
