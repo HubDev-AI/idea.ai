@@ -1,7 +1,7 @@
 import type { Provider, RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { ProviderCircuitBreaker } from '../runtime/provider_circuit';
-import { clampConfidence, clampScore, otherProvider, parseJsonObject, resolvePreferredProvider, runProvider, toPositiveInt } from './ai_helpers';
+import { clampConfidence, clampScore, otherProvider, parseJsonObject, resolveFallbackProvider, resolvePreferredProvider, runProvider, toPositiveInt } from './ai_helpers';
 
 export type AiPostScrapeSettings = {
   enabled: boolean;
@@ -150,10 +150,10 @@ export const resolveAiPostScrapeSettings = (env: NodeJS.ProcessEnv = process.env
   return {
     enabled: env.AI_POST_SCRAPE_ENABLED !== 'false',
     preferredProvider: resolvePreferredProvider(env),
-    allowFallback: env.AI_PROVIDER_FALLBACK === 'true',
+    allowFallback: resolveFallbackProvider(env) !== null,
     maxSignals: toPositiveInt(env.AI_POST_SCRAPE_MAX_SIGNALS, isTest ? 0 : DEFAULT_MAX_SIGNALS),
-    timeoutMs: toPositiveInt(env.AI_POST_SCRAPE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
-    retries: toPositiveInt(env.AI_PROVIDER_RETRIES, 1)
+    timeoutMs: toPositiveInt(env.AI_TIMEOUT_MS ?? env.AI_POST_SCRAPE_TIMEOUT_MS, DEFAULT_TIMEOUT_MS),
+    retries: toPositiveInt(env.AI_RETRIES ?? env.AI_PROVIDER_RETRIES, 1)
   };
 };
 

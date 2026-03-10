@@ -13,7 +13,7 @@ import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { extractEntities } from './jobs/entity_extractor';
 import { snapshotPredictions } from './jobs/backtest_snapshot';
 import { validatePredictions } from './jobs/backtest_validate';
-import { resolveAiJudgeSettings } from './jobs/ai_judges';
+
 import { runWeightOptimization } from './jobs/weight_optimizer_job';
 import { loadProfiles } from './profiles/index.js';
 import { type AgentRunStore, createAgentRunStore } from './runtime/agent_run_store';
@@ -151,7 +151,6 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         count: profiles.length
       });
 
-      const aiSettings = resolveAiJudgeSettings(process.env);
       const baseDeps = {
         thesisStore,
         signalStore,
@@ -161,9 +160,9 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         runCodex: runCodexPrompt,
         logger,
         runId,
-        preferredProvider: aiSettings.preferredProvider,
-        allowFallback: aiSettings.allowFallback,
-        timeoutMs: agentEnv.agentTimeoutMs,
+        preferredProvider: agentEnv.aiPrimary,
+        allowFallback: agentEnv.aiFallback !== 'none',
+        timeoutMs: agentEnv.aiTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
         pool: pool ?? undefined,
         debateEnabled: agentEnv.debateEnabled,
@@ -298,12 +297,12 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   signalStore,
   deepDiveStore: pool ? createDeepDiveStore({ pool }) : null,
   deepDiveAi: (() => {
-    const s = resolveAiJudgeSettings(process.env);
+    const env = loadRuntimeEnv(process.env);
     return {
       runClaude: runClaudePrompt,
       runCodex: runCodexPrompt,
-      preferredProvider: s.preferredProvider,
-      allowFallback: s.allowFallback
+      preferredProvider: env.aiPrimary,
+      allowFallback: env.aiFallback !== 'none'
     };
   })(),
   logger: createExecutionLogger({ runId: 'api-services' }),

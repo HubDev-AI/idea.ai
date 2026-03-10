@@ -159,7 +159,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         (canonical_key, title, topic, status, confidence, problem_statement,
          target_buyer, proposed_solution, estimated_scope, profile_id, velocity, corroboration_score,
          prior_confidence, posterior_confidence, first_seen_at, last_seen_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $5::real, $5::real, NOW(), NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
        ON CONFLICT (canonical_key) DO UPDATE SET
          title = EXCLUDED.title,
          status = EXCLUDED.status,
@@ -181,7 +181,9 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         draft.estimatedScope ?? null,
         draft.profileId ?? 'consumer',
         draft.velocity ?? null,
-        draft.corroborationScore ?? null
+        draft.corroborationScore ?? null,
+        draft.confidence,
+        draft.confidence
       ]
     );
 
