@@ -40,6 +40,7 @@ export const fetchReddit = async (options: {
   const subreddits = options.subreddits ?? DEFAULT_SUBREDDITS;
   const limit = options.limit ?? 25;
   const results: RawEventInput[] = [];
+  let failedCount = 0;
 
   for (const sub of subreddits) {
     try {
@@ -61,9 +62,15 @@ export const fetchReddit = async (options: {
           url: `https://www.reddit.com${permalink}`
         });
       }
-    } catch {
-      // Skip failed subreddit, don't crash entire connector
+    } catch (error) {
+      failedCount++;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[reddit] failed to fetch r/${sub}: ${message}`);
     }
+  }
+
+  if (failedCount > 0 && results.length === 0) {
+    console.warn(`[reddit] all ${failedCount} subreddits failed, returning empty`);
   }
 
   return results;
