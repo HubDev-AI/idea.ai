@@ -22,7 +22,12 @@ export const buildTrendWindows = (
 
     for (const record of scoped) {
       const key = `${record.topic}::${record.source}`;
-      grouped.set(key, [...(grouped.get(key) ?? []), record]);
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.push(record);
+      } else {
+        grouped.set(key, [record]);
+      }
     }
 
     return Array.from(grouped.entries()).map(([key, records]) => {
