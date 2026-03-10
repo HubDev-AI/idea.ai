@@ -583,7 +583,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           observed_at: new Date().toISOString()
         }));
 
-        const key = `${profile.id}:${proposal.title.toLowerCase().replace(/\s+/g, '_').slice(0, 40)}`;
+        const key = `${profile.id}:${proposal.title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 40)}`;
         await deps.thesisStore.upsert({
           canonicalKey: key,
           title: proposal.title,
