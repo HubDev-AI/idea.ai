@@ -225,9 +225,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const role = aiHealth?.provider_setting === 'both'
             ? (p.provider === aiHealth.primary_provider ? 'primary' : 'fallback')
             : null;
+          const isActive = agentRunning || p.attempted > 0;
+          const effectiveStatus = (p.status === 'idle' && isActive) ? 'active' : p.status;
           return (
             <div key={p.provider} className="sidebar-row">
-              <span className={`status-dot ${dotClass(p.status, { enabled: p.enabled })}`} />
+              <span className={`status-dot ${dotClass(effectiveStatus, { enabled: p.enabled })}`} />
               <span className="sidebar-row-name">
                 {providerDisplayName[p.provider] ?? p.provider}
                 {role && <span className={`sidebar-role-tag ${role}`}>{role}</span>}
@@ -236,6 +238,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="sidebar-row-detail detail-error">circuit open</span>
               ) : p.circuit_state === 'half-open' ? (
                 <span className="sidebar-row-detail detail-standby">probing</span>
+              ) : agentRunning && p.attempted === 0 ? (
+                <span className="sidebar-row-detail detail-ok">running</span>
               ) : p.status === 'idle' && p.attempted === 0 ? (
                 <span className="sidebar-row-detail detail-standby">standby</span>
               ) : (

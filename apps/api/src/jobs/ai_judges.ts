@@ -1,7 +1,7 @@
 import type { Provider, RunPromptInput, RunPromptResult } from '@idea/ai-runtime/src/types';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 import type { ProviderCircuitBreaker } from '../runtime/provider_circuit';
-import { clampScore, otherProvider, parseJsonObject, resolvePreferredProvider, runProvider, toPositiveInt } from './ai_helpers';
+import { clampScore, otherProvider, parseJsonObject, resolveFallbackProvider, resolvePreferredProvider, runProvider, toPositiveInt } from './ai_helpers';
 
 const defaultJudgeScores: [number, number, number] = [62, 66, 60];
 const opportunityKeywords = [
@@ -90,9 +90,9 @@ export type AiJudgeAttempt = {
 };
 
 export const resolveAiJudgeSettings = (env: NodeJS.ProcessEnv = process.env): AiJudgeSettings => {
-  const providerRaw = env.AI_PROVIDER?.toLowerCase();
+  const fallback = resolveFallbackProvider(env);
   const modeRaw = env.AI_PROVIDER_MODE?.toLowerCase();
-  const mode = providerRaw === 'both' && modeRaw === 'ensemble' ? 'ensemble' : 'single';
+  const mode = fallback !== null && modeRaw === 'ensemble' ? 'ensemble' : 'single';
   const isTest = env.NODE_ENV === 'test' || env.VITEST === 'true';
   const defaultMaxSignals = isTest ? 0 : 50;
 
@@ -100,9 +100,9 @@ export const resolveAiJudgeSettings = (env: NodeJS.ProcessEnv = process.env): Ai
     preferredProvider: resolvePreferredProvider(env),
     mode,
     maxSignals: toPositiveInt(env.AI_JUDGE_MAX_SIGNALS, defaultMaxSignals),
-    timeoutMs: toPositiveInt(env.AI_JUDGE_TIMEOUT_MS, 180_000),
-    allowFallback: env.AI_PROVIDER_FALLBACK === 'true',
-    retries: toPositiveInt(env.AI_PROVIDER_RETRIES, 1)
+    timeoutMs: toPositiveInt(env.AI_TIMEOUT_MS ?? env.AI_JUDGE_TIMEOUT_MS, 180_000),
+    allowFallback: fallback !== null,
+    retries: toPositiveInt(env.AI_RETRIES ?? env.AI_PROVIDER_RETRIES, 1)
   };
 };
 

@@ -45,11 +45,19 @@ export const parseJsonObject = (text: string): unknown => {
 export const otherProvider = (provider: Provider): Provider => (provider === 'codex' ? 'claude' : 'codex');
 
 export const resolvePreferredProvider = (env: NodeJS.ProcessEnv): Provider => {
-  const raw = env.AI_PROVIDER?.toLowerCase();
-  if (raw === 'both') {
-    return env.AI_PROVIDER_PRIMARY?.toLowerCase() === 'codex' ? 'codex' : 'claude';
-  }
+  const raw = (env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase();
   return raw === 'codex' ? 'codex' : 'claude';
+};
+
+export const resolveFallbackProvider = (env: NodeJS.ProcessEnv): Provider | null => {
+  const raw = (env.AI_FALLBACK ?? '').toLowerCase();
+  if (raw === 'claude' || raw === 'codex') return raw;
+  if (raw === 'none' || raw === 'false') return null;
+  // Legacy: AI_PROVIDER_FALLBACK=true → infer
+  if (env.AI_PROVIDER_FALLBACK === 'true') {
+    return otherProvider(resolvePreferredProvider(env));
+  }
+  return null;
 };
 
 export const runProvider = async (

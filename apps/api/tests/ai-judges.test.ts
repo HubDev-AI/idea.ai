@@ -88,8 +88,8 @@ describe('ai judges', () => {
 
   it('keeps single mode unless ensemble is explicitly enabled', () => {
     const settings = resolveAiJudgeSettings({
-      AI_PROVIDER: 'both',
-      AI_PROVIDER_PRIMARY: 'codex',
+      AI_PRIMARY: 'codex',
+      AI_FALLBACK: 'claude',
       AI_JUDGE_MAX_SIGNALS: '3'
     });
 
@@ -100,9 +100,9 @@ describe('ai judges', () => {
 
   it('enables ensemble mode when AI_PROVIDER_MODE=ensemble', () => {
     const settings = resolveAiJudgeSettings({
-      AI_PROVIDER: 'both',
+      AI_PRIMARY: 'codex',
+      AI_FALLBACK: 'claude',
       AI_PROVIDER_MODE: 'ensemble',
-      AI_PROVIDER_PRIMARY: 'codex',
       AI_JUDGE_MAX_SIGNALS: '3'
     });
 

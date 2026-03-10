@@ -26,7 +26,6 @@ export type RuntimeEnv = {
   agentScheduleCron: string;
   agentDualAnalyst: boolean;
   agentIntervalMs: number;
-  agentTimeoutMs: number;
   agentMaxClusters: number;
   shutdownTimeoutMs: number;
   wsInfraPollMs: number;
@@ -57,10 +56,10 @@ export type RuntimeEnv = {
   weightOptMinImprovement: number;
   weightOptGridStep: number;
   entityExtractBatchSize: number;
-  aiProvider: 'claude' | 'codex' | 'both';
-  aiProviderPrimary: 'claude' | 'codex';
-  aiProviderFallback: boolean;
-  aiProviderRetries: number;
+  aiPrimary: 'claude' | 'codex';
+  aiFallback: 'claude' | 'codex' | 'none';
+  aiRetries: number;
+  aiTimeoutMs: number;
   connectorConcurrency: number;
 };
 
@@ -85,7 +84,6 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     agentScheduleCron: env.AGENT_SCHEDULE_CRON ?? '0 */4 * * *',
     agentDualAnalyst: env.AGENT_DUAL_ANALYST === 'true',
     agentIntervalMs: parseNumber(env.AGENT_INTERVAL_MS, 60 * 60 * 1000),
-    agentTimeoutMs: parseNumber(env.AGENT_TIMEOUT_MS, 180_000),
     agentMaxClusters: parseNumber(env.AGENT_MAX_CLUSTERS, 50),
     shutdownTimeoutMs: parseNumber(env.SHUTDOWN_TIMEOUT_MS, 15_000),
     wsInfraPollMs: parseNumber(env.WS_INFRA_POLL_MS, 10_000),
@@ -116,10 +114,19 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     weightOptMinImprovement: parseNumber(env.WEIGHT_OPT_MIN_IMPROVEMENT, 0.05),
     weightOptGridStep: parseNumber(env.WEIGHT_OPT_GRID_STEP, 0.05),
     entityExtractBatchSize: parseNumber(env.ENTITY_EXTRACT_BATCH_SIZE, 10),
-    aiProvider: (env.AI_PROVIDER?.toLowerCase() === 'codex' ? 'codex' : env.AI_PROVIDER?.toLowerCase() === 'both' ? 'both' : 'claude') as RuntimeEnv['aiProvider'],
-    aiProviderPrimary: env.AI_PROVIDER_PRIMARY?.toLowerCase() === 'codex' ? 'codex' : 'claude',
-    aiProviderFallback: env.AI_PROVIDER_FALLBACK === 'true',
-    aiProviderRetries: parseNumber(env.AI_PROVIDER_RETRIES, 1),
+    aiPrimary: (env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase() === 'codex' ? 'codex' : 'claude',
+    aiFallback: (() => {
+      const raw = (env.AI_FALLBACK ?? '').toLowerCase();
+      if (raw === 'claude' || raw === 'codex') return raw;
+      if (raw === 'none' || raw === 'false') return 'none' as const;
+      // Legacy: AI_PROVIDER_FALLBACK=true → infer fallback as the other provider
+      if (env.AI_PROVIDER_FALLBACK === 'true') {
+        return ((env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase() === 'codex' ? 'claude' : 'codex') as const;
+      }
+      return 'none' as const;
+    })(),
+    aiRetries: parseNumber(env.AI_RETRIES ?? env.AI_PROVIDER_RETRIES, 1),
+    aiTimeoutMs: parseNumber(env.AI_TIMEOUT_MS, 300_000),
     connectorConcurrency: parseNumber(env.CONNECTOR_CONCURRENCY, 5),
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
