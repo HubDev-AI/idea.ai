@@ -77,6 +77,7 @@ export const readExecutionLogs = async ({
       .slice(0, limit);
   }
 
+  // Cap to 50 most-recent log files to avoid loading unbounded history into memory (P1-6)
   const MAX_LOG_FILES = 50;
   const recentFiles = jsonlFiles.sort().slice(-MAX_LOG_FILES);
 
