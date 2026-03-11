@@ -12,6 +12,16 @@ export type DualResult<T> = {
   codex: T | null;
 };
 
+export class NoUsableProviderResponseError extends Error {
+  readonly failures: Array<{ provider: 'claude' | 'codex'; error: string }>;
+
+  constructor(failures: Array<{ provider: 'claude' | 'codex'; error: string }>) {
+    super(`No AI provider returned a usable response: ${failures.map((f) => `${f.provider}: ${f.error}`).join('; ')}`);
+    this.name = 'NoUsableProviderResponseError';
+    this.failures = failures;
+  }
+}
+
 const DISAGREEMENT_THRESHOLD = 25;
 
 const avg = (a: number, b: number) => Math.round((a + b) / 2);
@@ -62,9 +72,11 @@ export const dualAnalystRun = async <T>(
   const log = deps.logger;
   const preferred = deps.preferred ?? 'claude';
   const allowFallback = deps.allowFallback ?? true;
+  const strategy = allowFallback ? 'primary_with_fallback' : 'single_provider';
 
   let claude: T | null = null;
   let codex: T | null = null;
+  const failures: Array<{ provider: 'claude' | 'codex'; error: string }> = [];
 
   const runPrimary = preferred === 'claude' ? deps.runClaude : deps.runCodex;
   const runFallback = preferred === 'claude' ? deps.runCodex : deps.runClaude;
@@ -76,11 +88,15 @@ export const dualAnalystRun = async <T>(
     const result = await runPrimary(input);
     const parsed = deps.parseResponse(result.text);
     if (preferred === 'claude') claude = parsed; else codex = parsed;
-    await log?.info('dual_analyst', `${primaryLabel} succeeded`, { parsed: true });
+    await log?.info('ai_provider', `${primaryLabel} succeeded`, { parsed: true, strategy, preferred });
     return { claude, codex };
   } catch (err) {
-    await log?.warn('dual_analyst', `${primaryLabel} failed`, {
-      error: err instanceof Error ? err.message : 'unknown'
+    const error = err instanceof Error ? err.message : 'unknown';
+    failures.push({ provider: primaryLabel, error });
+    await log?.warn('ai_provider', `${primaryLabel} failed`, {
+      error,
+      strategy,
+      preferred,
     });
   }
 
@@ -90,26 +106,44 @@ export const dualAnalystRun = async <T>(
       const result = await runFallback(input);
       const parsed = deps.parseResponse(result.text);
       if (fallbackLabel === 'claude') claude = parsed; else codex = parsed;
-      await log?.info('dual_analyst', `${fallbackLabel} succeeded`, { parsed: true });
+      await log?.info('ai_provider', `${fallbackLabel} succeeded`, { parsed: true, strategy, preferred });
       return { claude, codex };
     } catch (err) {
-      await log?.warn('dual_analyst', `${fallbackLabel} failed`, {
-        error: err instanceof Error ? err.message : 'unknown'
+      const error = err instanceof Error ? err.message : 'unknown';
+      failures.push({ provider: fallbackLabel, error });
+      await log?.warn('ai_provider', `${fallbackLabel} failed`, {
+        error,
+        strategy,
+        preferred,
       });
     }
   }
 
   // Retry primary if it failed (and fallback was skipped or also failed)
   if (claude === null && codex === null) {
-    await log?.info('dual_analyst', `retrying ${primaryLabel}`);
+    await log?.info('ai_provider', `retrying ${primaryLabel}`, { strategy, preferred });
     try {
       const retry = await runPrimary(input);
       try {
         const parsed = deps.parseResponse(retry.text);
         if (preferred === 'claude') claude = parsed; else codex = parsed;
-      } catch { /* parse failed */ }
-      await log?.info('dual_analyst', `${primaryLabel} retry result`, { parsed: claude !== null || codex !== null });
-    } catch { /* exhausted */ }
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'unknown';
+        failures.push({ provider: primaryLabel, error });
+      }
+      await log?.info('ai_provider', `${primaryLabel} retry result`, {
+        parsed: claude !== null || codex !== null,
+        strategy,
+        preferred,
+      });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'unknown';
+      failures.push({ provider: primaryLabel, error });
+    }
+  }
+
+  if (claude === null && codex === null) {
+    throw new NoUsableProviderResponseError(failures);
   }
 
   return { claude, codex };

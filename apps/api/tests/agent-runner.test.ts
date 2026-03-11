@@ -39,17 +39,13 @@ describe('agent runner', () => {
     expect(updated?.status).toBe('promoted');
   });
 
-  it('returns empty result when both providers fail', async () => {
+  it('throws when no provider returns a usable broad scan', async () => {
     const store = new InMemoryThesisStore();
-    const result = await runResearchAgent({
+    await expect(runResearchAgent({
       thesisStore: store,
       runClaude: failingAi(),
       runCodex: failingAi()
-    });
-
-    expect(result.thesesUpdated).toBe(0);
-    expect(result.newCandidates).toBe(0);
-    expect(result.deepDivesPerformed).toBe(0);
+    })).rejects.toThrow(/No AI provider returned a usable response/i);
   });
 
   it('performs deep dive when broad scan suggests dig_deeper', async () => {

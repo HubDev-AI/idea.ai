@@ -88,5 +88,33 @@ describe('dual analyst', () => {
       expect(result.claude).toBeNull();
       expect(result.codex).toEqual({ value: 2 });
     });
+
+    it('throws and logs ai_provider when no provider returns a usable response', async () => {
+      const warn = vi.fn().mockResolvedValue(undefined);
+
+      await expect(dualAnalystRun(
+        { prompt: 'test', timeoutMs: 10_000 },
+        {
+          runClaude: vi.fn().mockRejectedValue(new Error('claude down')),
+          runCodex: vi.fn().mockResolvedValue({
+            text: 'still not json',
+            provider: 'codex',
+            meta: {}
+          }),
+          parseResponse: JSON.parse,
+          logger: { info: vi.fn().mockResolvedValue(undefined), warn },
+          preferred: 'codex',
+        }
+      )).rejects.toThrow(/No AI provider returned a usable response/i);
+
+      expect(warn).toHaveBeenCalledWith(
+        'ai_provider',
+        'codex failed',
+        expect.objectContaining({
+          strategy: 'primary_with_fallback',
+          preferred: 'codex',
+        })
+      );
+    });
   });
 });

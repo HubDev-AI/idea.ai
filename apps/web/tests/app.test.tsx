@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -97,6 +97,7 @@ const mockTheses = [
 const mockAgentStatus = {
   isRunning: false,
   intervalMs: 3600000,
+  activeRunId: null,
   lastRun: {
     timestamp: '2026-02-24T03:00:00.000Z',
     thesesUpdated: 2,
@@ -105,6 +106,13 @@ const mockAgentStatus = {
     deepDivesPerformed: 1,
     journalEntriesWritten: 5,
     provider: 'claude'
+  },
+  lastAttempt: {
+    runId: 'agent-prev',
+    timestamp: '2026-02-24T03:00:00.000Z',
+    status: 'completed' as const,
+    provider: 'claude',
+    errorMessage: null
   },
   investigateNext: 'API security testing tools'
 };
@@ -137,8 +145,17 @@ const mockSnapshot = {
 };
 
 // Mock socket.io-client
+let socketListeners: Map<string, Set<(...args: any[]) => void>> | null = null;
+
+const emitSocketEvent = (event: string, payload?: unknown) => {
+  for (const handler of socketListeners?.get(event) ?? []) {
+    handler(payload);
+  }
+};
+
 const createMockSocket = () => {
   const listeners = new Map<string, Set<(...args: any[]) => void>>();
+  socketListeners = listeners;
   const socket = {
     on: vi.fn((event: string, handler: (...args: any[]) => void) => {
       if (!listeners.has(event)) listeners.set(event, new Set());
@@ -222,7 +239,7 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
     }
 
     if (url.includes('/v1/agent/run')) {
-      return Promise.resolve(new Response(JSON.stringify({ thesesUpdated: 1, newCandidates: 0 }), { status: 202 }));
+      return Promise.resolve(new Response(JSON.stringify({ accepted: true, runId: 'agent-123', alreadyRunning: false }), { status: 202 }));
     }
 
     if (url.includes('/v1/profiles')) {
@@ -242,6 +259,7 @@ describe('web app', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    socketListeners = null;
   });
 
   it('renders feed rows with idea, score, source/snippet, and next action', async () => {
@@ -312,7 +330,7 @@ describe('web app', () => {
     expect(screen.getByText(/Research Agent/i)).toBeDefined();
   });
 
-  it('triggers agent run and shows running state', async () => {
+  it('keeps manual runs active until websocket finishes the matching run', async () => {
     render(<App />);
 
     // Wait for initial data load
@@ -323,8 +341,44 @@ describe('web app', () => {
     expect(runButton).toBeDefined();
     fireEvent.click(runButton);
 
-    // Verify "Running..." state appears
-    expect(await screen.findByText(/Running/i)).toBeDefined();
+    // The old snapshot says not running, but the local optimistic state must survive
+    // until the websocket sends the matching run outcome.
+    expect(await screen.findByRole('button', { name: /Running/i })).toBeDefined();
+
+    await act(async () => {
+      emitSocketEvent('agentStatus', {
+        ...mockAgentStatus,
+        isRunning: true,
+        activeRunId: 'agent-123',
+        lastAttempt: {
+          runId: 'agent-123',
+          timestamp: '2026-02-24T04:00:00.000Z',
+          status: 'running',
+          provider: null,
+          errorMessage: null
+        }
+      });
+    });
+
+    expect(await screen.findByText(/Analyzing signals and updating theses/i)).toBeDefined();
+
+    await act(async () => {
+      emitSocketEvent('agentStatus', {
+        ...mockAgentStatus,
+        isRunning: false,
+        activeRunId: null,
+        lastAttempt: {
+          runId: 'agent-123',
+          timestamp: '2026-02-24T04:01:00.000Z',
+          status: 'failed',
+          provider: null,
+          errorMessage: 'No AI provider returned a usable response'
+        }
+      });
+    });
+
+    expect(await screen.findByText('Run failed')).toBeDefined();
+    expect(screen.getByText('Last success')).toBeDefined();
   });
 
   it('opens log drawer and shows log entries', async () => {

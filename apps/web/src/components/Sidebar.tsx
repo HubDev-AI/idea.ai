@@ -86,6 +86,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     agentStatus?.lastRun?.timestamp ?? null,
     agentStatus?.intervalMs ?? 3600000
   );
+  const derivedAgentResult = !agentRunning && !agentRunResult && agentStatus?.lastAttempt?.status === 'failed'
+    ? 'failed'
+    : agentRunResult;
 
   return (
     <aside className="sidebar">
@@ -303,15 +306,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {agentRunning && (
           <p className="sidebar-agent-status running">Analyzing signals and updating theses{'\u2026'}</p>
         )}
-        {!agentRunning && agentRunResult && (
-          <p className={`sidebar-agent-status ${agentRunResult === 'failed' ? 'error' : 'success'}`}>
-            {agentRunResult === 'failed' ? 'Run failed' : agentRunResult}
+        {!agentRunning && derivedAgentResult && (
+          <p className={`sidebar-agent-status ${derivedAgentResult === 'failed' ? 'error' : 'success'}`}>
+            {derivedAgentResult === 'failed' ? 'Run failed' : derivedAgentResult}
           </p>
         )}
         {agentStatus?.lastRun ? (
           <>
             <div className="sidebar-row">
-              <span className="sidebar-row-name">Last run</span>
+              <span className="sidebar-row-name">Last success</span>
               <span className="sidebar-row-detail">{new Date(agentStatus.lastRun.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
             <div className="sidebar-row">
