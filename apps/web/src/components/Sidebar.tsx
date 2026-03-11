@@ -33,6 +33,21 @@ const providerDisplayName: Record<string, string> = {
   codex: 'Codex',
 };
 
+const toTimestamp = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? null : ts;
+};
+
+const hasLatestFailedAttempt = (status: AgentStatusRecord | null): boolean => {
+  if (!status || status.lastAttempt?.status !== 'failed') return false;
+  const failedAt = toTimestamp(status.lastAttempt.timestamp);
+  const lastSuccessAt = toTimestamp(status.lastRun?.timestamp);
+  if (failedAt == null) return true;
+  if (lastSuccessAt == null) return true;
+  return failedAt >= lastSuccessAt;
+};
+
 const formatCountdown = (ms: number): string => {
   if (ms <= 0) return '0:00';
   const totalSec = Math.ceil(ms / 1000);
@@ -86,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     agentStatus?.lastRun?.timestamp ?? null,
     agentStatus?.intervalMs ?? 3600000
   );
-  const derivedAgentResult = !agentRunning && !agentRunResult && agentStatus?.lastAttempt?.status === 'failed'
+  const derivedAgentResult = !agentRunning && !agentRunResult && hasLatestFailedAttempt(agentStatus)
     ? 'failed'
     : agentRunResult;
 

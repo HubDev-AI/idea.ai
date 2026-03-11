@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -407,6 +407,77 @@ describe('web app', () => {
 
     expect(await screen.findByText('Run failed')).toBeDefined();
     expect(screen.getByText('Last success')).toBeDefined();
+  });
+
+  it('does not show failed when the latest visible outcome is a newer success', async () => {
+    render(<App />);
+    await screen.findByText('SOC2 prep copilot');
+
+    await act(async () => {
+      emitSocketEvent('agentStatus', {
+        ...mockAgentStatus,
+        isRunning: false,
+        activeRunId: null,
+        lastRun: {
+          ...mockAgentStatus.lastRun,
+          timestamp: '2026-02-24T05:10:00.000Z',
+          thesesUpdated: 5,
+          newCandidates: 2,
+        },
+        lastAttempt: {
+          runId: 'agent-old-failure',
+          timestamp: '2026-02-24T05:00:00.000Z',
+          status: 'failed',
+          provider: null,
+          errorMessage: 'primary timeout',
+        }
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Run failed')).toBeNull();
+    });
+  });
+
+  it('reconciles a temporary local run failure when websocket reports completion', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/v1/agent/run')) {
+        return Promise.reject(new Error('client timeout'));
+      }
+      return buildMockFetch()(input);
+    }));
+
+    render(<App />);
+    await screen.findByText('SOC2 prep copilot');
+
+    fireEvent.click(screen.getByRole('button', { name: /^Run$/i }));
+    expect(await screen.findByText('Run failed')).toBeDefined();
+
+    await act(async () => {
+      emitSocketEvent('agentStatus', {
+        ...mockAgentStatus,
+        isRunning: false,
+        activeRunId: null,
+        lastRun: {
+          ...mockAgentStatus.lastRun,
+          timestamp: '2026-02-24T06:05:00.000Z',
+          thesesUpdated: 3,
+          newCandidates: 1,
+        },
+        lastAttempt: {
+          runId: 'agent-124',
+          timestamp: '2026-02-24T06:05:00.000Z',
+          status: 'completed',
+          provider: 'codex',
+          errorMessage: null,
+        }
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Run failed')).toBeNull();
+    });
   });
 
   it('opens log drawer and shows log entries', async () => {

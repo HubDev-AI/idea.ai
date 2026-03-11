@@ -34,6 +34,21 @@ const PAGE_SIZE = 8;
 const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
 
+const toTimestamp = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? null : ts;
+};
+
+const isLatestOutcomeFailed = (status: AgentStatusRecord): boolean => {
+  if (status.lastAttempt?.status !== 'failed') return false;
+  const failedAt = toTimestamp(status.lastAttempt.timestamp);
+  const lastSuccessAt = toTimestamp(status.lastRun?.timestamp);
+  if (failedAt == null) return true;
+  if (lastSuccessAt == null) return true;
+  return failedAt >= lastSuccessAt;
+};
+
 const formatContextValue = (value: unknown): string => {
   if (value === null || value === undefined) return 'null';
   if (typeof value === 'string') return value.length > 200 ? `${value.slice(0, 197)}...` : value;
@@ -185,10 +200,10 @@ const App = () => {
   }, [ws.thesisStats]);
 
   const summarizeAgentRun = useCallback((status: AgentStatusRecord): string | null => {
-    if (status.lastAttempt?.status === 'failed') {
+    if (isLatestOutcomeFailed(status)) {
       return 'failed';
     }
-    if (status.lastAttempt?.status === 'completed' && status.lastRun) {
+    if (status.lastRun) {
       return `${status.lastRun.thesesUpdated} updated, ${status.lastRun.newCandidates} new`;
     }
     return null;
@@ -220,17 +235,25 @@ const App = () => {
       return;
     }
 
+    const summarized = summarizeAgentRun(ws.agentStatus);
+
+    // If a manual trigger temporarily set a local failure, reconcile it with
+    // the authoritative websocket status once a later success is visible.
+    if (agentRunResult === 'failed' && summarized && summarized !== 'failed') {
+      setAgentRunResult(summarized);
+    }
+
     if (waitingForManualOutcome && pendingRunId !== null && ws.agentStatus.lastAttempt?.runId === pendingRunId) {
       manualRunRequestedRef.current = false;
       pendingManualRunIdRef.current = null;
-      setAgentRunResult(summarizeAgentRun(ws.agentStatus));
+      setAgentRunResult(summarized);
       return;
     }
 
     if (wasRunning && !nowRunning) {
-      setAgentRunResult(summarizeAgentRun(ws.agentStatus));
+      setAgentRunResult(summarized);
     }
-  }, [summarizeAgentRun, ws.agentStatus]);
+  }, [agentRunResult, summarizeAgentRun, ws.agentStatus]);
 
   // Connection lost warning
   useEffect(() => {
