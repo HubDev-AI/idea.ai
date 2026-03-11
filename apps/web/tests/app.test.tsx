@@ -480,6 +480,41 @@ describe('web app', () => {
     });
   });
 
+  it('uses latest agent activity for due countdown (not only last success)', async () => {
+    const { container } = render(<App />);
+    await screen.findByText('SOC2 prep copilot');
+
+    const now = Date.now();
+    const isoNow = new Date(now).toISOString();
+
+    await act(async () => {
+      emitSocketEvent('refreshMeta', {
+        ...mockRefreshMeta,
+        last_hourly_run: isoNow,
+        last_daily_run: isoNow,
+      });
+
+      emitSocketEvent('agentStatus', {
+        ...mockAgentStatus,
+        intervalMs: 3_600_000,
+        lastRun: {
+          ...mockAgentStatus.lastRun,
+          timestamp: new Date(now - 3 * 3_600_000).toISOString(),
+        },
+        lastAttempt: {
+          runId: 'agent-recent-failure',
+          timestamp: new Date(now - 5 * 60_000).toISOString(),
+          status: 'failed',
+          provider: null,
+          errorMessage: 'timeout',
+        }
+      });
+    });
+
+    const countdown = container.querySelector('.sidebar-agent-controls .sidebar-countdown');
+    expect(countdown?.textContent?.trim()).not.toBe('due');
+  });
+
   it('opens log drawer and shows log entries', async () => {
     render(<App />);
 

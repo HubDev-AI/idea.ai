@@ -48,6 +48,17 @@ const hasLatestFailedAttempt = (status: AgentStatusRecord | null): boolean => {
   return failedAt >= lastSuccessAt;
 };
 
+const latestAgentActivityTimestamp = (status: AgentStatusRecord | null): string | null => {
+  if (!status) return null;
+  const attemptTimestamp = status.lastAttempt?.timestamp ?? null;
+  const runTimestamp = status.lastRun?.timestamp ?? null;
+  const attemptAt = toTimestamp(attemptTimestamp);
+  const lastRunAt = toTimestamp(runTimestamp);
+  if (attemptAt == null) return runTimestamp;
+  if (lastRunAt == null) return attemptTimestamp;
+  return attemptAt >= lastRunAt ? attemptTimestamp : runTimestamp;
+};
+
 const formatCountdown = (ms: number): string => {
   if (ms <= 0) return '0:00';
   const totalSec = Math.ceil(ms / 1000);
@@ -98,7 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     refreshMeta?.daily_interval_ms ?? 86400000
   );
   const agentCountdown = useCountdown(
-    agentStatus?.lastRun?.timestamp ?? null,
+    latestAgentActivityTimestamp(agentStatus),
     agentStatus?.intervalMs ?? 3600000
   );
   const derivedAgentResult = !agentRunning && !agentRunResult && hasLatestFailedAttempt(agentStatus)
