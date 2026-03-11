@@ -24,6 +24,7 @@ import { createEntityStore } from './runtime/entity_store';
 import { createExecutionLogger } from './runtime/execution_logger';
 import { createExperienceStore } from './runtime/experience_store';
 import { createPostgresJournalStore } from './runtime/journal_store';
+import { buildShutdownInterruptedError, isAgentCatchUpDue } from './runtime/agent_run_lifecycle';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresSignalStore } from './runtime/postgres_signal_store';
 import { buildStartupAgentStatus } from './runtime/agent_status_state';
@@ -69,7 +70,7 @@ const signalStore = databaseUrl
   ? createPostgresSignalStore({ databaseUrl, embedText: embedTextFn })
   : null;
 
-const readModel = createLiveReadModel(undefined, {
+const readModel = createLiveReadModel(startupEnv.agentIntervalMs, {
   ...(signalStore ? { persistentStore: signalStore } : {}),
   circuit: providerCircuit,
   ...(pool ? { pool } : {}),
@@ -181,6 +182,7 @@ const startAgentRun = (): AgentRunAccepted => {
         runId,
         preferredProvider: agentEnv.aiPrimary,
         allowFallback: agentEnv.aiFallback !== 'none',
+        retries: agentEnv.aiRetries,
         timeoutMs: agentEnv.aiTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
         pool: pool ?? undefined,
@@ -517,9 +519,25 @@ const shutdown = async () => {
         new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), SHUTDOWN_TIMEOUT_MS))
       ]);
     } catch {
-      // Run was interrupted or timed out — agentRunStore.fail() already called in executeAgentRun's catch block
+      if (agentRunInFlightId) {
+        const error = buildShutdownInterruptedError(agentRunInFlightId);
+        await agentRunStore?.fail(agentRunInFlightId, error);
+        agentStatus = {
+          ...agentStatus,
+          isRunning: false,
+          activeRunId: null,
+          lastAttempt: {
+            runId: agentRunInFlightId,
+            timestamp: new Date().toISOString(),
+            status: 'failed',
+            provider: null,
+            errorMessage: error.message
+          }
+        };
+      }
     }
     agentRunInFlight = null;
+    agentRunInFlightId = null;
   }
 
   // readModel.close() closes the shared signalStore pool — don't close it again
@@ -566,9 +584,7 @@ app
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
     // If overdue from a previous session, run immediately then start the regular interval
-    const lastRunTs = agentStatus.lastRun?.timestamp;
-    const isOverdue = lastRunTs && (Date.now() - new Date(lastRunTs).getTime()) > runtimeEnv.agentIntervalMs;
-    if (isOverdue) {
+    if (isAgentCatchUpDue(agentStatus, runtimeEnv.agentIntervalMs)) {
       void executeAgentRun().catch((err) => {
         console.error('research agent catch-up run failed:', err);
       });

@@ -39,6 +39,7 @@ export type AgentRunnerDeps = {
   runId?: string;
   preferredProvider?: 'claude' | 'codex';
   allowFallback?: boolean;
+  retries?: number;
   timeoutMs?: number;
   maxClusters?: number;
   profile?: AgentProfile;
@@ -51,6 +52,11 @@ export type AgentRunnerDeps = {
 };
 
 const MAX_DEEP_DIVES = 2;
+const TREND_WINDOWS_MS = [
+  { window: '7d', durationMs: 7 * 24 * 60 * 60 * 1000 },
+  { window: '30d', durationMs: 30 * 24 * 60 * 60 * 1000 },
+  { window: '90d', durationMs: 90 * 24 * 60 * 60 * 1000 },
+] as const;
 
 const titleWords = (title: string): Set<string> =>
   new Set(title.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter((w) => w.length > 2));
@@ -85,11 +91,51 @@ const resolveUsedProvider = (result: { claude: unknown | null; codex: unknown | 
     ? (result.codex ? 'codex' : result.claude ? 'claude' : null)
     : (result.claude ? 'claude' : result.codex ? 'codex' : null);
 
+const matchesProfile = (profileId: string, thesis: { profileId?: string | null }): boolean =>
+  (thesis.profileId ?? 'consumer') === profileId;
+
+const buildTrendSummary = (signals: Array<{ topic: string; observed_at: string; demand: number }>) => {
+  const now = Date.now();
+  const topics = new Map<string, Array<{ observedAt: number; demand: number }>>();
+  for (const signal of signals) {
+    const observedAt = new Date(signal.observed_at).getTime();
+    if (Number.isNaN(observedAt)) continue;
+    const entries = topics.get(signal.topic) ?? [];
+    entries.push({ observedAt, demand: signal.demand });
+    topics.set(signal.topic, entries);
+  }
+
+  return Array.from(topics.entries())
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 5)
+    .flatMap(([topic, entries]) =>
+      TREND_WINDOWS_MS.map(({ window, durationMs }) => {
+        const cutoff = now - durationMs;
+        const inWindow = entries.filter((entry) => entry.observedAt >= cutoff);
+        const count = inWindow.length;
+        const avgDemand = count > 0
+          ? Math.round((inWindow.reduce((sum, entry) => sum + entry.demand, 0) / count) * 100) / 100
+          : 0;
+        const priorCutoff = cutoff - durationMs;
+        const priorCount = entries.filter((entry) => entry.observedAt >= priorCutoff && entry.observedAt < cutoff).length;
+        const growth = count > priorCount ? 'rising' : count < priorCount ? 'cooling' : count > 0 ? 'steady' : 'none';
+        return {
+          topic,
+          window,
+          count,
+          avg_demand: avgDemand,
+          growth,
+        };
+      })
+    );
+};
+
 export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunResult> => {
   const log = deps.logger ?? noopLogger;
   const runId = deps.runId ?? `agent-${Date.now()}`;
   const preferred = deps.preferredProvider ?? 'claude';
   const allowFallback = deps.allowFallback ?? true;
+  const retries = deps.retries ?? 1;
   const timeoutMs = deps.timeoutMs ?? 180_000;
   const maxClusters = deps.maxClusters ?? 50;
   const profile = deps.profile ?? consumerProfile;
@@ -98,9 +144,11 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   const allAlerts: string[] = [];
   const allJournalEntries: JournalEntry[] = [];
   let investigateNext = '';
+  const thesisFilter = { profileId: profile.id };
+  const signalSourceById = new Map<string, string>();
 
   // === Load context ===
-  const allTheses = await deps.thesisStore.list();
+  const allTheses = await deps.thesisStore.list(thesisFilter);
   const activeTheses: AgentThesisSummary[] = allTheses
     .filter((t) => t.status !== 'stale' && t.status !== 'rejected')
     .slice(0, 15)
@@ -116,6 +164,9 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   const recentSignals = deps.signalStore
     ? await deps.signalStore.listAllSignals(500)
     : [];
+  for (const signal of recentSignals) {
+    signalSourceById.set(signal.signal_id, signal.source);
+  }
 
   // Load embeddings for clustering
   let clusterableSignals: ClusterableSignal[] = [];
@@ -190,7 +241,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
 
   // Supply/demand imbalance per cluster
   const clusterImbalance = new Map<number, string>();
-  const supplySources = new Set(['producthunt', 'alternativeto', 'github_issues', 'npm_trends']);
+  const supplySources = new Set(['producthunt', 'alternativeto', 'github_issues', 'npm_trends', 'yc_companies']);
   for (const cluster of clusters) {
     const clusterSignalIds = new Set(cluster.representatives.map(r => r.signal_id));
     const matchedSignals = recentSignals.filter(s => clusterSignalIds.has(s.signal_id));
@@ -235,19 +286,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   });
 
   // Load trend windows
-  const trendSummary = deps.signalStore
-    ? (await deps.signalStore.retriever.getTrendWindows({
-        topic: 'general',
-        source: 'all',
-        canonicalText: ''
-      })).map((tw) => ({
-        topic: tw.topic,
-        window: tw.window,
-        count: tw.count_signals,
-        avg_demand: tw.avg_demand,
-        growth: tw.count_signals > 0 ? 'active' : 'none'
-      }))
-    : [];
+  const trendSummary = buildTrendSummary(recentSignals);
 
   // Load recent journal entries
   const recentJournal = deps.journalStore
@@ -318,6 +357,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       },
       preferred,
       allowFallback,
+      retries,
       ...(deps.logger ? { logger: deps.logger } : {})
     }
   );
@@ -336,7 +376,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   if (broadOutput) {
     for (const update of broadOutput.thesis_updates) {
       const existing = await deps.thesisStore.getByKey(update.canonicalKey);
-      if (existing) {
+      if (existing && matchesProfile(profile.id, existing)) {
         const delta = clampDelta(update.confidence_delta);
         const newConfidence = Math.max(0, Math.min(100, existing.confidence + delta));
         const newStatus = newConfidence >= 80 ? 'promoted' : newConfidence >= 55 ? 'watching' : existing.status;
@@ -375,9 +415,9 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
   // Debate requires both Claude and Codex. Skip when disabled or only one provider is available.
   const debateThreshold = deps.debateConfidenceThreshold ?? 40;
   const debateMax = deps.debateMaxPerRun ?? 5;
-  const debateEnabled = (deps.debateEnabled ?? true) && deps.allowFallback;
+  const debateEnabled = (deps.debateEnabled ?? true) && allowFallback;
   const debateCandidates = debateEnabled
-    ? (await deps.thesisStore.list())
+    ? (await deps.thesisStore.list(thesisFilter))
         .filter(t => t.confidence >= debateThreshold)
         .sort((a, b) => b.confidence - a.confidence)
         .slice(0, debateMax)
@@ -532,6 +572,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         },
         preferred,
         allowFallback,
+        retries,
         ...(deps.logger ? { logger: deps.logger } : {})
       }
     );
@@ -549,7 +590,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       // Apply deep dive thesis updates
       for (const update of diveOutput.thesis_updates) {
         const existing = await deps.thesisStore.getByKey(update.canonicalKey);
-        if (existing) {
+        if (existing && matchesProfile(profile.id, existing)) {
           const delta = clampDelta(update.confidence_delta);
           const newConfidence = Math.max(0, Math.min(100, existing.confidence + delta));
           const newStatus = newConfidence >= 80 ? 'promoted' : newConfidence >= 55 ? 'watching' : existing.status;
@@ -582,7 +623,8 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
           relation: 'supporting' as const,
           weight: 1,
           snippet: '',
-          observed_at: new Date().toISOString()
+          observed_at: new Date().toISOString(),
+          ...(signalSourceById.get(id) ? { source: signalSourceById.get(id)! } : {})
         }));
 
         const key = `${profile.id}:${proposal.title.toLowerCase().replace(/\s+/g, '_').slice(0, 40)}`;
@@ -636,7 +678,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
 
   // === Enrich all theses with velocity and corroboration from cluster data ===
   if (clusters.length > 0) {
-    const allThesesNow = await deps.thesisStore.list();
+    const allThesesNow = await deps.thesisStore.list(thesisFilter);
     let enriched = 0;
     for (const thesis of allThesesNow) {
       // Find the best matching cluster by checking if cluster representatives overlap with thesis evidence signals
@@ -722,4 +764,3 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
     provider
   };
 };
-

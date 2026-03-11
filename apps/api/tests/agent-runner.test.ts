@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runResearchAgent } from '../src/jobs/agent_runner';
+import { consumerProfile } from '../src/profiles/consumer';
 import { InMemoryThesisStore } from '../src/runtime/thesis_store';
 
 // Helper to create mock AI response
@@ -172,5 +173,226 @@ describe('agent runner', () => {
 
     const updated = await store.getByKey('test:thesis');
     expect(updated?.confidence).toBe(70); // 50 + 20 (clamped from 50)
+  });
+
+  it('scopes active thesis context and updates to the current profile', async () => {
+    const store = new InMemoryThesisStore();
+    await store.upsert({
+      canonicalKey: 'consumer:meal',
+      title: 'Meal Planner',
+      topic: 'consumer',
+      status: 'watching',
+      confidence: 60,
+      scoreTotal: 60,
+      problemStatement: 'p',
+      targetBuyer: 'b',
+      proposedSolution: 's',
+      evidenceCount: 1,
+      avgDemand: 50,
+      avgTiming: 50,
+      avgBuildability: 50,
+      avgVirality: 50,
+      latestObservedAt: '2026-02-25T10:00:00Z',
+      evidence: [],
+      profileId: 'consumer',
+    });
+    await store.upsert({
+      canonicalKey: 'b2b:soc2',
+      title: 'SOC2 Autopilot',
+      topic: 'b2b',
+      status: 'watching',
+      confidence: 70,
+      scoreTotal: 70,
+      problemStatement: 'p',
+      targetBuyer: 'b',
+      proposedSolution: 's',
+      evidenceCount: 1,
+      avgDemand: 60,
+      avgTiming: 60,
+      avgBuildability: 60,
+      avgVirality: 20,
+      latestObservedAt: '2026-02-25T10:00:00Z',
+      evidence: [],
+      profileId: 'b2b',
+    });
+
+    const prompts: string[] = [];
+    const runClaude = vi.fn().mockImplementation(async ({ prompt }: { prompt: string }) => {
+      prompts.push(prompt);
+      return {
+        text: JSON.stringify({
+          thesis_updates: [
+            { canonicalKey: 'consumer:meal', confidence_delta: 5, reasoning: 'consumer fit' },
+            { canonicalKey: 'b2b:soc2', confidence_delta: 15, reasoning: 'should be ignored' },
+          ],
+          dig_deeper: [],
+          observations: [],
+        }),
+        provider: 'claude',
+        meta: {},
+      };
+    });
+
+    await runResearchAgent({
+      thesisStore: store,
+      runClaude,
+      runCodex: failingAi(),
+      profile: consumerProfile,
+      debateEnabled: false,
+    });
+
+    expect(prompts[0]).toContain('Meal Planner');
+    expect(prompts[0]).not.toContain('SOC2 Autopilot');
+    expect((await store.getByKey('consumer:meal'))?.confidence).toBe(65);
+    expect((await store.getByKey('b2b:soc2'))?.confidence).toBe(70);
+  });
+
+  it('does not dedup new theses against a different profile', async () => {
+    const store = new InMemoryThesisStore();
+    await store.upsert({
+      canonicalKey: 'b2b:ops',
+      title: 'Ops Workflow Copilot',
+      topic: 'operations',
+      status: 'watching',
+      confidence: 68,
+      scoreTotal: 68,
+      problemStatement: 'p',
+      targetBuyer: 'b',
+      proposedSolution: 's',
+      evidenceCount: 2,
+      avgDemand: 60,
+      avgTiming: 55,
+      avgBuildability: 50,
+      avgVirality: 15,
+      latestObservedAt: '2026-02-25T10:00:00Z',
+      evidence: [],
+      profileId: 'b2b',
+    });
+
+    let callCount = 0;
+    const runClaude = vi.fn().mockImplementation(async () => {
+      callCount += 1;
+      if (callCount === 1) {
+        return {
+          text: JSON.stringify({
+            thesis_updates: [],
+            dig_deeper: [{ topic: 'ops workflow', reason: 'demand rising', related_cluster_ids: [] }],
+            observations: [],
+          }),
+          provider: 'claude',
+          meta: {},
+        };
+      }
+      return {
+        text: JSON.stringify({
+          thesis_updates: [],
+          new_theses: [{
+            title: 'Ops Workflow Copilot',
+            problem_statement: 'Manual team coordination is slow',
+            target_buyer: 'Consumers',
+            proposed_solution: 'Consumer-facing task coordination app',
+            supporting_signal_ids: ['sig-1'],
+            estimated_scope: 'small',
+          }],
+          journal_entries: [],
+        }),
+        provider: 'claude',
+        meta: {},
+      };
+    });
+
+    await runResearchAgent({
+      thesisStore: store,
+      runClaude,
+      runCodex: failingAi(),
+      profile: consumerProfile,
+      debateEnabled: false,
+    });
+
+    const theses = await store.list();
+    const consumerCopy = theses.find((t) => t.canonicalKey.startsWith('consumer:') && t.title === 'Ops Workflow Copilot');
+    const original = await store.getByKey('b2b:ops');
+    expect(consumerCopy).toBeDefined();
+    expect(consumerCopy?.profileId).toBe('consumer');
+    expect(original?.confidence).toBe(68);
+  });
+
+  it('builds trend summary from recent signals instead of synthetic empty windows', async () => {
+    const store = new InMemoryThesisStore();
+    const prompts: string[] = [];
+    const runClaude = vi.fn().mockImplementation(async ({ prompt }: { prompt: string }) => {
+      prompts.push(prompt);
+      return {
+        text: JSON.stringify({
+          thesis_updates: [],
+          dig_deeper: [],
+          observations: [],
+        }),
+        provider: 'claude',
+        meta: {},
+      };
+    });
+
+    const signalStore = {
+      listAllSignals: vi.fn().mockResolvedValue([
+        {
+          signal_id: 'sig-1',
+          canonical_text: 'Users keep asking for shared travel planning',
+          source: 'reddit',
+          topic: 'travel_planning',
+          demand: 84,
+          timing: 63,
+          virality: 51,
+          blended: 70,
+          observed_at: new Date().toISOString(),
+        },
+      ]),
+      getEmbeddings: vi.fn().mockResolvedValue(new Map()),
+      retriever: {
+        getTrendWindows: vi.fn().mockResolvedValue([]),
+        findSimilar: vi.fn().mockResolvedValue([]),
+      },
+    } as any;
+
+    await runResearchAgent({
+      thesisStore: store,
+      signalStore,
+      runClaude,
+      runCodex: failingAi(),
+      debateEnabled: false,
+    });
+
+    expect(prompts[0]).toContain('travel_planning');
+    expect(prompts[0]).toContain('7d');
+    expect(signalStore.retriever.getTrendWindows).not.toHaveBeenCalled();
+  });
+
+  it('honors the configured retry budget for provider calls', async () => {
+    const store = new InMemoryThesisStore();
+    const runClaude = vi.fn()
+      .mockRejectedValueOnce(new Error('try 1'))
+      .mockRejectedValueOnce(new Error('try 2'))
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          thesis_updates: [],
+          dig_deeper: [],
+          observations: [],
+        }),
+        provider: 'claude',
+        meta: {},
+      });
+
+    const result = await runResearchAgent({
+      thesisStore: store,
+      runClaude,
+      runCodex: failingAi(),
+      allowFallback: false,
+      preferredProvider: 'claude',
+      retries: 2,
+      debateEnabled: false,
+    });
+
+    expect(runClaude).toHaveBeenCalledTimes(3);
+    expect(result.provider).toBe('claude');
   });
 });

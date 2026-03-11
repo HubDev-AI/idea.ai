@@ -423,8 +423,8 @@ describe('V2 integration', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body).toHaveLength(1);
-    expect(body[0].title).toBe('Test Thesis');
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].title).toBe('Test Thesis');
   });
 
   it('thesis API returns individual thesis by canonicalKey', async () => {

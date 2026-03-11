@@ -82,6 +82,7 @@ const App = () => {
   const prevRunningRef = useRef(false);
   const manualRunRequestedRef = useRef(false);
   const pendingManualRunIdRef = useRef<string | null>(null);
+  const latestWsAgentStatusRef = useRef<AgentStatusRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sortField, setSortField] = useState<SortField>('newest');
@@ -180,7 +181,7 @@ const App = () => {
 
   // Sync thesis stats from WebSocket
   useEffect(() => {
-    if (ws.thesisStats.total > 0) setThesisStats(ws.thesisStats);
+    setThesisStats(ws.thesisStats);
   }, [ws.thesisStats]);
 
   const summarizeAgentRun = useCallback((status: AgentStatusRecord): string | null => {
@@ -195,6 +196,7 @@ const App = () => {
 
   // Track agent running state from WebSocket
   useEffect(() => {
+    latestWsAgentStatusRef.current = ws.agentStatus ?? null;
     if (!ws.agentStatus) return;
     const nowRunning = ws.agentStatus.isRunning;
     const pendingRunId = pendingManualRunIdRef.current;
@@ -423,13 +425,27 @@ const App = () => {
   const handleLabelChange = useCallback(async (canonicalKey: string, label: ThesisLabel) => {
     try {
       await setThesisLabel(canonicalKey, label);
-      setTheses((prev) => prev.map((t) =>
-        t.canonicalKey === canonicalKey ? { ...t, label } : t
-      ));
+      const shouldRemoveFromFilteredList = labelFilter !== 'all' && label !== labelFilter;
+      setTheses((prev) => prev.flatMap((t) => {
+        if (t.canonicalKey !== canonicalKey) return [t];
+        if (shouldRemoveFromFilteredList) return [];
+        return [{ ...t, label }];
+      }));
+      if (shouldRemoveFromFilteredList) {
+        setThesisPageInfo((prev) => ({
+          ...prev,
+          totalItems: Math.max(0, prev.totalItems - 1),
+        }));
+        setOmapSelectedThesis((prev) => prev?.canonicalKey === canonicalKey ? null : prev);
+        if (thesisFilter === canonicalKey) {
+          setThesisFilter(null);
+          setThesisFilterTitle('');
+        }
+      }
     } catch {
       showToast('Failed to update label', 'error');
     }
-  }, [showToast]);
+  }, [labelFilter, showToast, thesisFilter]);
 
   const handleRunAgent = async () => {
     manualRunRequestedRef.current = true;
@@ -440,6 +456,14 @@ const App = () => {
     try {
       const run = await triggerAgentRun();
       pendingManualRunIdRef.current = run.runId;
+      const latestStatus = latestWsAgentStatusRef.current;
+      if (latestStatus && !latestStatus.isRunning && latestStatus.lastAttempt?.runId === run.runId) {
+        manualRunRequestedRef.current = false;
+        pendingManualRunIdRef.current = null;
+        setAgentStatus(latestStatus);
+        setAgentRunning(false);
+        setAgentRunResult(summarizeAgentRun(latestStatus));
+      }
     } catch {
       manualRunRequestedRef.current = false;
       pendingManualRunIdRef.current = null;
@@ -456,7 +480,13 @@ const App = () => {
         agentStatus={agentStatus ?? ws.agentStatus}
         infraStatus={ws.infraStatus}
         thesisStats={thesisStats}
-        signalCount={ws.signalCount || Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
+        signalCount={
+          ws.signalCount
+          ?? (Object.keys(ws.signalCounts).length > 0
+            ? Object.values(ws.signalCounts).reduce((a, b) => a + b, 0)
+            : undefined)
+          ?? pageInfo.totalItems
+        }
         latestSignalAt={ws.latestSignalAt}
         signalCounts={ws.signalCounts}
         onRunAgent={handleRunAgent}

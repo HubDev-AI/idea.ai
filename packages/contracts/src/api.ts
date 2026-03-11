@@ -173,6 +173,12 @@ export type ThesisExplainRecord = {
     timing: { score: number; weight: number; contribution: number };
     buildability: { score: number; weight: number; contribution: number };
     virality: { score: number; weight: number; contribution: number };
+    dimensionLabels: {
+      demand: string;
+      timing: string;
+      buildability: string;
+      virality: string;
+    };
     blended: number;
     weightsSource: 'optimized' | 'default';
   };

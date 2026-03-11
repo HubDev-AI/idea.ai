@@ -57,3 +57,31 @@ export const buildStartupAgentStatus = ({
   lastAttempt: toLastAttempt(latestRow),
   investigateNext: latestRow?.investigate_next ?? completedRow?.investigate_next ?? null,
 });
+
+const toTimestamp = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? null : ts;
+};
+
+export const getLatestAgentActivityAt = (status: Pick<AgentStatusRecord, 'lastAttempt' | 'lastRun'>): number | null => {
+  const attemptAt = toTimestamp(status.lastAttempt?.timestamp);
+  const lastRunAt = toTimestamp(status.lastRun?.timestamp);
+  if (attemptAt == null) return lastRunAt;
+  if (lastRunAt == null) return attemptAt;
+  return Math.max(attemptAt, lastRunAt);
+};
+
+export const isAgentCatchUpDue = (
+  status: Pick<AgentStatusRecord, 'lastAttempt' | 'lastRun' | 'intervalMs'>,
+  now: string | number | Date = Date.now(),
+): boolean => {
+  const nowMs = typeof now === 'number'
+    ? now
+    : now instanceof Date
+      ? now.getTime()
+      : new Date(now).getTime();
+  const latestActivityAt = getLatestAgentActivityAt(status);
+  if (latestActivityAt == null) return true;
+  return nowMs - latestActivityAt > status.intervalMs;
+};

@@ -83,4 +83,43 @@ describe('startup agent status reconstruction', () => {
       investigateNext: 'b2b workflow ops',
     });
   });
+
+  it('treats the latest failed attempt as recent activity for catch-up scheduling', async () => {
+    const { buildStartupAgentStatus, isAgentCatchUpDue } = await import('../src/runtime/agent_status_state');
+
+    const status: AgentStatusRecord = buildStartupAgentStatus({
+      intervalMs: 3_600_000,
+      completedRow: {
+        run_id: 'agent-success',
+        started_at: '2026-03-11T05:00:00.000Z',
+        finished_at: '2026-03-11T05:05:00.000Z',
+        status: 'completed',
+        theses_updated: 1,
+        new_candidates: 0,
+        clusters_analyzed: 4,
+        deep_dives_performed: 0,
+        journal_entries_written: 2,
+        provider: 'codex',
+        investigate_next: null,
+        error_message: null,
+      },
+      latestRow: {
+        run_id: 'agent-failed',
+        started_at: '2026-03-11T08:55:00.000Z',
+        finished_at: '2026-03-11T08:56:00.000Z',
+        status: 'failed',
+        theses_updated: 0,
+        new_candidates: 0,
+        clusters_analyzed: 0,
+        deep_dives_performed: 0,
+        journal_entries_written: 0,
+        provider: null,
+        investigate_next: null,
+        error_message: 'provider outage',
+      },
+    });
+
+    expect(isAgentCatchUpDue(status, '2026-03-11T09:00:00.000Z')).toBe(false);
+    expect(isAgentCatchUpDue(status, '2026-03-11T10:10:00.000Z')).toBe(true);
+  });
 });

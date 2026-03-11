@@ -19,6 +19,7 @@ export type ThesisEvidenceDraft = {
   weight: number;
   snippet: string;
   observed_at: string;
+  source?: string;
 };
 
 export type ThesisDraft = {
@@ -351,7 +352,8 @@ export const buildThesisCandidates = (
       relation: 'supporting' as const,
       weight: round2(clamp(signal.blended)),
       snippet: parseSnippet(signal.canonical_text),
-      observed_at: signal.observed_at
+      observed_at: signal.observed_at,
+      source: signal.source,
     }));
 
     drafts.push({
@@ -376,4 +378,3 @@ export const buildThesisCandidates = (
 
   return drafts.sort((left, right) => right.confidence - left.confidence);
 };
-

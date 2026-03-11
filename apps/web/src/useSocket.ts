@@ -22,7 +22,7 @@ export type SocketState = {
   infraStatus: InfraStatusRecord | null;
   refreshMeta: RefreshMeta | null;
   signalCounts: Record<string, number>;
-  signalCount: number;
+  signalCount: number | null;
   latestSignalAt: string | null;
   thesisStats: ThesisStats;
   logs: ExecutionLogRecord[];
@@ -40,7 +40,7 @@ export const useSocket = (): SocketState => {
   const [infraStatus, setInfraStatus] = useState<InfraStatusRecord | null>(null);
   const [refreshMeta, setRefreshMeta] = useState<RefreshMeta | null>(null);
   const [signalCounts, setSignalCounts] = useState<Record<string, number>>({});
-  const [signalCount, setSignalCount] = useState(0);
+  const [signalCount, setSignalCount] = useState<number | null>(null);
   const [latestSignalAt, setLatestSignalAt] = useState<string | null>(null);
   const [thesisStats, setThesisStats] = useState<ThesisStats>(EMPTY_STATS);
   const [logs, setLogs] = useState<ExecutionLogRecord[]>([]);
@@ -73,7 +73,7 @@ export const useSocket = (): SocketState => {
       setInfraStatus(state.infraStatus);
       setRefreshMeta(state.refreshMeta);
       setSignalCounts(state.signalCounts);
-      setSignalCount(state.signalCount);
+      setSignalCount(typeof state.signalCount === 'number' ? state.signalCount : null);
       setLatestSignalAt(state.latestSignalAt);
       setThesisStats(state.thesisStats);
       setLogs(state.logs);
@@ -85,7 +85,7 @@ export const useSocket = (): SocketState => {
     socket.on('infraStatus', setInfraStatus);
     socket.on('refreshMeta', setRefreshMeta);
     socket.on('signalCounts', setSignalCounts);
-    socket.on('signalCount', setSignalCount);
+    socket.on('signalCount', (count) => setSignalCount(typeof count === 'number' ? count : null));
     socket.on('latestSignalAt', setLatestSignalAt);
     socket.on('thesisStats', setThesisStats);
     socket.on('logs', setLogs);

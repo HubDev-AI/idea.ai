@@ -21,6 +21,8 @@ const DEFAULT_B2B_WEIGHTS = {
 } as const;
 
 type Weights = { demand: number; timing: number; buildability: number; virality: number };
+type WeightLabels = { demand: string; timing: string; buildability: string; virality: string };
+type ActiveWeights = Weights & { source?: 'optimized' | 'default' };
 
 /**
  * Resolve the four canonical weights for the given profile id.
@@ -28,13 +30,53 @@ type Weights = { demand: number; timing: number; buildability: number; virality:
  * (self-improving weight optimizer). When absent we fall back to
  * static profile defaults.
  */
-const resolveWeights = (
+const resolveWeightLabels = (profileId: string): WeightLabels => {
+  const defaults: WeightLabels = {
+    demand: 'Demand',
+    timing: 'Timing',
+    buildability: 'Buildability',
+    virality: 'Virality',
+  };
+
+  const profile = getProfile(profileId);
+  if (!profile) return defaults;
+
+  const dims = profile.scoring.dimensions;
+  const labels: Partial<WeightLabels> = {};
+  const canonicalNames: (keyof WeightLabels)[] = ['demand', 'timing', 'buildability', 'virality'];
+  for (let i = 0; i < Math.min(dims.length, canonicalNames.length); i += 1) {
+    labels[canonicalNames[i]] = dims[i].name
+      .split('_')
+      .map((part) => part[0]?.toUpperCase() + part.slice(1))
+      .join(' ');
+  }
+
+  return {
+    demand: labels.demand ?? defaults.demand,
+    timing: labels.timing ?? defaults.timing,
+    buildability: labels.buildability ?? defaults.buildability,
+    virality: labels.virality ?? defaults.virality,
+  };
+};
+
+const resolveWeights = async (
   profileId: string,
-  getActiveWeights?: (profileId: string) => Weights | null,
-): { weights: Weights; source: 'optimized' | 'default' } => {
+  getActiveWeights?: (profileId: string) => Promise<ActiveWeights | null>,
+): Promise<{ weights: Weights; labels: WeightLabels; source: 'optimized' | 'default' }> => {
   if (getActiveWeights) {
-    const active = getActiveWeights(profileId);
-    if (active) return { weights: active, source: 'optimized' };
+    const active = await getActiveWeights(profileId);
+    if (active) {
+      return {
+        weights: {
+          demand: active.demand,
+          timing: active.timing,
+          buildability: active.buildability,
+          virality: active.virality,
+        },
+        labels: resolveWeightLabels(profileId),
+        source: active.source ?? 'optimized',
+      };
+    }
   }
 
   // Fall back to profile definition or static defaults
@@ -54,18 +96,19 @@ const resolveWeights = (
         buildability: w.buildability ?? DEFAULT_CONSUMER_WEIGHTS.buildability,
         virality: w.virality ?? DEFAULT_CONSUMER_WEIGHTS.virality,
       },
+      labels: resolveWeightLabels(profileId),
       source: 'default',
     };
   }
 
   const defaults = profileId === 'b2b' ? DEFAULT_B2B_WEIGHTS : DEFAULT_CONSUMER_WEIGHTS;
-  return { weights: { ...defaults }, source: 'default' };
+  return { weights: { ...defaults }, labels: resolveWeightLabels(profileId), source: 'default' };
 };
 
 export type ThesisExplainDeps = {
   store: ThesisStore;
   pool?: Pool | null;
-  getActiveWeights?: (profileId: string) => Weights | null;
+  getActiveWeights?: (profileId: string) => Promise<ActiveWeights | null>;
 };
 
 export const registerThesisExplainRoute = (
@@ -90,7 +133,7 @@ export const registerThesisExplainRoute = (
     }
 
     const profileId = thesis.profileId ?? 'consumer';
-    const { weights, source } = resolveWeights(profileId, deps.getActiveWeights);
+    const { weights, labels, source } = await resolveWeights(profileId, deps.getActiveWeights);
 
     // -- Weight breakdown --
     const demandContrib = thesis.avgDemand * weights.demand;
@@ -104,6 +147,7 @@ export const registerThesisExplainRoute = (
       timing: { score: thesis.avgTiming, weight: weights.timing, contribution: Math.round(timingContrib * 10) / 10 },
       buildability: { score: thesis.avgBuildability, weight: weights.buildability, contribution: Math.round(buildContrib * 10) / 10 },
       virality: { score: thesis.avgVirality, weight: weights.virality, contribution: Math.round(viralContrib * 10) / 10 },
+      dimensionLabels: labels,
       blended,
       weightsSource: source,
     };
@@ -209,7 +253,7 @@ export const registerThesisExplainRoute = (
       .map((e) => ({
         signalId: e.signal_id,
         text: e.snippet,
-        source: e.relation,
+        source: e.source ?? 'unknown',
         score: e.weight,
       }));
 
