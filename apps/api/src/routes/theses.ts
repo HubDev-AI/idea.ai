@@ -18,6 +18,7 @@ export type ThesesRouteDeps = {
 };
 
 const inFlightDives = new Map<string, Promise<unknown>>();
+const toIsoString = (value: string): string => new Date(value).toISOString();
 
 const draftToListItem = (draft: ThesisDraft) => ({
   canonicalKey: draft.canonicalKey,
@@ -28,7 +29,8 @@ const draftToListItem = (draft: ThesisDraft) => ({
   problemStatement: draft.problemStatement,
   sourceCount: draft.evidenceCount,
   estimatedScope: draft.estimatedScope ?? null,
-  lastSeenAt: draft.latestObservedAt,
+  firstSeenAt: toIsoString(draft.firstObservedAt ?? draft.latestObservedAt),
+  lastSeenAt: toIsoString(draft.latestObservedAt),
   hasDeepDive: false,
   profileId: draft.profileId,
   label: draft.label ?? null,
@@ -49,7 +51,11 @@ const sortDrafts = (drafts: ThesisDraft[], sort: 'score' | 'latest' | 'evidence'
       sorted.sort((a, b) => b.evidenceCount - a.evidenceCount);
       break;
     case 'newest':
-      sorted.sort((a, b) => new Date(b.latestObservedAt).getTime() - new Date(a.latestObservedAt).getTime());
+      sorted.sort(
+        (a, b) =>
+          new Date(b.firstObservedAt ?? b.latestObservedAt).getTime() -
+          new Date(a.firstObservedAt ?? a.latestObservedAt).getTime()
+      );
       break;
     default:
       sorted.sort((a, b) => b.confidence - a.confidence);
@@ -161,7 +167,10 @@ export const registerThesesRoute = (
       return { error: 'Thesis not found' };
     }
 
-    return draft;
+    return {
+      ...draftToListItem(draft),
+      evidence: draft.evidence,
+    };
   });
 
   const validLabels = new Set(['favourite', 'later', 'dismissed']);

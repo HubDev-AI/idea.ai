@@ -288,6 +288,84 @@ describe('live read model resilience', () => {
     expect(refreshCallCount).toBe(1);
   });
 
+  it('allows hourly refresh to run while a daily refresh is still in flight', async () => {
+    let releaseDaily: (() => void) | null = null;
+    let markDailyStarted: (() => void) | null = null;
+    const dailyStarted = new Promise<void>((resolve) => {
+      markDailyStarted = resolve;
+    });
+    let markHourlyStarted: (() => void) | null = null;
+    const hourlyStarted = new Promise<void>((resolve) => {
+      markHourlyStarted = resolve;
+    });
+    let hourlyCalls = 0;
+
+    vi.doMock('../src/jobs/ingest_open', () => ({
+      runOpenConnectorIngestionDetailed: vi.fn(async (cadence: 'hourly' | 'daily') => {
+        if (cadence === 'daily') {
+          markDailyStarted?.();
+          await new Promise<void>((resolve) => {
+            releaseDaily = resolve;
+          });
+          return {
+            events: [],
+            statuses: [
+              { name: 'producthunt', cadence: 'daily', status: 'active' }
+            ]
+          };
+        }
+
+        hourlyCalls += 1;
+        markHourlyStarted?.();
+        return {
+          events: [],
+          statuses: [
+            { name: 'hn', cadence: 'hourly', status: 'active' }
+          ]
+        };
+      })
+    }));
+
+    vi.doMock('../src/jobs/ingest_byo', () => ({
+      runByoConnectorIngestion: vi.fn(async () => ({
+        connectors: {
+          exa: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'exa_byo', skipped: true, reason: 'missing_credentials', budget_usd: 5 } },
+          perigon: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'perigon_byo', skipped: true, reason: 'missing_credentials', budget_usd: 5 } },
+          twitter: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'twitter_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } }
+        }
+      }))
+    }));
+
+    const { createLiveReadModel } = await import('../src/runtime/live_read_model');
+    const readModel = createLiveReadModel(60_000);
+
+    const dailyPromise = readModel.startRefresh('daily');
+    await dailyStarted;
+
+    expect(readModel.getRefreshMeta().refreshing).toEqual({
+      hourly: false,
+      daily: true,
+    });
+
+    const hourlyPromise = readModel.startRefresh('hourly');
+    await hourlyStarted;
+
+    expect(hourlyCalls).toBe(1);
+    expect(readModel.getRefreshMeta().refreshing).toEqual({
+      hourly: true,
+      daily: true,
+    });
+
+    releaseDaily?.();
+
+    await Promise.all([dailyPromise, hourlyPromise]);
+
+    expect(readModel.getRefreshMeta().refreshing).toEqual({
+      hourly: false,
+      daily: false,
+    });
+  });
+
   it('preserves daily connector error state across a later hourly-only refresh', async () => {
     let dailyCalls = 0;
 

@@ -297,8 +297,9 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getAiHealth: readModel.getAiHealth,
   getRefreshMeta: readModel.getRefreshMeta,
   triggerRefresh: async (cadence) => {
+    const refreshPromise = readModel.startRefresh(cadence);
     stateHub.pushRefreshMeta();
-    await readModel.startRefresh(cadence);
+    await refreshPromise;
     void stateHub.broadcastAll();
 
     // Entity extraction: run after refresh if both entityStore and modelRouter are available
@@ -474,6 +475,46 @@ readModel.setOnRefreshComplete(() => {
   stateHub.pushRefreshMeta();
 });
 
+const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+const triggerRefreshCadence = (cadence: 'hourly' | 'daily', source: 'startup' | 'periodic') => {
+  const refreshPromise = readModel.startRefresh(cadence);
+  stateHub.pushRefreshMeta();
+  void refreshPromise.then(() => stateHub.broadcastAll()).catch((err) => {
+    console.error(`${source} ${cadence} refresh failed:`, err);
+  });
+  return refreshPromise;
+};
+
+const scheduleDueRefreshes = async ({
+  hourlyLastRunAt,
+  dailyLastRunAt,
+  hourlyIntervalMs,
+}: {
+  hourlyLastRunAt: number;
+  dailyLastRunAt: number;
+  hourlyIntervalMs: number;
+}, source: 'startup' | 'periodic'): Promise<void> => {
+  const now = Date.now();
+  const hourlyDue = hourlyLastRunAt === 0 || now - hourlyLastRunAt > hourlyIntervalMs;
+  const dailyDue = dailyLastRunAt === 0 || now - dailyLastRunAt > DAILY_INTERVAL_MS;
+  const started: Promise<unknown>[] = [];
+
+  if (hourlyDue) {
+    started.push(triggerRefreshCadence('hourly', source));
+  }
+  if (dailyDue) {
+    started.push(triggerRefreshCadence('daily', source));
+  }
+
+  if (started.length === 0) {
+    await stateHub.broadcastAll();
+    return;
+  }
+
+  await Promise.allSettled(started);
+};
+
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -575,11 +616,11 @@ app
     // Only refresh on startup if data is actually stale (avoids re-ingesting on every restart)
     void (async () => {
       const state = await readModel.peekState();
-      const isStale = state.lastHourlyRunAt === 0 || Date.now() - state.lastHourlyRunAt > runtimeEnv.agentIntervalMs;
-      if (isStale) {
-        await readModel.startRefresh();
-      }
-      stateHub.broadcastAll();
+      await scheduleDueRefreshes({
+        hourlyLastRunAt: state.lastHourlyRunAt,
+        dailyLastRunAt: state.lastDailyRunAt,
+        hourlyIntervalMs: runtimeEnv.agentIntervalMs,
+      }, 'startup');
     })().catch(() => {});
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
@@ -598,10 +639,14 @@ app
 
     // Periodic connector refresh (was driven by client polling before WebSocket migration)
     refreshTimer = setInterval(() => {
-      stateHub.pushRefreshMeta();
-      void readModel.startRefresh().then(() => stateHub.broadcastAll()).catch((err) => {
-        console.error('periodic refresh failed:', err);
-      });
+      const meta = readModel.getRefreshMeta();
+      const hourlyLastRunAt = meta.last_hourly_run ? new Date(meta.last_hourly_run).getTime() : 0;
+      const dailyLastRunAt = meta.last_daily_run ? new Date(meta.last_daily_run).getTime() : 0;
+      void scheduleDueRefreshes({
+        hourlyLastRunAt,
+        dailyLastRunAt,
+        hourlyIntervalMs: runtimeEnv.agentIntervalMs,
+      }, 'periodic');
     }, runtimeEnv.agentIntervalMs);
 
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);

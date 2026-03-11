@@ -171,7 +171,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const group = connectors.filter((c) => c.cadence === cadence);
           if (group.length === 0) return null;
           const countdown = cadence === 'hourly' ? hourlyCountdown : dailyCountdown;
-          const isRefreshing = refreshMeta?.refreshing === cadence;
+          const isRefreshing = refreshMeta?.refreshing?.[cadence] === true;
           return (
             <div key={cadence} className="sidebar-cadence-group">
               <div className="sidebar-cadence-header">

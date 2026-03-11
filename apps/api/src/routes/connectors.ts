@@ -26,7 +26,13 @@ export const registerConnectorRoute = (
 
   app.get('/v1/connectors/refresh-meta', async () => {
     if (!deps.getRefreshMeta) {
-      return { last_hourly_run: null, last_daily_run: null, hourly_interval_ms: 3600000, daily_interval_ms: 86400000, refreshing: null };
+      return {
+        last_hourly_run: null,
+        last_daily_run: null,
+        hourly_interval_ms: 3600000,
+        daily_interval_ms: 86400000,
+        refreshing: { hourly: false, daily: false }
+      };
     }
     return deps.getRefreshMeta();
   });

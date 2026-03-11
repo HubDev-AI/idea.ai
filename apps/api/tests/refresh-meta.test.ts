@@ -10,7 +10,10 @@ describe('refresh metadata', () => {
       last_daily_run: null,
       hourly_interval_ms: 60_000,
       daily_interval_ms: 24 * 60 * 60 * 1000,
-      refreshing: null,
+      refreshing: {
+        hourly: false,
+        daily: false,
+      },
     });
 
     await model.close();

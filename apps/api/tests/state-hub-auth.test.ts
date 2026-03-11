@@ -10,7 +10,13 @@ const makeStubDeps = (): StateHubDeps => ({
   getAiHealth: async () => ({ providers: [], refreshed_at: null }),
   getAgentStatus: () => ({ isRunning: false, intervalMs: 0, activeRunId: null, lastRun: null, lastAttempt: null, investigateNext: null }),
   getInfraStatus: async () => ({ postgres: 'ok' as const, ollama: 'ok' as const, embeddings: { total: 0, withEmbedding: 0, fallbackModel: 'none' } }),
-  getRefreshMeta: () => ({ last_hourly_run: null, last_daily_run: null, hourly_interval_ms: 3600000, daily_interval_ms: 86400000, refreshing: null }),
+  getRefreshMeta: () => ({
+    last_hourly_run: null,
+    last_daily_run: null,
+    hourly_interval_ms: 3600000,
+    daily_interval_ms: 86400000,
+    refreshing: { hourly: false, daily: false }
+  }),
   getSignalCounts: async () => ({}),
   getSignalCount: async () => 0,
   getLatestSignalAt: async () => null,

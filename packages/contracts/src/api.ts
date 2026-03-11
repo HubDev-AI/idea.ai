@@ -49,7 +49,10 @@ export type RefreshMeta = {
   last_daily_run: string | null;
   hourly_interval_ms: number;
   daily_interval_ms: number;
-  refreshing: 'hourly' | 'daily' | null;
+  refreshing: {
+    hourly: boolean;
+    daily: boolean;
+  };
 };
 
 // -- Execution logs ------------------------------------------------ */
@@ -126,6 +129,7 @@ export type ThesisListItem = {
   problemStatement: string;
   sourceCount: number;
   estimatedScope: 'small' | 'medium' | 'large' | null;
+  firstSeenAt: string;
   lastSeenAt: string;
   hasDeepDive: boolean;
   profileId?: string;
