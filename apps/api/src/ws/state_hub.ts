@@ -47,7 +47,7 @@ export class StateHub {
     this.state = {
       connectors: [],
       aiHealth: null,
-      agentStatus: { isRunning: false, intervalMs: 0, lastRun: null, investigateNext: null },
+      agentStatus: { isRunning: false, intervalMs: 0, activeRunId: null, lastRun: null, lastAttempt: null, investigateNext: null },
       infraStatus: null,
       refreshMeta: { last_hourly_run: null, last_daily_run: null, hourly_interval_ms: 3600000, daily_interval_ms: 86400000, refreshing: null },
       signalCounts: {},

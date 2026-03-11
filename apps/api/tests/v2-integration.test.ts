@@ -387,18 +387,14 @@ describe('V2 integration', () => {
     expect(candidate!.confidence).toBe(45);
   });
 
-  it('research agent returns empty result when both providers fail', async () => {
+  it('research agent throws when both providers fail', async () => {
     const store = new InMemoryThesisStore();
 
-    const result = await runResearchAgent({
+    await expect(runResearchAgent({
       thesisStore: store,
       runClaude: vi.fn().mockRejectedValue(new Error('claude down')),
       runCodex: vi.fn().mockRejectedValue(new Error('codex down'))
-    });
-
-    expect(result.thesesUpdated).toBe(0);
-    expect(result.newCandidates).toBe(0);
-    expect(result.alerts).toHaveLength(0);
+    })).rejects.toThrow(/No AI provider returned a usable response/i);
   });
 
   it('thesis API returns theses from store', async () => {

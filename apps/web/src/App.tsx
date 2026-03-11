@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type AgentStatusRecord,
   type ExecutionLogRecord,
   fetchProfiles,
   fetchSignals,
@@ -74,10 +75,13 @@ const App = () => {
   const ws = useSocket();
   const [signals, setSignals] = useState<SignalRecord[]>([]);
   const [theses, setTheses] = useState<ThesisListItem[]>([]);
+  const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentRunResult, setAgentRunResult] = useState<string | null>(null);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const prevRunningRef = useRef(false);
+  const manualRunRequestedRef = useRef(false);
+  const pendingManualRunIdRef = useRef<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sortField, setSortField] = useState<SortField>('newest');
@@ -179,19 +183,52 @@ const App = () => {
     if (ws.thesisStats.total > 0) setThesisStats(ws.thesisStats);
   }, [ws.thesisStats]);
 
+  const summarizeAgentRun = useCallback((status: AgentStatusRecord): string | null => {
+    if (status.lastAttempt?.status === 'failed') {
+      return 'failed';
+    }
+    if (status.lastAttempt?.status === 'completed' && status.lastRun) {
+      return `${status.lastRun.thesesUpdated} updated, ${status.lastRun.newCandidates} new`;
+    }
+    return null;
+  }, []);
+
   // Track agent running state from WebSocket
   useEffect(() => {
     if (!ws.agentStatus) return;
-    const wasRunning = prevRunningRef.current;
     const nowRunning = ws.agentStatus.isRunning;
+    const pendingRunId = pendingManualRunIdRef.current;
+    const waitingForManualOutcome = manualRunRequestedRef.current;
+
+    if (waitingForManualOutcome && !nowRunning) {
+      if (pendingRunId === null) return;
+      const matchesPendingRun =
+        ws.agentStatus.activeRunId === pendingRunId ||
+        ws.agentStatus.lastAttempt?.runId === pendingRunId;
+      if (!matchesPendingRun) return;
+    }
+
+    const wasRunning = prevRunningRef.current;
+    setAgentStatus(ws.agentStatus);
     prevRunningRef.current = nowRunning;
     setAgentRunning(nowRunning);
 
-    if (wasRunning && !nowRunning && ws.agentStatus.lastRun) {
-      const lr = ws.agentStatus.lastRun;
-      setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
+    if (nowRunning) {
+      setAgentRunResult(null);
+      return;
     }
-  }, [ws.agentStatus]);
+
+    if (waitingForManualOutcome && pendingRunId !== null && ws.agentStatus.lastAttempt?.runId === pendingRunId) {
+      manualRunRequestedRef.current = false;
+      pendingManualRunIdRef.current = null;
+      setAgentRunResult(summarizeAgentRun(ws.agentStatus));
+      return;
+    }
+
+    if (wasRunning && !nowRunning) {
+      setAgentRunResult(summarizeAgentRun(ws.agentStatus));
+    }
+  }, [summarizeAgentRun, ws.agentStatus]);
 
   // Connection lost warning
   useEffect(() => {
@@ -395,14 +432,17 @@ const App = () => {
   }, [showToast]);
 
   const handleRunAgent = async () => {
+    manualRunRequestedRef.current = true;
+    pendingManualRunIdRef.current = null;
     setAgentRunning(true);
     setAgentRunResult(null);
     setLogDrawerOpen(true);
     try {
-      await triggerAgentRun();
-      // 202 accepted — agent runs in background.
-      // Polling via GET /v1/agent/status handles running→done transition.
+      const run = await triggerAgentRun();
+      pendingManualRunIdRef.current = run.runId;
     } catch {
+      manualRunRequestedRef.current = false;
+      pendingManualRunIdRef.current = null;
       setAgentRunning(false);
       setAgentRunResult('failed');
     }
@@ -413,7 +453,7 @@ const App = () => {
       <Sidebar
         connectors={ws.connectors}
         aiHealth={ws.aiHealth}
-        agentStatus={ws.agentStatus}
+        agentStatus={agentStatus ?? ws.agentStatus}
         infraStatus={ws.infraStatus}
         thesisStats={thesisStats}
         signalCount={ws.signalCount || Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}

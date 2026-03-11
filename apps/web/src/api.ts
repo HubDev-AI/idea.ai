@@ -1,4 +1,5 @@
 import type {
+  AgentRunAccepted,
   AgentRunResult,
   AgentStatusRecord,
   AiHealthRecord,
@@ -28,6 +29,7 @@ export type {
   ThesisListItem,
   ThesisPage,
   ThesisStats,
+  AgentRunAccepted,
   AgentStatusRecord,
   InfraStatusRecord,
   AgentRunResult,
@@ -190,13 +192,13 @@ export const fetchAgentStatus = async (): Promise<AgentStatusRecord> => {
   return response.json() as Promise<AgentStatusRecord>;
 };
 
-export const triggerAgentRun = async (): Promise<AgentRunResult> => {
+export const triggerAgentRun = async (): Promise<AgentRunAccepted> => {
   const response = await apiFetch('/v1/agent/run', {
     method: 'POST',
     signal: AbortSignal.timeout(300_000)
   });
   if (!response.ok) throw new Error('Failed to trigger agent run');
-  return response.json() as Promise<AgentRunResult>;
+  return response.json() as Promise<AgentRunAccepted>;
 };
 
 export const fetchSignalCounts = async (): Promise<Record<string, number>> => {

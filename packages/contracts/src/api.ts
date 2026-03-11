@@ -211,9 +211,16 @@ export type AgentRunResult = {
   provider: string | null;
 };
 
+export type AgentRunAccepted = {
+  accepted: boolean;
+  runId: string;
+  alreadyRunning: boolean;
+};
+
 export type AgentStatusRecord = {
   isRunning: boolean;
   intervalMs: number;
+  activeRunId: string | null;
   lastRun: {
     timestamp: string;
     thesesUpdated: number;
@@ -222,6 +229,13 @@ export type AgentStatusRecord = {
     deepDivesPerformed: number;
     journalEntriesWritten: number;
     provider: string | null;
+  } | null;
+  lastAttempt: {
+    runId: string;
+    timestamp: string;
+    status: 'running' | 'completed' | 'failed';
+    provider: string | null;
+    errorMessage: string | null;
   } | null;
   investigateNext: string | null;
 };

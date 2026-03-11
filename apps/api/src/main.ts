@@ -3,12 +3,13 @@ import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import { embedText } from '@idea/ai-runtime/src/ollama';
 import { runOllamaPrompt } from '@idea/ai-runtime/src/ollama_prompt';
 import { createRouter } from '@idea/ai-runtime/src/router';
-import type { AgentStatusRecord } from '@idea/contracts/src/api';
+import type { AgentRunAccepted, AgentStatusRecord } from '@idea/contracts/src/api';
 import type { ClientToServerEvents, ServerToClientEvents } from '@idea/contracts/src/ws';
 import pg from 'pg';
 import { Server as SocketIOServer } from 'socket.io';
 import { loadEnvFile } from './config/dotenv';
 import { loadRuntimeEnv } from './config/env';
+import { aggregateAgentProfileRuns } from './jobs/agent_run_aggregation';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { extractEntities } from './jobs/entity_extractor';
 import { snapshotPredictions } from './jobs/backtest_snapshot';
@@ -96,8 +97,41 @@ const modelRouter = startupEnv.modelRoutingEnabled
     })
   : null;
 
-let agentStatus: AgentStatusRecord = { isRunning: false, intervalMs: startupEnv.agentIntervalMs, lastRun: null, investigateNext: null };
+const toLastRun = (row: Record<string, any> | undefined): AgentStatusRecord['lastRun'] => {
+  if (!row) return null;
+  return {
+    timestamp: row.started_at,
+    thesesUpdated: row.theses_updated,
+    newCandidates: row.new_candidates,
+    clustersAnalyzed: row.clusters_analyzed,
+    deepDivesPerformed: row.deep_dives_performed,
+    journalEntriesWritten: row.journal_entries_written,
+    provider: row.provider ?? null
+  };
+};
+
+const toLastAttempt = (row: Record<string, any> | undefined): AgentStatusRecord['lastAttempt'] => {
+  if (!row) return null;
+  return {
+    runId: row.run_id,
+    timestamp: row.finished_at ?? row.started_at,
+    status: row.status,
+    provider: row.provider ?? null,
+    errorMessage: row.error_message ?? null
+  };
+};
+
+let agentStatus: AgentStatusRecord = {
+  isRunning: false,
+  intervalMs: startupEnv.agentIntervalMs,
+  activeRunId: null,
+  lastRun: null,
+  lastAttempt: null,
+  investigateNext: null
+};
 let agentRunInFlight: Promise<AgentRunResult> | null = null;
+let agentRunInFlightId: string | null = null;
+let stateHub: StateHub | null = null;
 
 // Load last run status from DB on startup (survives restarts)
 try {
@@ -106,43 +140,54 @@ try {
     await pool.query(
       `UPDATE agent_runs SET status = 'failed', finished_at = now(), error_message = 'interrupted by server restart' WHERE status = 'running'`
     );
-    // Load last completed run for display
-    const { rows } = await pool.query(
-      `SELECT * FROM agent_runs WHERE status = 'completed' ORDER BY started_at DESC LIMIT 1`
-    );
-    const row = rows[0] as any;
-    if (row) {
+    const [{ rows: completedRows }, { rows: latestRows }] = await Promise.all([
+      pool.query(`SELECT * FROM agent_runs WHERE status = 'completed' ORDER BY started_at DESC LIMIT 1`),
+      pool.query(`SELECT * FROM agent_runs ORDER BY started_at DESC LIMIT 1`)
+    ]);
+    const completedRow = completedRows[0] as any;
+    const latestRow = latestRows[0] as any;
+    if (completedRow || latestRow) {
       agentStatus = {
         isRunning: false,
         intervalMs: startupEnv.agentIntervalMs,
-        lastRun: {
-          timestamp: row.started_at,
-          thesesUpdated: row.theses_updated,
-          newCandidates: row.new_candidates,
-          clustersAnalyzed: row.clusters_analyzed,
-          deepDivesPerformed: row.deep_dives_performed,
-          journalEntriesWritten: row.journal_entries_written,
-          provider: row.provider ?? null
-        },
-        investigateNext: row.investigate_next
+        activeRunId: null,
+        lastRun: toLastRun(completedRow),
+        lastAttempt: toLastAttempt(latestRow),
+        investigateNext: latestRow?.investigate_next ?? completedRow?.investigate_next ?? null
       };
     }
   }
 } catch { /* DB may not have the table yet */ }
 
-const executeAgentRun = async (): Promise<AgentRunResult> => {
-  if (agentRunInFlight) return agentRunInFlight;
+const startAgentRun = (): AgentRunAccepted => {
+  if (agentRunInFlight && agentRunInFlightId) {
+    return { accepted: true, runId: agentRunInFlightId, alreadyRunning: true };
+  }
 
   const runId = `agent-${Date.now()}`;
+  const startedAt = new Date().toISOString();
+  agentRunInFlightId = runId;
   const logger = createExecutionLogger({ runId });
   readModel.registerRunId(runId);
 
-  agentRunInFlight = (async () => {
-    await agentRunStore?.create(runId);
-    await logger.info('agent_runner', 'run started', { run_id: runId });
-    stateHub.emitAgentStatus({ ...agentStatus, isRunning: true });
+  agentStatus = {
+    ...agentStatus,
+    isRunning: true,
+    activeRunId: runId,
+    lastAttempt: {
+      runId,
+      timestamp: startedAt,
+      status: 'running',
+      provider: null,
+      errorMessage: null
+    }
+  };
+  stateHub?.emitAgentStatus(agentStatus);
 
+  agentRunInFlight = (async () => {
     try {
+      await agentRunStore?.create(runId);
+      await logger.info('agent_runner', 'run started', { run_id: runId });
       const agentEnv = loadRuntimeEnv(process.env);
       const profiles = loadProfiles();
 
@@ -178,32 +223,10 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         )
       );
 
-      // Aggregate results across all profiles
-      const aggregated: AgentRunResult = {
-        thesesUpdated: 0,
-        newCandidates: 0,
-        alerts: [],
-        investigateNext: '',
-        journalEntriesWritten: 0,
-        clustersAnalyzed: 0,
-        deepDivesPerformed: 0,
-        debatesPerformed: 0,
-        provider: null,
-      };
-
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
         const p = profiles[i];
         if (r.status === 'fulfilled') {
-          aggregated.thesesUpdated += r.value.thesesUpdated;
-          aggregated.newCandidates += r.value.newCandidates;
-          aggregated.alerts.push(...r.value.alerts);
-          aggregated.journalEntriesWritten += r.value.journalEntriesWritten;
-          aggregated.clustersAnalyzed += r.value.clustersAnalyzed;
-          aggregated.deepDivesPerformed += r.value.deepDivesPerformed;
-          aggregated.debatesPerformed = (aggregated.debatesPerformed ?? 0) + (r.value.debatesPerformed ?? 0);
-          if (!aggregated.provider) aggregated.provider = r.value.provider;
-          if (!aggregated.investigateNext) aggregated.investigateNext = r.value.investigateNext;
           await logger.info('agent_runner', `profile ${p.id} completed`, {
             theses_updated: r.value.thesesUpdated,
             new_candidates: r.value.newCandidates,
@@ -215,6 +238,8 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         }
       }
 
+      const { aggregated, failedProfiles } = aggregateAgentProfileRuns(profiles, results);
+
       await agentRunStore?.complete(runId, aggregated);
       await logger.info('agent_runner', 'run complete', {
         theses_updated: aggregated.thesesUpdated,
@@ -223,14 +248,16 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         deep_dives: aggregated.deepDivesPerformed,
         journal_entries: aggregated.journalEntriesWritten,
         profiles_succeeded: results.filter(r => r.status === 'fulfilled').length,
-        profiles_failed: results.filter(r => r.status === 'rejected').length,
+        profiles_failed: failedProfiles.length,
       });
 
+      const finishedAt = new Date().toISOString();
       agentStatus = {
         isRunning: false,
         intervalMs: startupEnv.agentIntervalMs,
+        activeRunId: null,
         lastRun: {
-          timestamp: new Date().toISOString(),
+          timestamp: finishedAt,
           thesesUpdated: aggregated.thesesUpdated,
           newCandidates: aggregated.newCandidates,
           clustersAnalyzed: aggregated.clustersAnalyzed,
@@ -238,24 +265,51 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
           journalEntriesWritten: aggregated.journalEntriesWritten,
           provider: aggregated.provider,
         },
+        lastAttempt: {
+          runId,
+          timestamp: finishedAt,
+          status: 'completed',
+          provider: aggregated.provider,
+          errorMessage: null
+        },
         investigateNext: aggregated.investigateNext || null,
       };
-      // Push updates via WebSocket after agent run
-      void stateHub.broadcastAll();
-      stateHub.emitThesesUpdated();
+      stateHub?.emitAgentStatus(agentStatus);
+      void stateHub?.broadcastAll();
+      stateHub?.emitThesesUpdated();
       return aggregated;
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       await agentRunStore?.fail(runId, err);
       await logger.error('agent_runner', 'run failed', {
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage
       });
+      agentStatus = {
+        ...agentStatus,
+        isRunning: false,
+        activeRunId: null,
+        lastAttempt: {
+          runId,
+          timestamp: new Date().toISOString(),
+          status: 'failed',
+          provider: null,
+          errorMessage
+        }
+      };
+      stateHub?.emitAgentStatus(agentStatus);
       throw err;
     }
   })().finally(() => {
     agentRunInFlight = null;
+    agentRunInFlightId = null;
   });
 
-  return agentRunInFlight;
+  return { accepted: true, runId, alreadyRunning: false };
+};
+
+const executeAgentRun = async (): Promise<AgentRunResult> => {
+  startAgentRun();
+  return agentRunInFlight!;
 };
 
 const ollamaBaseUrl = startupEnv.ollamaBaseUrl;
@@ -309,8 +363,12 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getRouterStats: () => modelRouter
     ? { stats: modelRouter.getStats(), enabled: startupEnv.modelRoutingEnabled }
     : null,
-  getAgentStatus: () => ({ ...agentStatus, isRunning: agentRunInFlight !== null }),
-  triggerAgentRun: executeAgentRun,
+  getAgentStatus: () => ({
+    ...agentStatus,
+    isRunning: agentRunInFlight !== null,
+    activeRunId: agentRunInFlight !== null ? agentRunInFlightId : null
+  }),
+  triggerAgentRun: startAgentRun,
   agentRunStore,
   corsOrigins,
   pool: pool ?? undefined,
@@ -385,10 +443,14 @@ const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(app.se
 });
 
 const infraCheckDeps = serverDeps.infraStatusDeps!;
-const stateHub = new StateHub(io, {
+stateHub = new StateHub(io, {
   getConnectors: readModel.listConnectors,
   getAiHealth: readModel.getAiHealth,
-  getAgentStatus: () => ({ ...agentStatus, isRunning: agentRunInFlight !== null }),
+  getAgentStatus: () => ({
+    ...agentStatus,
+    isRunning: agentRunInFlight !== null,
+    activeRunId: agentRunInFlight !== null ? agentRunInFlightId : null
+  }),
   getInfraStatus: async () => {
     const [pgResult, ollamaResult, embStats, diskResult] = await Promise.allSettled([
       infraCheckDeps.checkPostgres(),
