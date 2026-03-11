@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { DeepDiveGeneratorDeps } from '../jobs/deep_dive_generator';
+import type { ThesisDraft } from '../jobs/thesis_synthesizer';
 import { generateDeepDive } from '../jobs/deep_dive_generator';
 import { buildThesisCandidates } from '../jobs/thesis_synthesizer';
 import type { DeepDiveStore } from '../runtime/deep_dive_store';
@@ -17,6 +18,46 @@ export type ThesesRouteDeps = {
 };
 
 const inFlightDives = new Map<string, Promise<unknown>>();
+
+const draftToListItem = (draft: ThesisDraft) => ({
+  canonicalKey: draft.canonicalKey,
+  title: draft.title,
+  confidence: draft.confidence,
+  status: draft.status,
+  evidenceCount: draft.evidenceCount,
+  problemStatement: draft.problemStatement,
+  sourceCount: draft.evidenceCount,
+  estimatedScope: draft.estimatedScope ?? null,
+  lastSeenAt: draft.latestObservedAt,
+  hasDeepDive: false,
+  profileId: draft.profileId,
+  label: draft.label ?? null,
+  posteriorConfidence: draft.posteriorConfidence ?? draft.confidence,
+  velocity: draft.velocity ?? undefined,
+  corroborationScore: draft.corroborationScore ?? undefined,
+  debateVerdict: null
+});
+
+const sortDrafts = (drafts: ThesisDraft[], sort: 'score' | 'latest' | 'evidence' | 'newest'): ThesisDraft[] => {
+  const sorted = drafts.slice();
+
+  switch (sort) {
+    case 'latest':
+      sorted.sort((a, b) => new Date(b.latestObservedAt).getTime() - new Date(a.latestObservedAt).getTime());
+      break;
+    case 'evidence':
+      sorted.sort((a, b) => b.evidenceCount - a.evidenceCount);
+      break;
+    case 'newest':
+      sorted.sort((a, b) => new Date(b.latestObservedAt).getTime() - new Date(a.latestObservedAt).getTime());
+      break;
+    default:
+      sorted.sort((a, b) => b.confidence - a.confidence);
+      break;
+  }
+
+  return sorted;
+};
 
 export const registerThesesRoute = (
   app: FastifyInstance,
@@ -47,8 +88,44 @@ export const registerThesesRoute = (
       });
     }
 
-    // Fallback: return flat list for InMemoryThesisStore
-    return deps.store.list(query.status ? { status: query.status as 'watching' } : undefined);
+    // Fallback: mirror paginated semantics when using the in-memory store
+    const page = Math.max(1, Number(query.page) || 1);
+    const pageSize = Math.min(50, Math.max(1, Number(query.page_size) || 10));
+    const profile = query.profile || 'all';
+    const drafts = await deps.store.list(query.status ? { status: query.status as ThesisDraft['status'] } : undefined);
+    const filtered = drafts.filter((draft) => {
+      if (profile !== 'all' && (draft.profileId ?? 'consumer') !== profile) {
+        return false;
+      }
+      if (query.label && (draft.label ?? null) !== query.label) {
+        return false;
+      }
+      return true;
+    });
+    const sorted = sortDrafts(filtered, sort);
+    const totalItems = sorted.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const safePage = Math.min(page, totalPages);
+    const offset = (safePage - 1) * pageSize;
+    const items = sorted.slice(offset, offset + pageSize).map(draftToListItem);
+    const stats = {
+      total: filtered.length,
+      promoted: filtered.filter((draft) => draft.status === 'promoted').length,
+      watching: filtered.filter((draft) => draft.status === 'watching').length,
+      totalEvidence: filtered.reduce((sum, draft) => sum + draft.evidenceCount, 0),
+      totalSources: filtered.reduce((sum, draft) => sum + draft.evidenceCount, 0)
+    };
+
+    return {
+      items,
+      page: safePage,
+      page_size: pageSize,
+      total_items: totalItems,
+      total_pages: totalPages,
+      has_next: safePage < totalPages,
+      has_prev: safePage > 1,
+      stats
+    };
   });
 
   app.get('/v1/theses/:key', {

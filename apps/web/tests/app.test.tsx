@@ -6,6 +6,10 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 
+const apiMockState = vi.hoisted(() => ({
+  baseUrl: ''
+}));
+
 const mockSignals = [
   {
     idea: 'SOC2 prep copilot',
@@ -146,6 +150,7 @@ const mockSnapshot = {
 
 // Mock socket.io-client
 let socketListeners: Map<string, Set<(...args: any[]) => void>> | null = null;
+const ioCalls: Array<{ url: unknown; options: unknown }> = [];
 
 const emitSocketEvent = (event: string, payload?: unknown) => {
   for (const handler of socketListeners?.get(event) ?? []) {
@@ -177,8 +182,19 @@ const createMockSocket = () => {
 };
 
 vi.mock('socket.io-client', () => ({
-  io: () => createMockSocket(),
+  io: (url?: unknown, options?: unknown) => {
+    ioCalls.push({ url, options });
+    return createMockSocket();
+  },
 }));
+
+vi.mock('../src/api', async () => {
+  const actual = await vi.importActual<typeof import('../src/api')>('../src/api');
+  return {
+    ...actual,
+    resolveApiBaseUrl: () => apiMockState.baseUrl,
+  };
+});
 
 const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolean }) =>
   vi.fn((input: RequestInfo | URL) => {
@@ -259,7 +275,10 @@ describe('web app', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     socketListeners = null;
+    ioCalls.length = 0;
+    apiMockState.baseUrl = '';
   });
 
   it('renders feed rows with idea, score, source/snippet, and next action', async () => {
@@ -402,5 +421,21 @@ describe('web app', () => {
     // Wait for connection — multiple LIVE indicators (sidebar + log drawer)
     const liveElements = await screen.findAllByText('LIVE');
     expect(liveElements.length).toBeGreaterThan(0);
+  });
+
+  it('connects Socket.IO to the configured API origin over websocket-only transport', async () => {
+    apiMockState.baseUrl = 'https://api.idea.test';
+
+    render(<App />);
+
+    await screen.findByText('SOC2 prep copilot');
+
+    expect(ioCalls[0]).toEqual({
+      url: 'https://api.idea.test',
+      options: expect.objectContaining({
+        path: '/socket.io/',
+        transports: ['websocket'],
+      })
+    });
   });
 });

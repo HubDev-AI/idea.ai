@@ -65,6 +65,27 @@ const sanitizeFeedRecord = (record: FeedRecord): FeedRecord => ({
   updated_at: sanitizeText(record.updated_at)
 });
 
+const sortFeedRecords = (records: FeedRecord[], sort: SignalSortField | undefined): FeedRecord[] => {
+  const sorted = records.slice();
+
+  switch (sort) {
+    case 'newest':
+      sorted.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      break;
+    case 'virality':
+      sorted.sort((a, b) => (b.virality ?? 0) - (a.virality ?? 0));
+      break;
+    case 'demand':
+      sorted.sort((a, b) => (b.demand ?? 0) - (a.demand ?? 0));
+      break;
+    default:
+      sorted.sort((a, b) => b.score - a.score);
+      break;
+  }
+
+  return sorted;
+};
+
 const signalToFeedRecord = (row: MemorySignalRow): FeedRecord => ({
   idea: row.canonical_text,
   score: row.blended,
@@ -160,14 +181,30 @@ export const registerFeedRoute = (
 
     // Fallback: in-memory snapshot with client-side pagination
     const allSignals = await deps.listSignals();
+    const minUpdatedAt = Date.now() - (WINDOW_MAP[windowParam ?? '7d'] ?? 7) * 24 * 60 * 60 * 1000;
+    const filteredSignals = sortFeedRecords(
+      allSignals.filter((signal) => {
+        if (sourceParam !== undefined && signal.top_source !== sourceParam) {
+          return false;
+        }
+
+        const updatedAt = new Date(signal.updated_at).getTime();
+        if (Number.isFinite(updatedAt) && updatedAt < minUpdatedAt) {
+          return false;
+        }
+
+        return true;
+      }),
+      sortParam
+    );
     const requestedPageSize = parsePositiveInt(request.query.page_size, 20);
     const pageSize = Math.min(MAX_PAGE_SIZE, requestedPageSize);
-    const totalItems = allSignals.length;
+    const totalItems = filteredSignals.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
     const requestedPage = parsePositiveInt(request.query.page, 1);
     const page = Math.min(requestedPage, totalPages);
     const offset = (page - 1) * pageSize;
-    const items = allSignals.slice(offset, offset + pageSize).map((record) => sanitizeFeedRecord(record));
+    const items = filteredSignals.slice(offset, offset + pageSize).map((record) => sanitizeFeedRecord(record));
 
     const payload: PaginatedFeedResponse = {
       items,

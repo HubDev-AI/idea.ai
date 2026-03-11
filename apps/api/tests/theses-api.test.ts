@@ -18,7 +18,22 @@ describe('GET /v1/theses', () => {
     const response = await app.inject({ method: 'GET', url: '/v1/theses' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([]);
+    expect(response.json()).toEqual({
+      items: [],
+      page: 1,
+      page_size: 10,
+      total_items: 0,
+      total_pages: 1,
+      has_next: false,
+      has_prev: false,
+      stats: {
+        total: 0,
+        promoted: 0,
+        watching: 0,
+        totalEvidence: 0,
+        totalSources: 0,
+      }
+    });
   });
 
   it('returns theses sorted by confidence', async () => {
@@ -67,8 +82,9 @@ describe('GET /v1/theses', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body).toHaveLength(2);
-    expect(body[0].canonicalKey).toBe('high');
+    expect(body.items).toHaveLength(2);
+    expect(body.items[0].canonicalKey).toBe('high');
+    expect(body.total_items).toBe(2);
   });
 
   it('does not register thesis route when no store provided', async () => {

@@ -1088,8 +1088,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     listSignals: async (): Promise<FeedRecord[]> => (await ensureFresh()).signals,
     listConnectors: async (): Promise<ConnectorStatusRecord[]> => (await ensureFresh()).connectors,
     getRefreshMeta: () => ({
-      last_hourly_run: new Date(snapshot.lastHourlyRunAt > 0 ? snapshot.lastHourlyRunAt : startedAt).toISOString(),
-      last_daily_run: new Date(snapshot.lastDailyRunAt > 0 ? snapshot.lastDailyRunAt : startedAt).toISOString(),
+      last_hourly_run: snapshot.lastHourlyRunAt > 0 ? new Date(snapshot.lastHourlyRunAt).toISOString() : null,
+      last_daily_run: snapshot.lastDailyRunAt > 0 ? new Date(snapshot.lastDailyRunAt).toISOString() : null,
       hourly_interval_ms: refreshMs,
       daily_interval_ms: DAILY_CADENCE_MS,
       refreshing: refreshingCadence,

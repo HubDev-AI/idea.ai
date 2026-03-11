@@ -10,6 +10,7 @@ import type {
 import type { AppSnapshot, ClientToServerEvents, ServerToClientEvents } from '@idea/contracts/src/ws';
 import { useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
+import { resolveApiBaseUrl } from './api';
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -51,12 +52,15 @@ export const useSocket = (): SocketState => {
     const apiKey =
       (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
         ?.VITE_API_KEY ?? '';
-
-    const socket: TypedSocket = io({
+    const socketOptions = {
       path: '/socket.io/',
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],
       ...(apiKey ? { auth: { key: apiKey } } : {}),
-    });
+    };
+    const apiBaseUrl = resolveApiBaseUrl();
+    const socket: TypedSocket = apiBaseUrl
+      ? io(apiBaseUrl, socketOptions)
+      : io(socketOptions);
     socketRef.current = socket;
 
     socket.on('connect', () => setConnected(true));
