@@ -56,6 +56,9 @@ type Snapshot = {
   lastDailyRunAt: number;
 };
 
+type RefreshCadence = 'hourly' | 'daily';
+type RefreshingState = Record<RefreshCadence, boolean>;
+
 const resolveProviderSetting = (env: NodeJS.ProcessEnv): 'claude' | 'codex' | 'both' => {
   const primary = (env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase();
   const fallback = (env.AI_FALLBACK ?? '').toLowerCase();
@@ -295,6 +298,11 @@ const mapByoStatus = (
 const connectorMap = (connectors: ConnectorStatusRecord[]): Map<string, ConnectorStatusRecord> =>
   new Map(connectors.map((connector) => [connector.name, connector] as const));
 
+const emptyRefreshingState = (): RefreshingState => ({
+  hourly: false,
+  daily: false,
+});
+
 const applyPersistedConnectorStates = (
   env: RuntimeEnv,
   persisted: ConnectorStateRow[],
@@ -323,12 +331,13 @@ const toConnectorStatus = (
   daily: OpenConnectorIngestionResult,
   byo: Awaited<ReturnType<typeof runByoConnectorIngestion>>,
   refreshedAtIso: string,
-  lastDailyRunAt: number,
+  lastRunAt: { hourly: number; daily: number },
   previousConnectors: ConnectorStatusRecord[]
 ): ConnectorStatusRecord[] => {
   const openStatuses = openStatusMap(hourly, daily);
   const previousByName = connectorMap(previousConnectors);
-  const dailyLastRunIso = lastDailyRunAt > 0 ? new Date(lastDailyRunAt).toISOString() : null;
+  const hourlyLastRunIso = lastRunAt.hourly > 0 ? new Date(lastRunAt.hourly).toISOString() : null;
+  const dailyLastRunIso = lastRunAt.daily > 0 ? new Date(lastRunAt.daily).toISOString() : null;
   const openRecords: ConnectorStatusRecord[] = OPEN_CONNECTORS.map((connector) => {
     const cadence = (OPEN_CONNECTOR_CADENCE[connector] as Cadence) ?? null;
     if (!isConnectorSelected(connector, env) || !isConnectorConfigured(connector, env)) {
@@ -346,7 +355,7 @@ const toConnectorStatus = (
       return {
         name: connector,
         status: previous.status,
-        last_run: previous.last_run ?? (cadence === 'daily' ? dailyLastRunIso : refreshedAtIso),
+        last_run: previous.last_run ?? (cadence === 'daily' ? dailyLastRunIso : hourlyLastRunIso),
         cadence
       };
     }
@@ -354,8 +363,8 @@ const toConnectorStatus = (
     const lastRun = currentStatus
       ? refreshedAtIso
       : cadence === 'daily'
-        ? (dailyLastRunIso ?? refreshedAtIso)
-        : refreshedAtIso;
+        ? dailyLastRunIso
+        : hourlyLastRunIso;
 
     return {
       name: connector,
@@ -465,8 +474,11 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
   let postgresSignalStore: PostgresSignalStore | null | undefined = opts?.persistentStore ?? undefined;
   let snapshotHydrated = false;
   let hydrationPromise: Promise<void> | null = null;
-  let refreshInFlight: Promise<Snapshot> | null = null;
-  let refreshingCadence: 'hourly' | 'daily' | null = null;
+  let refreshInFlight: Record<RefreshCadence, Promise<Snapshot> | null> = {
+    hourly: null,
+    daily: null,
+  };
+  let refreshingCadence: RefreshingState = emptyRefreshingState();
   let shutdownController = new AbortController();
   const sessionRunIds = new Set<string>();
   let aiHealth: AiHealthRecord = createAiHealthSnapshot({
@@ -579,7 +591,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     }
   };
 
-  const refresh = async (forceCadence?: 'hourly' | 'daily'): Promise<Snapshot> => {
+  const refresh = async (cadence: RefreshCadence): Promise<Snapshot> => {
     const env = loadRuntimeEnv(process.env);
     let activeWeights: WeightConfig | undefined;
     if (opts?.pool) {
@@ -604,17 +616,14 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     await hydrateRefreshState(env, logger);
 
     const persistentStore = await resolvePostgresSignalStore(env, logger);
-    const DAILY_CADENCE_MS = 24 * 60 * 60 * 1000;
-    const dailyDue = forceCadence === 'daily' || (!forceCadence && Date.now() - snapshot.lastDailyRunAt >= DAILY_CADENCE_MS);
-    refreshingCadence = dailyDue ? 'daily' : 'hourly';
-    const cadenceLabel = dailyDue ? 'daily_refresh' : 'hourly_refresh';
+    const cadenceLabel = cadence === 'daily' ? 'daily_refresh' : 'hourly_refresh';
 
     if (shutdownController.signal.aborted) {
       await logger.info(cadenceLabel, 'refresh aborted during shutdown');
       return snapshot;
     }
 
-    await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH START ===`, {
+    await logger.info(cadenceLabel, `=== ${cadence === 'daily' ? 'DAILY' : 'HOURLY'} REFRESH START ===`, {
       run_id: logger.runId
     });
 
@@ -624,19 +633,21 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       const emptyIngestion = { events: [] as RawEventInput[], statuses: [] as OpenConnectorIngestionResult['statuses'] } as OpenConnectorIngestionResult;
 
       const [hourly, daily, byo] = await Promise.all([
-        runOpenConnectorIngestionDetailed('hourly', {
-          enabledConnectors: enabledOpenConnectors('hourly', env),
-          logger
-        }),
-        dailyDue
+        cadence === 'hourly'
+          ? runOpenConnectorIngestionDetailed('hourly', {
+              enabledConnectors: enabledOpenConnectors('hourly', env),
+              logger
+            })
+          : Promise.resolve(emptyIngestion),
+        cadence === 'daily'
           ? runOpenConnectorIngestionDetailed('daily', {
               enabledConnectors: enabledOpenConnectors('daily', env),
               logger
             })
           : Promise.resolve(emptyIngestion),
-        forceCadence
-          ? Promise.resolve({ connectors: { exa: { status: 'skipped' as const, events: [] }, perigon: { status: 'skipped' as const, events: [] }, twitter: { status: 'skipped' as const, events: [] } } })
-          : runByoConnectorIngestion(process.env, { logger, spendStore: opts?.byoSpendStore ?? undefined })
+        cadence === 'daily'
+          ? runByoConnectorIngestion(process.env, { logger, spendStore: opts?.byoSpendStore ?? undefined })
+          : Promise.resolve({ connectors: { exa: { status: 'skipped' as const, events: [] }, perigon: { status: 'skipped' as const, events: [] }, twitter: { status: 'skipped' as const, events: [] } } })
       ]);
 
       if (shutdownController.signal.aborted) {
@@ -1024,9 +1035,12 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       snapshot = {
         refreshedAt: now,
         signals: nextSignals,
-        connectors: toConnectorStatus(env, hourly, daily, byo, refreshedAtIso, dailyDue ? now : snapshot.lastDailyRunAt, snapshot.connectors),
-        lastHourlyRunAt: now,
-        lastDailyRunAt: dailyDue ? now : snapshot.lastDailyRunAt
+        connectors: toConnectorStatus(env, hourly, daily, byo, refreshedAtIso, {
+          hourly: cadence === 'hourly' ? now : snapshot.lastHourlyRunAt,
+          daily: cadence === 'daily' ? now : snapshot.lastDailyRunAt,
+        }, snapshot.connectors),
+        lastHourlyRunAt: cadence === 'hourly' ? now : snapshot.lastHourlyRunAt,
+        lastDailyRunAt: cadence === 'daily' ? now : snapshot.lastDailyRunAt
       };
       aiHealth = {
         ...runAiHealth,
@@ -1056,7 +1070,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
         }
       }
 
-      await logger.info(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH COMPLETE ===`, {
+      await logger.info(cadenceLabel, `=== ${cadence === 'daily' ? 'DAILY' : 'HOURLY'} REFRESH COMPLETE ===`, {
         run_id: logger.runId,
         events: events.length,
         published_signals: snapshot.signals.length,
@@ -1066,7 +1080,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       return snapshot;
     } catch (error) {
       const message = toErrorMessage(error);
-      await logger.error(cadenceLabel, `=== ${dailyDue ? 'DAILY' : 'HOURLY'} REFRESH FAILED ===`, {
+      await logger.error(cadenceLabel, `=== ${cadence === 'daily' ? 'DAILY' : 'HOURLY'} REFRESH FAILED ===`, {
         run_id: logger.runId,
         error: message
       });
@@ -1088,8 +1102,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
         refreshedAt: now,
         signals: [],
         connectors: toErrorFirstSnapshot(env, refreshedAtIso),
-        lastHourlyRunAt: now,
-        lastDailyRunAt: snapshot.lastDailyRunAt
+        lastHourlyRunAt: cadence === 'hourly' ? now : snapshot.lastHourlyRunAt,
+        lastDailyRunAt: cadence === 'daily' ? now : snapshot.lastDailyRunAt
       };
       aiHealth = {
         ...runAiHealth,
@@ -1098,24 +1112,48 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
 
       return snapshot;
     } finally {
-      refreshingCadence = null;
+      refreshingCadence[cadence] = false;
     }
   };
 
   /**
-   * Guarded refresh: if a refresh is already in-flight, returns the same promise.
-   * Note: when a refresh is in-flight, concurrent calls with a different cadence
-   * are coalesced into the first — the cadence arg is dropped for the second caller.
+   * Guarded refresh: same-cadence calls coalesce into the same promise.
+   * Hourly and daily refreshes keep independent in-flight state.
    */
-  const startRefresh = (cadence?: 'hourly' | 'daily'): Promise<Snapshot> => {
-    if (!refreshInFlight) {
-      refreshInFlight = refresh(cadence).finally(() => {
-        refreshInFlight = null;
+  const startRefreshForCadence = (cadence: RefreshCadence): Promise<Snapshot> => {
+    if (!refreshInFlight[cadence]) {
+      refreshingCadence[cadence] = true;
+      refreshInFlight[cadence] = refresh(cadence).finally(() => {
+        refreshInFlight[cadence] = null;
         onRefreshComplete?.();
       });
     }
 
-    return refreshInFlight;
+    return refreshInFlight[cadence]!;
+  };
+
+  const startRefresh = (cadence?: RefreshCadence): Promise<Snapshot> => {
+    if (cadence) {
+      return startRefreshForCadence(cadence);
+    }
+
+    const dueCadences: RefreshCadence[] = [];
+    const now = Date.now();
+    const dailyDue = snapshot.lastDailyRunAt === 0 || now - snapshot.lastDailyRunAt >= 24 * 60 * 60 * 1000;
+    const hourlyDue = snapshot.lastHourlyRunAt === 0 || now - snapshot.lastHourlyRunAt >= refreshMs;
+
+    if (hourlyDue) {
+      dueCadences.push('hourly');
+    }
+    if (dailyDue) {
+      dueCadences.push('daily');
+    }
+
+    if (dueCadences.length === 0) {
+      return Promise.resolve(snapshot);
+    }
+
+    return Promise.all(dueCadences.map((dueCadence) => startRefreshForCadence(dueCadence))).then(() => snapshot);
   };
 
   const ensureFresh = async (): Promise<Snapshot> => {
@@ -1152,7 +1190,10 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       last_daily_run: snapshot.lastDailyRunAt > 0 ? new Date(snapshot.lastDailyRunAt).toISOString() : null,
       hourly_interval_ms: refreshMs,
       daily_interval_ms: DAILY_CADENCE_MS,
-      refreshing: refreshingCadence,
+      refreshing: {
+        hourly: refreshingCadence.hourly,
+        daily: refreshingCadence.daily,
+      },
     }),
     getAiHealth: async (): Promise<AiHealthRecord> => {
       await ensureFresh();

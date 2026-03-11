@@ -557,7 +557,7 @@ const App = () => {
                   value={thesisSortField}
                   onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
                 >
-                  <option value="newest">Newest</option>
+                  <option value="newest">Newest Added</option>
                   <option value="score">By Score</option>
                   <option value="latest">Latest Activity</option>
                   <option value="evidence">Most Evidence</option>
@@ -669,7 +669,7 @@ const App = () => {
                   value={sortField}
                   onChange={(e) => { setSortField(e.target.value as SortField); setRequestedPage(1); }}
                 >
-                  <option value="newest">Newest</option>
+                  <option value="newest">Newest Added</option>
                   <option value="score">By Score</option>
                   <option value="virality">By Virality</option>
                   <option value="demand">By Demand</option>

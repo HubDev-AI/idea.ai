@@ -135,7 +135,10 @@ const mockRefreshMeta = {
   last_daily_run: '2026-02-24T00:00:00.000Z',
   hourly_interval_ms: 3600000,
   daily_interval_ms: 86400000,
-  refreshing: null
+  refreshing: {
+    hourly: false,
+    daily: false
+  }
 };
 
 const mockSnapshot = {
@@ -299,7 +302,7 @@ describe('web app', () => {
     expect(screen.getByRole('link', { name: /Source/i })).toBeDefined();
     expect(screen.getByText(/Logs/i)).toBeDefined();
     expect(screen.getByText(/AI Agents/i)).toBeDefined();
-    expect(screen.getAllByText(/claude/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/claude/i)).length).toBeGreaterThan(0);
 
     // Thesis board (titles in main pane only, sidebar shows overview)
     expect(screen.getByText(/Top Ideas/i)).toBeDefined();

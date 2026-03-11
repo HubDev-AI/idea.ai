@@ -39,6 +39,8 @@ const corroborationDots = (score: number | undefined): { filled: number; total: 
   return { filled, total: 5 };
 };
 
+const visibleDate = (iso: string): string => new Date(iso).toISOString().slice(0, 10);
+
 export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, isActive, isGenerating, onClick, onExplore, onView, onLabelChange }) => {
   const statusClass = thesis.status === 'promoted' ? 'promoted' : thesis.status === 'watching' ? 'watching' : '';
   const hasData = thesis.hasDeepDive === true;
@@ -134,7 +136,10 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
             {thesis.supplyDemand}
           </span>
         )}
-        {thesis.lastSeenAt && <span>{relativeTime(thesis.lastSeenAt)}</span>}
+        {thesis.firstSeenAt && <span title={`Added ${new Date(thesis.firstSeenAt).toLocaleString()}`}>added {visibleDate(thesis.firstSeenAt)}</span>}
+        {thesis.lastSeenAt && thesis.lastSeenAt !== thesis.firstSeenAt && (
+          <span title={`Latest activity ${new Date(thesis.lastSeenAt).toLocaleString()}`}>active {relativeTime(thesis.lastSeenAt)}</span>
+        )}
         {onLabelChange && (
           <span className="thesis-label-btns">
             <button

@@ -17,7 +17,11 @@ export class InMemoryThesisStore implements ThesisStore {
   private store = new Map<string, ThesisDraft>();
 
   async upsert(draft: ThesisDraft): Promise<void> {
-    this.store.set(draft.canonicalKey, { ...draft });
+    const existing = this.store.get(draft.canonicalKey);
+    this.store.set(draft.canonicalKey, {
+      ...draft,
+      firstObservedAt: existing?.firstObservedAt ?? draft.firstObservedAt ?? draft.latestObservedAt,
+    });
   }
 
   async list(filter?: ThesisStoreFilter): Promise<ThesisDraft[]> {
