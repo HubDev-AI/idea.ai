@@ -36,7 +36,7 @@ export type {
   RefreshMeta
 };
 
-const resolveApiBaseUrl = (): string => {
+export const resolveApiBaseUrl = (): string => {
   const maybeEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
   const raw = maybeEnv?.VITE_API_URL ?? '';
 

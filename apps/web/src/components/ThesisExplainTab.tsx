@@ -76,6 +76,12 @@ export const ThesisExplainTab: React.FC<Props> = ({ canonicalKey }) => {
   if (!data) return null;
 
   const { weightBreakdown: wb, debate, bayesianTrail: trail, topEvidence } = data;
+  const labels = wb.dimensionLabels ?? {
+    demand: 'Demand',
+    timing: 'Timing',
+    buildability: 'Buildability',
+    virality: 'Virality',
+  };
 
   return (
     <div className="explain-content">
@@ -83,10 +89,10 @@ export const ThesisExplainTab: React.FC<Props> = ({ canonicalKey }) => {
       <section className="explain-section">
         <h3>Score Breakdown</h3>
         <div className="explain-bars">
-          <DimensionBar label="Demand" score={wb.demand.score} weight={wb.demand.weight} contribution={wb.demand.contribution} />
-          <DimensionBar label="Timing" score={wb.timing.score} weight={wb.timing.weight} contribution={wb.timing.contribution} />
-          <DimensionBar label="Buildability" score={wb.buildability.score} weight={wb.buildability.weight} contribution={wb.buildability.contribution} />
-          <DimensionBar label="Virality" score={wb.virality.score} weight={wb.virality.weight} contribution={wb.virality.contribution} />
+          <DimensionBar label={labels.demand} score={wb.demand.score} weight={wb.demand.weight} contribution={wb.demand.contribution} />
+          <DimensionBar label={labels.timing} score={wb.timing.score} weight={wb.timing.weight} contribution={wb.timing.contribution} />
+          <DimensionBar label={labels.buildability} score={wb.buildability.score} weight={wb.buildability.weight} contribution={wb.buildability.contribution} />
+          <DimensionBar label={labels.virality} score={wb.virality.score} weight={wb.virality.weight} contribution={wb.virality.contribution} />
         </div>
         <div className="explain-blended">
           <span>Blended Score</span>

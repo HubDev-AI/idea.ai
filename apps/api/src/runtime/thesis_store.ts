@@ -2,6 +2,7 @@ import type { ThesisDraft, ThesisStatus } from '../jobs/thesis_synthesizer';
 
 export type ThesisStoreFilter = {
   status?: ThesisStatus;
+  profileId?: string;
 };
 
 export interface ThesisStore {
@@ -21,10 +22,11 @@ export class InMemoryThesisStore implements ThesisStore {
 
   async list(filter?: ThesisStoreFilter): Promise<ThesisDraft[]> {
     const sorted = Array.from(this.store.values()).sort((a, b) => b.confidence - a.confidence);
-    if (filter?.status) {
-      return sorted.filter((t) => t.status === filter.status);
-    }
-    return sorted;
+    return sorted.filter((t) => {
+      if (filter?.status && t.status !== filter.status) return false;
+      if (filter?.profileId && (t.profileId ?? 'consumer') !== filter.profileId) return false;
+      return true;
+    });
   }
 
   async getByKey(canonicalKey: string): Promise<ThesisDraft | null> {

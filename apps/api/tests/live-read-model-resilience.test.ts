@@ -288,6 +288,98 @@ describe('live read model resilience', () => {
     expect(refreshCallCount).toBe(1);
   });
 
+  it('preserves daily connector error state across a later hourly-only refresh', async () => {
+    let dailyCalls = 0;
+
+    vi.doMock('../src/jobs/ingest_open', () => ({
+      runOpenConnectorIngestionDetailed: vi.fn(async (cadence: 'hourly' | 'daily') => {
+        if (cadence === 'daily') {
+          dailyCalls += 1;
+          return {
+            events: [],
+            statuses: dailyCalls === 1
+              ? [{ name: 'producthunt', cadence: 'daily', status: 'error', last_error: 'api outage' }]
+              : []
+          };
+        }
+
+        return {
+          events: [],
+          statuses: [
+            { name: 'hn', cadence: 'hourly', status: 'active' },
+            { name: 'github_issues', cadence: 'hourly', status: 'active' }
+          ]
+        };
+      })
+    }));
+
+    vi.doMock('../src/jobs/ingest_byo', () => ({
+      runByoConnectorIngestion: vi.fn(async () => ({
+        connectors: {
+          exa: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'exa_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } },
+          perigon: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'perigon_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } },
+          twitter: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'twitter_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } }
+        }
+      }))
+    }));
+
+    const { createLiveReadModel } = await import('../src/runtime/live_read_model');
+    const readModel = createLiveReadModel(0);
+
+    const first = await readModel.listConnectors();
+    const second = await readModel.listConnectors();
+
+    expect(first.find((connector) => connector.name === 'producthunt')?.status).toBe('error');
+    expect(second.find((connector) => connector.name === 'producthunt')?.status).toBe('error');
+  });
+
+  it('hydrates persisted connector states on startup before the first refresh', async () => {
+    const now = Date.now();
+    const mockStore = {
+      retriever: { findSimilar: vi.fn(async () => []), getTrendWindows: vi.fn(async () => []) },
+      save: vi.fn(async () => {}),
+      listAllSignals: vi.fn(async () => []),
+      querySignals: vi.fn(async () => ({ items: [], page: 1, pageSize: 50, totalItems: 0, totalPages: 1, hasNext: false, hasPrev: false })),
+      countSignalsBySource: vi.fn(async () => ({})),
+      getEmbeddings: vi.fn(async () => new Map()),
+      getEmbeddingStats: vi.fn(async () => ({ total: 0, withEmbedding: 0, fallbackModel: 'none' })),
+      findConvergentSignals: vi.fn(async () => []),
+      boostViralityScore: vi.fn(async () => {}),
+      listSignalsWithoutEmbeddings: vi.fn(async () => []),
+      saveEmbedding: vi.fn(async () => {}),
+      loadRefreshState: vi.fn(async () => ({
+        lastHourlyRunAt: now,
+        lastDailyRunAt: now,
+        refreshedAt: now,
+      })),
+      listConnectorStates: vi.fn(async () => ([
+        {
+          connector_name: 'producthunt',
+          status: 'error',
+          last_run_at: '2026-03-11T08:00:00.000Z',
+          last_error: 'api outage',
+          cadence: 'daily',
+        }
+      ])),
+      saveRefreshState: vi.fn(async () => {}),
+      ping: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+    };
+
+    const { createLiveReadModel } = await import('../src/runtime/live_read_model');
+    const readModel = createLiveReadModel(3_600_000, { persistentStore: mockStore as any });
+
+    const connectors = await readModel.listConnectors();
+    const productHunt = connectors.find((connector) => connector.name === 'producthunt');
+
+    expect(productHunt).toMatchObject({
+      name: 'producthunt',
+      status: 'error',
+      last_run: '2026-03-11T08:00:00.000Z',
+      cadence: 'daily',
+    });
+  });
+
   it('loads refresh state from database and skips daily connectors when recently run', async () => {
     const recentDailyRun = Date.now() - 60_000; // 1 minute ago
 

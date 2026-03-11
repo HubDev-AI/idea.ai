@@ -6,6 +6,10 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 
+const apiMockState = vi.hoisted(() => ({
+  baseUrl: ''
+}));
+
 const mockSignals = [
   {
     idea: 'SOC2 prep copilot',
@@ -79,7 +83,8 @@ const mockTheses = [
     evidenceCount: 5,
     problemStatement: 'Startups struggle with SOC2 compliance prep',
     sourceCount: 3,
-    estimatedScope: 'small' as const
+    estimatedScope: 'small' as const,
+    label: 'favourite' as const,
   },
   {
     canonicalKey: 'dev-onboarding',
@@ -146,6 +151,7 @@ const mockSnapshot = {
 
 // Mock socket.io-client
 let socketListeners: Map<string, Set<(...args: any[]) => void>> | null = null;
+const ioCalls: Array<{ url: unknown; options: unknown }> = [];
 
 const emitSocketEvent = (event: string, payload?: unknown) => {
   for (const handler of socketListeners?.get(event) ?? []) {
@@ -177,12 +183,24 @@ const createMockSocket = () => {
 };
 
 vi.mock('socket.io-client', () => ({
-  io: () => createMockSocket(),
+  io: (url?: unknown, options?: unknown) => {
+    ioCalls.push({ url, options });
+    return createMockSocket();
+  },
 }));
+
+vi.mock('../src/api', async () => {
+  const actual = await vi.importActual<typeof import('../src/api')>('../src/api');
+  return {
+    ...actual,
+    resolveApiBaseUrl: () => apiMockState.baseUrl,
+  };
+});
 
 const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolean }) =>
   vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
+    const parsedUrl = new URL(url, 'https://app.idea.test');
 
     if (url.includes('/v1/signals/counts')) {
       return Promise.resolve(new Response(JSON.stringify(mockSignalCounts), { status: 200 }));
@@ -227,11 +245,15 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
       if (overrides?.failTheses) {
         return Promise.resolve(new Response('not found', { status: 404 }));
       }
+      const label = parsedUrl.searchParams.get('label');
+      const items = label
+        ? mockTheses.filter((thesis) => (thesis.label ?? null) === label)
+        : mockTheses;
       return Promise.resolve(new Response(JSON.stringify({
-        items: mockTheses,
+        items,
         page: 1,
         page_size: 10,
-        total_items: mockTheses.length,
+        total_items: items.length,
         total_pages: 1,
         has_next: false,
         has_prev: false
@@ -259,7 +281,10 @@ describe('web app', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     socketListeners = null;
+    ioCalls.length = 0;
+    apiMockState.baseUrl = '';
   });
 
   it('renders feed rows with idea, score, source/snippet, and next action', async () => {
@@ -402,5 +427,113 @@ describe('web app', () => {
     // Wait for connection — multiple LIVE indicators (sidebar + log drawer)
     const liveElements = await screen.findAllByText('LIVE');
     expect(liveElements.length).toBeGreaterThan(0);
+  });
+
+  it('connects Socket.IO to the configured API origin over websocket-only transport', async () => {
+    apiMockState.baseUrl = 'https://api.idea.test';
+
+    render(<App />);
+
+    await screen.findByText('SOC2 prep copilot');
+
+    expect(ioCalls[0]).toEqual({
+      url: 'https://api.idea.test',
+      options: expect.objectContaining({
+        path: '/socket.io/',
+        transports: ['websocket'],
+      })
+    });
+  });
+
+  it('clears the thesis overview when websocket stats drop to zero', async () => {
+    render(<App />);
+
+    await screen.findByText('SOC2 prep copilot');
+    expect(await screen.findByText('Theses Overview')).toBeDefined();
+
+    await act(async () => {
+      emitSocketEvent('thesisStats', {
+        total: 0,
+        promoted: 0,
+        watching: 0,
+        totalEvidence: 0,
+        totalSources: 0,
+      });
+    });
+
+    expect(screen.queryByText('Theses Overview')).toBeNull();
+  });
+
+  it('shows an authoritative zero signal count instead of falling back to stale page totals', async () => {
+    const { container } = render(<App />);
+
+    await screen.findByText('SOC2 prep copilot');
+
+    await act(async () => {
+      emitSocketEvent('signalCounts', {});
+      emitSocketEvent('signalCount', 0);
+      emitSocketEvent('latestSignalAt', null);
+    });
+
+    const signalsStat = container.querySelector('.sidebar-stats .sidebar-stat:first-child .sidebar-stat-value');
+    expect(signalsStat?.textContent).toBe('0');
+  });
+
+  it('resolves a manual run if the websocket finishes before the POST returns', async () => {
+    let resolveRunRequest: ((value: Response) => void) | null = null;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/v1/agent/run')) {
+        return new Promise<Response>((resolve) => {
+          resolveRunRequest = resolve;
+        });
+      }
+      return buildMockFetch()(input);
+    }));
+
+    render(<App />);
+    await screen.findByText('SOC2 prep copilot');
+
+    fireEvent.click(screen.getByRole('button', { name: /^Run$/i }));
+    expect(await screen.findByRole('button', { name: /Running/i })).toBeDefined();
+
+    await act(async () => {
+      emitSocketEvent('agentStatus', {
+        ...mockAgentStatus,
+        isRunning: false,
+        activeRunId: null,
+        lastAttempt: {
+          runId: 'agent-123',
+          timestamp: '2026-02-24T04:01:00.000Z',
+          status: 'failed',
+          provider: null,
+          errorMessage: 'provider failed quickly'
+        }
+      });
+    });
+
+    await act(async () => {
+      resolveRunRequest?.(new Response(JSON.stringify({ accepted: true, runId: 'agent-123', alreadyRunning: false }), { status: 202 }));
+    });
+
+    expect(await screen.findByText('Run failed')).toBeDefined();
+  });
+
+  it('removes a thesis locally when its label no longer matches the active filter', async () => {
+    render(<App />);
+
+    await screen.findByText('SOC2 Automation Platform');
+
+    fireEvent.change(screen.getByDisplayValue('All Labels'), {
+      target: { value: 'favourite' },
+    });
+
+    expect(await screen.findByText('SOC2 Automation Platform')).toBeDefined();
+    expect(screen.queryByText('Developer Onboarding Tool')).toBeNull();
+
+    fireEvent.click(screen.getByTitle('Favourite'));
+
+    expect(await screen.findByText(/No theses yet/i)).toBeDefined();
+    expect(screen.queryByText('SOC2 Automation Platform')).toBeNull();
   });
 });

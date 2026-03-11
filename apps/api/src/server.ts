@@ -172,6 +172,9 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     registerThesisExplainRoute(app, {
       store: resolvedDeps.thesisStore,
       pool: resolvedDeps.pool ?? null,
+      ...(resolvedDeps.pool ? {
+        getActiveWeights: (profileId: string) => getActiveWeights(resolvedDeps.pool!, profileId)
+      } : {}),
     });
   }
 

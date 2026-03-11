@@ -24,8 +24,10 @@ import { createEntityStore } from './runtime/entity_store';
 import { createExecutionLogger } from './runtime/execution_logger';
 import { createExperienceStore } from './runtime/experience_store';
 import { createPostgresJournalStore } from './runtime/journal_store';
+import { buildShutdownInterruptedError, isAgentCatchUpDue } from './runtime/agent_run_lifecycle';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresSignalStore } from './runtime/postgres_signal_store';
+import { buildStartupAgentStatus } from './runtime/agent_status_state';
 import { createPostgresThesisStore, type PaginatedThesisStore } from './runtime/postgres_thesis_store';
 import { createProviderCircuitBreaker } from './runtime/provider_circuit';
 import { InMemoryThesisStore } from './runtime/thesis_store';
@@ -68,7 +70,7 @@ const signalStore = databaseUrl
   ? createPostgresSignalStore({ databaseUrl, embedText: embedTextFn })
   : null;
 
-const readModel = createLiveReadModel(undefined, {
+const readModel = createLiveReadModel(startupEnv.agentIntervalMs, {
   ...(signalStore ? { persistentStore: signalStore } : {}),
   circuit: providerCircuit,
   ...(pool ? { pool } : {}),
@@ -97,30 +99,6 @@ const modelRouter = startupEnv.modelRoutingEnabled
     })
   : null;
 
-const toLastRun = (row: Record<string, any> | undefined): AgentStatusRecord['lastRun'] => {
-  if (!row) return null;
-  return {
-    timestamp: row.started_at,
-    thesesUpdated: row.theses_updated,
-    newCandidates: row.new_candidates,
-    clustersAnalyzed: row.clusters_analyzed,
-    deepDivesPerformed: row.deep_dives_performed,
-    journalEntriesWritten: row.journal_entries_written,
-    provider: row.provider ?? null
-  };
-};
-
-const toLastAttempt = (row: Record<string, any> | undefined): AgentStatusRecord['lastAttempt'] => {
-  if (!row) return null;
-  return {
-    runId: row.run_id,
-    timestamp: row.finished_at ?? row.started_at,
-    status: row.status,
-    provider: row.provider ?? null,
-    errorMessage: row.error_message ?? null
-  };
-};
-
 let agentStatus: AgentStatusRecord = {
   isRunning: false,
   intervalMs: startupEnv.agentIntervalMs,
@@ -147,14 +125,11 @@ try {
     const completedRow = completedRows[0] as any;
     const latestRow = latestRows[0] as any;
     if (completedRow || latestRow) {
-      agentStatus = {
-        isRunning: false,
+      agentStatus = buildStartupAgentStatus({
         intervalMs: startupEnv.agentIntervalMs,
-        activeRunId: null,
-        lastRun: toLastRun(completedRow),
-        lastAttempt: toLastAttempt(latestRow),
-        investigateNext: latestRow?.investigate_next ?? completedRow?.investigate_next ?? null
-      };
+        completedRow,
+        latestRow
+      });
     }
   }
 } catch { /* DB may not have the table yet */ }
@@ -207,6 +182,7 @@ const startAgentRun = (): AgentRunAccepted => {
         runId,
         preferredProvider: agentEnv.aiPrimary,
         allowFallback: agentEnv.aiFallback !== 'none',
+        retries: agentEnv.aiRetries,
         timeoutMs: agentEnv.aiTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
         pool: pool ?? undefined,
@@ -430,13 +406,9 @@ if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
 // -- Socket.IO + StateHub -----------------------------------------------
-const allowedOrigins = corsOrigins.length > 0
-  ? corsOrigins
-  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
-
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(app.server, {
   cors: {
-    origin: allowedOrigins,
+    origin: corsOrigins.length > 0 ? corsOrigins : true,
     methods: ['GET', 'POST'],
   },
   path: '/socket.io/',
@@ -547,9 +519,25 @@ const shutdown = async () => {
         new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), SHUTDOWN_TIMEOUT_MS))
       ]);
     } catch {
-      // Run was interrupted or timed out — agentRunStore.fail() already called in executeAgentRun's catch block
+      if (agentRunInFlightId) {
+        const error = buildShutdownInterruptedError(agentRunInFlightId);
+        await agentRunStore?.fail(agentRunInFlightId, error);
+        agentStatus = {
+          ...agentStatus,
+          isRunning: false,
+          activeRunId: null,
+          lastAttempt: {
+            runId: agentRunInFlightId,
+            timestamp: new Date().toISOString(),
+            status: 'failed',
+            provider: null,
+            errorMessage: error.message
+          }
+        };
+      }
     }
     agentRunInFlight = null;
+    agentRunInFlightId = null;
   }
 
   // readModel.close() closes the shared signalStore pool — don't close it again
@@ -596,9 +584,7 @@ app
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
     // If overdue from a previous session, run immediately then start the regular interval
-    const lastRunTs = agentStatus.lastRun?.timestamp;
-    const isOverdue = lastRunTs && (Date.now() - new Date(lastRunTs).getTime()) > runtimeEnv.agentIntervalMs;
-    if (isOverdue) {
+    if (isAgentCatchUpDue(agentStatus, runtimeEnv.agentIntervalMs)) {
       void executeAgentRun().catch((err) => {
         console.error('research agent catch-up run failed:', err);
       });

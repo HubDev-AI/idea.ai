@@ -116,5 +116,48 @@ describe('dual analyst', () => {
         })
       );
     });
+
+    it('does not retry when retry budget is zero', async () => {
+      const runClaude = vi.fn().mockRejectedValue(new Error('claude down'));
+      const runCodex = vi.fn().mockRejectedValue(new Error('codex down'));
+
+      await expect(dualAnalystRun(
+        { prompt: 'test', timeoutMs: 10_000 },
+        {
+          runClaude,
+          runCodex,
+          parseResponse: JSON.parse,
+          retries: 0,
+        }
+      )).rejects.toThrow(/No AI provider returned a usable response/i);
+
+      expect(runClaude).toHaveBeenCalledTimes(1);
+      expect(runCodex).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries the current provider up to the configured budget', async () => {
+      const runClaude = vi.fn()
+        .mockRejectedValueOnce(new Error('first'))
+        .mockRejectedValueOnce(new Error('second'))
+        .mockResolvedValueOnce({
+          text: JSON.stringify({ value: 3 }),
+          provider: 'claude',
+          meta: {}
+        });
+
+      const result = await dualAnalystRun(
+        { prompt: 'test', timeoutMs: 10_000 },
+        {
+          runClaude,
+          runCodex: vi.fn(),
+          parseResponse: JSON.parse,
+          allowFallback: false,
+          retries: 2,
+        }
+      );
+
+      expect(runClaude).toHaveBeenCalledTimes(3);
+      expect(result.claude).toEqual({ value: 3 });
+    });
   });
 });

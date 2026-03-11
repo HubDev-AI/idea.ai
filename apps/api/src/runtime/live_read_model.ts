@@ -35,7 +35,7 @@ import type { FeedRecord } from '../routes/feed';
 import type { ExecutionLogRecord, ListLogsQuery } from '../routes/logs';
 import { readExecutionLogs } from './execution_log_reader';
 import { createExecutionLogger, createRunId } from './execution_logger';
-import { createPostgresSignalStore, type PostgresSignalStore } from './postgres_signal_store';
+import { createPostgresSignalStore, type ConnectorStateRow, type PostgresSignalStore } from './postgres_signal_store';
 import type { ProviderCircuitBreaker } from './provider_circuit';
 import {
   applySourceQualityPenalty,
@@ -292,15 +292,42 @@ const mapByoStatus = (
   return { status: 'disabled', last_run: null };
 };
 
+const connectorMap = (connectors: ConnectorStatusRecord[]): Map<string, ConnectorStatusRecord> =>
+  new Map(connectors.map((connector) => [connector.name, connector] as const));
+
+const applyPersistedConnectorStates = (
+  env: RuntimeEnv,
+  persisted: ConnectorStateRow[],
+): ConnectorStatusRecord[] => {
+  const seeded = buildInitialConnectors(env);
+  const seededByName = connectorMap(seeded);
+
+  return seeded.map((connector) => {
+    const persistedRow = persisted.find((row) => row.connector_name === connector.name);
+    if (!persistedRow || connector.status === 'disabled') {
+      return connector;
+    }
+
+    return {
+      ...connector,
+      status: persistedRow.status === 'error' ? 'error' : 'active',
+      last_run: persistedRow.last_run_at ?? connector.last_run,
+      cadence: (persistedRow.cadence as Cadence | null) ?? connector.cadence,
+    };
+  }).filter((connector) => seededByName.has(connector.name));
+};
+
 const toConnectorStatus = (
   env: RuntimeEnv,
   hourly: OpenConnectorIngestionResult,
   daily: OpenConnectorIngestionResult,
   byo: Awaited<ReturnType<typeof runByoConnectorIngestion>>,
   refreshedAtIso: string,
-  lastDailyRunAt: number
+  lastDailyRunAt: number,
+  previousConnectors: ConnectorStatusRecord[]
 ): ConnectorStatusRecord[] => {
   const openStatuses = openStatusMap(hourly, daily);
+  const previousByName = connectorMap(previousConnectors);
   const dailyLastRunIso = lastDailyRunAt > 0 ? new Date(lastDailyRunAt).toISOString() : null;
   const openRecords: ConnectorStatusRecord[] = OPEN_CONNECTORS.map((connector) => {
     const cadence = (OPEN_CONNECTOR_CADENCE[connector] as Cadence) ?? null;
@@ -313,19 +340,47 @@ const toConnectorStatus = (
       };
     }
 
-    const lastRun = cadence === 'daily' ? (dailyLastRunIso ?? refreshedAtIso) : refreshedAtIso;
+    const currentStatus = openStatuses.get(connector);
+    const previous = previousByName.get(connector);
+    if (!currentStatus && previous) {
+      return {
+        name: connector,
+        status: previous.status,
+        last_run: previous.last_run ?? (cadence === 'daily' ? dailyLastRunIso : refreshedAtIso),
+        cadence
+      };
+    }
+
+    const lastRun = currentStatus
+      ? refreshedAtIso
+      : cadence === 'daily'
+        ? (dailyLastRunIso ?? refreshedAtIso)
+        : refreshedAtIso;
 
     return {
       name: connector,
-      status: openStatuses.get(connector) === 'error' ? 'error' : 'active',
+      status: currentStatus === 'error' ? 'error' : 'active',
       last_run: lastRun,
       cadence
     };
   });
 
-  const exa = mapByoStatus(byo.connectors.exa.status, refreshedAtIso);
-  const perigon = mapByoStatus(byo.connectors.perigon.status, refreshedAtIso);
-  const twitter = mapByoStatus(byo.connectors.twitter.status, refreshedAtIso);
+  const mapByoStatusWithPrevious = (
+    connectorName: string,
+    status: 'active' | 'skipped' | 'error',
+  ): Pick<ConnectorStatusRecord, 'status' | 'last_run'> => {
+    if (status === 'skipped') {
+      const previous = previousByName.get(connectorName);
+      if (previous) {
+        return { status: previous.status, last_run: previous.last_run };
+      }
+    }
+    return mapByoStatus(status, refreshedAtIso);
+  };
+
+  const exa = mapByoStatusWithPrevious('exa_byo', byo.connectors.exa.status);
+  const perigon = mapByoStatusWithPrevious('perigon_byo', byo.connectors.perigon.status);
+  const twitter = mapByoStatusWithPrevious('twitter_byo', byo.connectors.twitter.status);
 
   return [
     ...openRecords,
@@ -449,10 +504,15 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
           snapshot.lastHourlyRunAt = state.lastHourlyRunAt;
           snapshot.lastDailyRunAt = state.lastDailyRunAt;
           snapshot.refreshedAt = state.refreshedAt;
+          const connectorStates = await store.listConnectorStates();
+          if (connectorStates.length > 0) {
+            snapshot.connectors = applyPersistedConnectorStates(env, connectorStates);
+          }
           await logger.info('live_read_model', 'loaded refresh state from database', {
             refreshed_at: state.refreshedAt > 0 ? new Date(state.refreshedAt).toISOString() : null,
             last_hourly: state.lastHourlyRunAt > 0 ? new Date(state.lastHourlyRunAt).toISOString() : null,
             last_daily: state.lastDailyRunAt > 0 ? new Date(state.lastDailyRunAt).toISOString() : null,
+            connector_states: connectorStates.length,
           });
         } catch (error) {
           await logger.warn('live_read_model', 'failed to load refresh state from database', {
@@ -964,7 +1024,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       snapshot = {
         refreshedAt: now,
         signals: nextSignals,
-        connectors: toConnectorStatus(env, hourly, daily, byo, refreshedAtIso, dailyDue ? now : snapshot.lastDailyRunAt),
+        connectors: toConnectorStatus(env, hourly, daily, byo, refreshedAtIso, dailyDue ? now : snapshot.lastDailyRunAt, snapshot.connectors),
         lastHourlyRunAt: now,
         lastDailyRunAt: dailyDue ? now : snapshot.lastDailyRunAt
       };
@@ -1088,8 +1148,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
     listSignals: async (): Promise<FeedRecord[]> => (await ensureFresh()).signals,
     listConnectors: async (): Promise<ConnectorStatusRecord[]> => (await ensureFresh()).connectors,
     getRefreshMeta: () => ({
-      last_hourly_run: new Date(snapshot.lastHourlyRunAt > 0 ? snapshot.lastHourlyRunAt : startedAt).toISOString(),
-      last_daily_run: new Date(snapshot.lastDailyRunAt > 0 ? snapshot.lastDailyRunAt : startedAt).toISOString(),
+      last_hourly_run: snapshot.lastHourlyRunAt > 0 ? new Date(snapshot.lastHourlyRunAt).toISOString() : null,
+      last_daily_run: snapshot.lastDailyRunAt > 0 ? new Date(snapshot.lastDailyRunAt).toISOString() : null,
       hourly_interval_ms: refreshMs,
       daily_interval_ms: DAILY_CADENCE_MS,
       refreshing: refreshingCadence,
