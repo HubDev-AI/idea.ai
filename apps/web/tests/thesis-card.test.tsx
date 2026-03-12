@@ -3,10 +3,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 // biome-ignore lint/correctness/noUnusedImports: React must be in scope for JSX
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ThesisCard } from '../src/components/ThesisCard';
 
 describe('ThesisCard', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders thesis title, confidence, and status', () => {
     render(
       <ThesisCard
@@ -19,6 +23,7 @@ describe('ThesisCard', () => {
           problemStatement: 'Compliance is painful',
           sourceCount: 3,
           estimatedScope: null,
+          firstSeenAt: '',
           lastSeenAt: '',
           hasDeepDive: false,
           label: null
@@ -43,6 +48,7 @@ describe('ThesisCard', () => {
           problemStatement: 'Test problem',
           sourceCount: 1,
           estimatedScope: null,
+          firstSeenAt: '',
           lastSeenAt: '',
           hasDeepDive: false,
           label: null
@@ -67,6 +73,7 @@ describe('ThesisCard', () => {
           problemStatement: 'Click me',
           sourceCount: 1,
           estimatedScope: null,
+          firstSeenAt: '',
           lastSeenAt: '',
           hasDeepDive: false,
           label: null
@@ -91,6 +98,7 @@ describe('ThesisCard', () => {
           problemStatement: 'p',
           sourceCount: 2,
           estimatedScope: 'small',
+          firstSeenAt: '',
           lastSeenAt: '',
           hasDeepDive: false,
           label: null
@@ -110,6 +118,7 @@ describe('ThesisCard', () => {
           problemStatement: 'p',
           sourceCount: 1,
           estimatedScope: 'medium',
+          firstSeenAt: '',
           lastSeenAt: '',
           hasDeepDive: false,
           label: null
@@ -129,6 +138,7 @@ describe('ThesisCard', () => {
           problemStatement: 'p',
           sourceCount: 1,
           estimatedScope: 'large',
+          firstSeenAt: '',
           lastSeenAt: '',
           hasDeepDive: false,
           label: null
@@ -150,6 +160,7 @@ describe('ThesisCard', () => {
           problemStatement: 'p',
           sourceCount: 1,
           estimatedScope: null,
+          firstSeenAt: '',
           lastSeenAt: '',
           hasDeepDive: false,
           label: null
@@ -174,6 +185,7 @@ describe('ThesisCard', () => {
           problemStatement: 'p',
           sourceCount: 5,
           estimatedScope: null,
+          firstSeenAt: '',
           lastSeenAt: '',
           hasDeepDive: false,
           label: null
@@ -183,5 +195,32 @@ describe('ThesisCard', () => {
 
     const fill = container.querySelector('.thesis-confidence-fill') as HTMLElement;
     expect(fill.style.width).toBe('100%');
+  });
+
+  it('renders a visible added date from firstSeenAt so newest does not read like latest activity', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-25T12:00:00.000Z'));
+
+    render(
+      <ThesisCard
+        thesis={{
+          canonicalKey: 'dated',
+          title: 'Dated Thesis',
+          confidence: 72,
+          status: 'watching',
+          evidenceCount: 4,
+          problemStatement: 'p',
+          sourceCount: 2,
+          estimatedScope: null,
+          firstSeenAt: '2026-02-25T10:00:00.000Z',
+          lastSeenAt: '2026-02-25T11:30:00.000Z',
+          hasDeepDive: false,
+          label: null
+        }}
+      />
+    );
+
+    expect(screen.getByText('added 2026-02-25')).toBeTruthy();
+    expect(screen.getByText('active 30m ago')).toBeTruthy();
   });
 });

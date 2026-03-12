@@ -288,6 +288,176 @@ describe('live read model resilience', () => {
     expect(refreshCallCount).toBe(1);
   });
 
+  it('allows hourly refresh to run while a daily refresh is still in flight', async () => {
+    let releaseDaily: (() => void) | null = null;
+    let markDailyStarted: (() => void) | null = null;
+    const dailyStarted = new Promise<void>((resolve) => {
+      markDailyStarted = resolve;
+    });
+    let markHourlyStarted: (() => void) | null = null;
+    const hourlyStarted = new Promise<void>((resolve) => {
+      markHourlyStarted = resolve;
+    });
+    let hourlyCalls = 0;
+
+    vi.doMock('../src/jobs/ingest_open', () => ({
+      runOpenConnectorIngestionDetailed: vi.fn(async (cadence: 'hourly' | 'daily') => {
+        if (cadence === 'daily') {
+          markDailyStarted?.();
+          await new Promise<void>((resolve) => {
+            releaseDaily = resolve;
+          });
+          return {
+            events: [],
+            statuses: [
+              { name: 'producthunt', cadence: 'daily', status: 'active' }
+            ]
+          };
+        }
+
+        hourlyCalls += 1;
+        markHourlyStarted?.();
+        return {
+          events: [],
+          statuses: [
+            { name: 'hn', cadence: 'hourly', status: 'active' }
+          ]
+        };
+      })
+    }));
+
+    vi.doMock('../src/jobs/ingest_byo', () => ({
+      runByoConnectorIngestion: vi.fn(async () => ({
+        connectors: {
+          exa: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'exa_byo', skipped: true, reason: 'missing_credentials', budget_usd: 5 } },
+          perigon: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'perigon_byo', skipped: true, reason: 'missing_credentials', budget_usd: 5 } },
+          twitter: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'twitter_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } }
+        }
+      }))
+    }));
+
+    const { createLiveReadModel } = await import('../src/runtime/live_read_model');
+    const readModel = createLiveReadModel(60_000);
+
+    const dailyPromise = readModel.startRefresh('daily');
+    await dailyStarted;
+
+    expect(readModel.getRefreshMeta().refreshing).toEqual({
+      hourly: false,
+      daily: true,
+    });
+
+    const hourlyPromise = readModel.startRefresh('hourly');
+    await hourlyStarted;
+
+    expect(hourlyCalls).toBe(1);
+    expect(readModel.getRefreshMeta().refreshing).toEqual({
+      hourly: true,
+      daily: true,
+    });
+
+    releaseDaily?.();
+
+    await Promise.all([dailyPromise, hourlyPromise]);
+
+    expect(readModel.getRefreshMeta().refreshing).toEqual({
+      hourly: false,
+      daily: false,
+    });
+  });
+
+  it('preserves daily connector error state across a later hourly-only refresh', async () => {
+    let dailyCalls = 0;
+
+    vi.doMock('../src/jobs/ingest_open', () => ({
+      runOpenConnectorIngestionDetailed: vi.fn(async (cadence: 'hourly' | 'daily') => {
+        if (cadence === 'daily') {
+          dailyCalls += 1;
+          return {
+            events: [],
+            statuses: dailyCalls === 1
+              ? [{ name: 'producthunt', cadence: 'daily', status: 'error', last_error: 'api outage' }]
+              : []
+          };
+        }
+
+        return {
+          events: [],
+          statuses: [
+            { name: 'hn', cadence: 'hourly', status: 'active' },
+            { name: 'github_issues', cadence: 'hourly', status: 'active' }
+          ]
+        };
+      })
+    }));
+
+    vi.doMock('../src/jobs/ingest_byo', () => ({
+      runByoConnectorIngestion: vi.fn(async () => ({
+        connectors: {
+          exa: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'exa_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } },
+          perigon: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'perigon_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } },
+          twitter: { status: 'skipped', reason: 'missing_credentials', events: [], telemetry: { connector: 'twitter_byo', skipped: true, reason: 'missing_credentials', budget_usd: 0 } }
+        }
+      }))
+    }));
+
+    const { createLiveReadModel } = await import('../src/runtime/live_read_model');
+    const readModel = createLiveReadModel(0);
+
+    const first = await readModel.listConnectors();
+    const second = await readModel.listConnectors();
+
+    expect(first.find((connector) => connector.name === 'producthunt')?.status).toBe('error');
+    expect(second.find((connector) => connector.name === 'producthunt')?.status).toBe('error');
+  });
+
+  it('hydrates persisted connector states on startup before the first refresh', async () => {
+    const now = Date.now();
+    const mockStore = {
+      retriever: { findSimilar: vi.fn(async () => []), getTrendWindows: vi.fn(async () => []) },
+      save: vi.fn(async () => {}),
+      listAllSignals: vi.fn(async () => []),
+      querySignals: vi.fn(async () => ({ items: [], page: 1, pageSize: 50, totalItems: 0, totalPages: 1, hasNext: false, hasPrev: false })),
+      countSignalsBySource: vi.fn(async () => ({})),
+      getEmbeddings: vi.fn(async () => new Map()),
+      getEmbeddingStats: vi.fn(async () => ({ total: 0, withEmbedding: 0, fallbackModel: 'none' })),
+      findConvergentSignals: vi.fn(async () => []),
+      boostViralityScore: vi.fn(async () => {}),
+      listSignalsWithoutEmbeddings: vi.fn(async () => []),
+      saveEmbedding: vi.fn(async () => {}),
+      loadRefreshState: vi.fn(async () => ({
+        lastHourlyRunAt: now,
+        lastDailyRunAt: now,
+        refreshedAt: now,
+      })),
+      listConnectorStates: vi.fn(async () => ([
+        {
+          connector_name: 'producthunt',
+          status: 'error',
+          last_run_at: '2026-03-11T08:00:00.000Z',
+          last_error: 'api outage',
+          cadence: 'daily',
+        }
+      ])),
+      saveRefreshState: vi.fn(async () => {}),
+      ping: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+    };
+
+    const { createLiveReadModel } = await import('../src/runtime/live_read_model');
+    const readModel = createLiveReadModel(3_600_000, { persistentStore: mockStore as any });
+
+    const connectors = await readModel.listConnectors();
+    const productHunt = connectors.find((connector) => connector.name === 'producthunt');
+
+    expect(productHunt).toMatchObject({
+      name: 'producthunt',
+      status: 'error',
+      last_run: '2026-03-11T08:00:00.000Z',
+      cadence: 'daily',
+    });
+  });
+
   it('loads refresh state from database and skips daily connectors when recently run', async () => {
     const recentDailyRun = Date.now() - 60_000; // 1 minute ago
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  type AgentStatusRecord,
   type ExecutionLogRecord,
   fetchProfiles,
   fetchSignals,
@@ -29,9 +30,31 @@ import { ThesisDeepDiveModal } from './components/ThesisDeepDiveModal';
 import { connectorDisplayName, connectorSourceKey } from './connectorNames';
 import { useSocket } from './useSocket';
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+const DEFAULT_SIGNAL_PAGE_SIZE = 10;
+const DEFAULT_THESIS_PAGE_SIZE = 10;
 const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
+
+const parsePageSize = (value: string, fallback: number): number => {
+  const parsed = Number(value);
+  return PAGE_SIZE_OPTIONS.some((size) => size === parsed) ? parsed : fallback;
+};
+
+const toTimestamp = (value: string | null | undefined): number | null => {
+  if (!value) return null;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? null : ts;
+};
+
+const isLatestOutcomeFailed = (status: AgentStatusRecord): boolean => {
+  if (status.lastAttempt?.status !== 'failed') return false;
+  const failedAt = toTimestamp(status.lastAttempt.timestamp);
+  const lastSuccessAt = toTimestamp(status.lastRun?.timestamp);
+  if (failedAt == null) return true;
+  if (lastSuccessAt == null) return true;
+  return failedAt >= lastSuccessAt;
+};
 
 const formatContextValue = (value: unknown): string => {
   if (value === null || value === undefined) return 'null';
@@ -74,10 +97,14 @@ const App = () => {
   const ws = useSocket();
   const [signals, setSignals] = useState<SignalRecord[]>([]);
   const [theses, setTheses] = useState<ThesisListItem[]>([]);
+  const [agentStatus, setAgentStatus] = useState<AgentStatusRecord | null>(null);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentRunResult, setAgentRunResult] = useState<string | null>(null);
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const prevRunningRef = useRef(false);
+  const manualRunRequestedRef = useRef(false);
+  const pendingManualRunIdRef = useRef<string | null>(null);
+  const latestWsAgentStatusRef = useRef<AgentStatusRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sortField, setSortField] = useState<SortField>('newest');
@@ -92,10 +119,12 @@ const App = () => {
   const toastIdRef = useRef(0);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
+  const [signalPageSize, setSignalPageSize] = useState<number>(DEFAULT_SIGNAL_PAGE_SIZE);
+  const [thesisPageSize, setThesisPageSize] = useState<number>(DEFAULT_THESIS_PAGE_SIZE);
   const [thesisSortField, setThesisSortField] = useState<ThesisSortField>('newest');
   const [thesisPageInfo, setThesisPageInfo] = useState({
     page: 1,
-    pageSize: 10,
+    pageSize: DEFAULT_THESIS_PAGE_SIZE,
     totalItems: 0,
     totalPages: 1,
     hasNext: false,
@@ -119,7 +148,7 @@ const App = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pageInfo, setPageInfo] = useState({
     page: 1,
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_SIGNAL_PAGE_SIZE,
     totalItems: 0,
     totalPages: 1,
     hasNext: false,
@@ -176,22 +205,64 @@ const App = () => {
 
   // Sync thesis stats from WebSocket
   useEffect(() => {
-    if (ws.thesisStats.total > 0) setThesisStats(ws.thesisStats);
+    setThesisStats(ws.thesisStats);
   }, [ws.thesisStats]);
+
+  const summarizeAgentRun = useCallback((status: AgentStatusRecord): string | null => {
+    if (isLatestOutcomeFailed(status)) {
+      return 'failed';
+    }
+    if (status.lastRun) {
+      return `${status.lastRun.thesesUpdated} updated, ${status.lastRun.newCandidates} new`;
+    }
+    return null;
+  }, []);
 
   // Track agent running state from WebSocket
   useEffect(() => {
+    latestWsAgentStatusRef.current = ws.agentStatus ?? null;
     if (!ws.agentStatus) return;
-    const wasRunning = prevRunningRef.current;
     const nowRunning = ws.agentStatus.isRunning;
+    const pendingRunId = pendingManualRunIdRef.current;
+    const waitingForManualOutcome = manualRunRequestedRef.current;
+
+    if (waitingForManualOutcome && !nowRunning) {
+      if (pendingRunId === null) return;
+      const matchesPendingRun =
+        ws.agentStatus.activeRunId === pendingRunId ||
+        ws.agentStatus.lastAttempt?.runId === pendingRunId;
+      if (!matchesPendingRun) return;
+    }
+
+    const wasRunning = prevRunningRef.current;
+    setAgentStatus(ws.agentStatus);
     prevRunningRef.current = nowRunning;
     setAgentRunning(nowRunning);
 
-    if (wasRunning && !nowRunning && ws.agentStatus.lastRun) {
-      const lr = ws.agentStatus.lastRun;
-      setAgentRunResult(`${lr.thesesUpdated} updated, ${lr.newCandidates} new`);
+    if (nowRunning) {
+      setAgentRunResult(null);
+      return;
     }
-  }, [ws.agentStatus]);
+
+    const summarized = summarizeAgentRun(ws.agentStatus);
+
+    // If a manual trigger temporarily set a local failure, reconcile it with
+    // the authoritative websocket status once a later success is visible.
+    if (agentRunResult === 'failed' && summarized && summarized !== 'failed') {
+      setAgentRunResult(summarized);
+    }
+
+    if (waitingForManualOutcome && pendingRunId !== null && ws.agentStatus.lastAttempt?.runId === pendingRunId) {
+      manualRunRequestedRef.current = false;
+      pendingManualRunIdRef.current = null;
+      setAgentRunResult(summarized);
+      return;
+    }
+
+    if (wasRunning && !nowRunning) {
+      setAgentRunResult(summarized);
+    }
+  }, [agentRunResult, summarizeAgentRun, ws.agentStatus]);
 
   // Connection lost warning
   useEffect(() => {
@@ -210,7 +281,7 @@ const App = () => {
       try {
         const result = await fetchSignals({
           page: requestedPage,
-          pageSize: PAGE_SIZE,
+          pageSize: signalPageSize,
           ...(sourceFilter !== 'all' ? { source: sourceFilter } : {}),
           ...(thesisFilter !== null ? { thesisKey: thesisFilter } : {}),
           sort: sortField,
@@ -237,7 +308,7 @@ const App = () => {
     void loadSignals();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedPage, sourceFilter, thesisFilter, sortField, ws.signalsUpdatedAt]);
+  }, [requestedPage, signalPageSize, sourceFilter, thesisFilter, sortField, ws.signalsUpdatedAt]);
 
   // Fetch theses on page/sort/filter change or when server pushes thesesUpdated
   useEffect(() => {
@@ -246,7 +317,7 @@ const App = () => {
       try {
         const tp = await fetchTheses({
           page: requestedThesisPage,
-          pageSize: 10,
+          pageSize: thesisPageSize,
           sort: thesisSortField,
           profile: activeProfile,
           ...(labelFilter !== 'all' ? { label: labelFilter } : {}),
@@ -267,7 +338,7 @@ const App = () => {
     void loadTheses();
     return () => { isCancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter, ws.thesesUpdatedAt]);
+  }, [requestedThesisPage, thesisPageSize, thesisSortField, activeProfile, labelFilter, ws.thesesUpdatedAt]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderedLogs+logDrawerOpen trigger scroll-to-bottom
   useEffect(() => {
@@ -386,23 +457,48 @@ const App = () => {
   const handleLabelChange = useCallback(async (canonicalKey: string, label: ThesisLabel) => {
     try {
       await setThesisLabel(canonicalKey, label);
-      setTheses((prev) => prev.map((t) =>
-        t.canonicalKey === canonicalKey ? { ...t, label } : t
-      ));
+      const shouldRemoveFromFilteredList = labelFilter !== 'all' && label !== labelFilter;
+      setTheses((prev) => prev.flatMap((t) => {
+        if (t.canonicalKey !== canonicalKey) return [t];
+        if (shouldRemoveFromFilteredList) return [];
+        return [{ ...t, label }];
+      }));
+      if (shouldRemoveFromFilteredList) {
+        setThesisPageInfo((prev) => ({
+          ...prev,
+          totalItems: Math.max(0, prev.totalItems - 1),
+        }));
+        setOmapSelectedThesis((prev) => prev?.canonicalKey === canonicalKey ? null : prev);
+        if (thesisFilter === canonicalKey) {
+          setThesisFilter(null);
+          setThesisFilterTitle('');
+        }
+      }
     } catch {
       showToast('Failed to update label', 'error');
     }
-  }, [showToast]);
+  }, [labelFilter, showToast, thesisFilter]);
 
   const handleRunAgent = async () => {
+    manualRunRequestedRef.current = true;
+    pendingManualRunIdRef.current = null;
     setAgentRunning(true);
     setAgentRunResult(null);
     setLogDrawerOpen(true);
     try {
-      await triggerAgentRun();
-      // 202 accepted — agent runs in background.
-      // Polling via GET /v1/agent/status handles running→done transition.
+      const run = await triggerAgentRun();
+      pendingManualRunIdRef.current = run.runId;
+      const latestStatus = latestWsAgentStatusRef.current;
+      if (latestStatus && !latestStatus.isRunning && latestStatus.lastAttempt?.runId === run.runId) {
+        manualRunRequestedRef.current = false;
+        pendingManualRunIdRef.current = null;
+        setAgentStatus(latestStatus);
+        setAgentRunning(false);
+        setAgentRunResult(summarizeAgentRun(latestStatus));
+      }
     } catch {
+      manualRunRequestedRef.current = false;
+      pendingManualRunIdRef.current = null;
       setAgentRunning(false);
       setAgentRunResult('failed');
     }
@@ -413,10 +509,16 @@ const App = () => {
       <Sidebar
         connectors={ws.connectors}
         aiHealth={ws.aiHealth}
-        agentStatus={ws.agentStatus}
+        agentStatus={agentStatus ?? ws.agentStatus}
         infraStatus={ws.infraStatus}
         thesisStats={thesisStats}
-        signalCount={ws.signalCount || Object.values(ws.signalCounts).reduce((a, b) => a + b, 0) || pageInfo.totalItems}
+        signalCount={
+          ws.signalCount
+          ?? (Object.keys(ws.signalCounts).length > 0
+            ? Object.values(ws.signalCounts).reduce((a, b) => a + b, 0)
+            : undefined)
+          ?? pageInfo.totalItems
+        }
         latestSignalAt={ws.latestSignalAt}
         signalCounts={ws.signalCounts}
         onRunAgent={handleRunAgent}
@@ -487,10 +589,24 @@ const App = () => {
                   value={thesisSortField}
                   onChange={(e) => { setThesisSortField(e.target.value as ThesisSortField); setRequestedThesisPage(1); }}
                 >
-                  <option value="newest">Newest</option>
+                  <option value="newest">Newest Added</option>
                   <option value="score">By Score</option>
                   <option value="latest">Latest Activity</option>
                   <option value="evidence">Most Evidence</option>
+                </select>
+                <select
+                  className="source-filter"
+                  value={thesisPageSize}
+                  onChange={(e) => {
+                    setThesisPageSize(parsePageSize(e.target.value, DEFAULT_THESIS_PAGE_SIZE));
+                    setRequestedThesisPage(1);
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}/page
+                    </option>
+                  ))}
                 </select>
                 {thesisPageInfo.totalPages > 1 && (
                   <>
@@ -599,10 +715,24 @@ const App = () => {
                   value={sortField}
                   onChange={(e) => { setSortField(e.target.value as SortField); setRequestedPage(1); }}
                 >
-                  <option value="newest">Newest</option>
+                  <option value="newest">Newest Added</option>
                   <option value="score">By Score</option>
                   <option value="virality">By Virality</option>
                   <option value="demand">By Demand</option>
+                </select>
+                <select
+                  className="source-filter"
+                  value={signalPageSize}
+                  onChange={(e) => {
+                    setSignalPageSize(parsePageSize(e.target.value, DEFAULT_SIGNAL_PAGE_SIZE));
+                    setRequestedPage(1);
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}/page
+                    </option>
+                  ))}
                 </select>
                 {thesisFilter && (
                   <div className="filter-chip">

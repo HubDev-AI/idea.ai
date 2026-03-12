@@ -4,6 +4,7 @@ import type { ThesisDraft } from '../jobs/thesis_synthesizer';
 import type { ThesisStore, ThesisStoreFilter } from './thesis_store';
 
 type ThesisRow = {
+  id?: string;
   canonical_key: string;
   title: string;
   topic: string;
@@ -28,9 +29,24 @@ type ThesisRow = {
   corroboration_score: number | string | null;
 };
 
+type ThesisEvidenceRow = {
+  thesis_id: string;
+  signal_id: string;
+  relation: ThesisDraft['evidence'][number]['relation'];
+  weight: number | string;
+  snippet: string;
+  observed_at: Date | string;
+  source: string | null;
+};
+
 const toNumber = (v: unknown): number => {
   const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
+};
+
+const toIsoString = (v: unknown): string => {
+  const date = new Date(String(v ?? ''));
+  return Number.isNaN(date.getTime()) ? new Date(0).toISOString() : date.toISOString();
 };
 
 const validScopes = new Set(['small', 'medium', 'large']);
@@ -39,7 +55,10 @@ const toScope = (v: unknown): ThesisDraft['estimatedScope'] => {
   return validScopes.has(s) ? (s as 'small' | 'medium' | 'large') : null;
 };
 
-const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
+const rowToDraft = (
+  row: ThesisRow,
+  evidence: ThesisDraft['evidence'] = [],
+): ThesisDraft & { sourceCount: number } => ({
   canonicalKey: row.canonical_key,
   title: row.title,
   topic: row.topic,
@@ -55,8 +74,9 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   avgTiming: toNumber(row.avg_timing),
   avgBuildability: toNumber(row.avg_buildability),
   avgVirality: toNumber(row.avg_virality),
-  latestObservedAt: new Date(row.last_seen_at).toISOString(),
-  evidence: [],
+  firstObservedAt: toIsoString(row.first_seen_at),
+  latestObservedAt: toIsoString(row.last_seen_at),
+  evidence,
   estimatedScope: toScope(row.estimated_scope),
   profileId: row.profile_id ?? 'consumer',
   label: row.label ?? null,
@@ -64,6 +84,48 @@ const rowToDraft = (row: ThesisRow): ThesisDraft & { sourceCount: number } => ({
   velocity: row.velocity != null ? toNumber(row.velocity) : null,
   corroborationScore: row.corroboration_score != null ? toNumber(row.corroboration_score) : null,
 });
+
+const hydrateEvidence = async <T extends ThesisDraft & { canonicalKey: string; id?: string }>(
+  pool: Pool,
+  drafts: T[],
+): Promise<T[]> => {
+  const thesisIds = drafts.flatMap((draft) => typeof draft.id === 'string' && draft.id.length > 0 ? [draft.id] : []);
+
+  if (thesisIds.length === 0) {
+    return drafts;
+  }
+
+  const result = await pool.query<ThesisEvidenceRow>(
+    `SELECT te.thesis_id, te.signal_id, te.relation, te.weight, te.snippet, te.observed_at, sm.source
+     FROM thesis_evidence te
+     LEFT JOIN scored_signals sm ON sm.signal_id = te.signal_id
+     WHERE te.thesis_id::text = ANY($1::text[])
+     ORDER BY te.weight DESC, te.observed_at DESC`,
+    [thesisIds]
+  );
+
+  const evidenceByThesisId = new Map<string, ThesisDraft['evidence']>();
+  for (const row of result.rows) {
+    const list = evidenceByThesisId.get(row.thesis_id) ?? [];
+    list.push({
+      signal_id: row.signal_id,
+      relation: row.relation,
+      weight: toNumber(row.weight),
+      snippet: row.snippet,
+      observed_at: toIsoString(row.observed_at),
+      ...(row.source ? { source: row.source } : {}),
+    });
+    evidenceByThesisId.set(row.thesis_id, list);
+  }
+
+  return drafts.map((draft) => {
+    if (!draft.id) return draft;
+    return {
+      ...draft,
+      evidence: evidenceByThesisId.get(draft.id) ?? [],
+    };
+  });
+};
 
 export type ThesisSortField = 'score' | 'latest' | 'evidence' | 'newest';
 
@@ -84,8 +146,17 @@ const THESIS_AGG_COLS = [
 
 export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedThesisStore => ({
   async list(filter?: ThesisStoreFilter): Promise<ThesisDraft[]> {
-    const where = filter?.status ? 'WHERE status = $1' : '';
-    const params = filter?.status ? [filter.status] : [];
+    const clauses: string[] = [];
+    const params: string[] = [];
+    if (filter?.status) {
+      params.push(filter.status);
+      clauses.push(`status = $${params.length}`);
+    }
+    if (filter?.profileId) {
+      params.push(filter.profileId);
+      clauses.push(`profile_id = $${params.length}`);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     const sql = `
       SELECT tc.*, ${THESIS_AGG_COLS}
       FROM thesis_candidates tc
@@ -96,7 +167,8 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       ORDER BY tc.confidence DESC
     `;
     const result = await pool.query<ThesisRow>(sql, params);
-    return result.rows.map(rowToDraft);
+    const drafts = result.rows.map((row) => Object.assign(rowToDraft(row), row.id ? { id: row.id } : {}));
+    return hydrateEvidence(pool, drafts).then((rows) => rows.map(({ id: _id, ...draft }) => draft));
   },
 
   async getByKey(canonicalKey: string): Promise<ThesisDraft | null> {
@@ -109,7 +181,12 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
        GROUP BY tc.id`,
       [canonicalKey]
     );
-    return result.rows[0] ? rowToDraft(result.rows[0]) : null;
+    if (!result.rows[0]) return null;
+    const draft = Object.assign(rowToDraft(result.rows[0]), result.rows[0].id ? { id: result.rows[0].id } : {});
+    const [hydrated] = await hydrateEvidence(pool, [draft]);
+    if (!hydrated) return null;
+    const { id: _id, ...clean } = hydrated as ThesisDraft & { id?: string };
+    return clean;
   },
 
   async getAsListItem(canonicalKey: string): Promise<ThesisListItem | null> {
@@ -142,6 +219,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       problemStatement: d.problemStatement,
       sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
       estimatedScope: d.estimatedScope ?? null,
+      firstSeenAt: d.firstObservedAt ?? d.latestObservedAt ?? new Date().toISOString(),
       lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
       hasDeepDive: row.has_deep_dive === true,
       profileId: (d as ReturnType<typeof rowToDraft>).profileId ?? 'consumer',
@@ -296,6 +374,7 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
         problemStatement: d.problemStatement,
         sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
         estimatedScope: d.estimatedScope ?? null,
+        firstSeenAt: d.firstObservedAt ?? d.latestObservedAt ?? new Date().toISOString(),
         lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
         hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
         profileId: (d as ReturnType<typeof rowToDraft>).profileId ?? 'consumer',

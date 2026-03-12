@@ -1,5 +1,5 @@
 import rateLimit from '@fastify/rate-limit';
-import type { AgentStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
+import type { AgentRunAccepted, AgentStatusRecord, RefreshMeta } from '@idea/contracts/src/api';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { AgentRunResult } from './jobs/agent_runner';
 import type { DeepDiveGeneratorDeps } from './jobs/deep_dive_generator';
@@ -37,7 +37,7 @@ export type ServerDeps = {
   apiKey?: string;
   rateLimitMax?: number;
   getAgentStatus?: () => AgentStatusRecord;
-  triggerAgentRun?: () => Promise<AgentRunResult>;
+  triggerAgentRun?: () => AgentRunAccepted;
   agentRunStore?: AgentRunStore | null;
   infraStatusDeps?: InfraStatusDeps;
   getRefreshMeta?: () => RefreshMeta;
@@ -172,6 +172,9 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
     registerThesisExplainRoute(app, {
       store: resolvedDeps.thesisStore,
       pool: resolvedDeps.pool ?? null,
+      ...(resolvedDeps.pool ? {
+        getActiveWeights: (profileId: string) => getActiveWeights(resolvedDeps.pool!, profileId)
+      } : {}),
     });
   }
 

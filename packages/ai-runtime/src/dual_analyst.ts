@@ -12,6 +12,16 @@ export type DualResult<T> = {
   codex: T | null;
 };
 
+export class NoUsableProviderResponseError extends Error {
+  readonly failures: Array<{ provider: 'claude' | 'codex'; error: string }>;
+
+  constructor(failures: Array<{ provider: 'claude' | 'codex'; error: string }>) {
+    super(`No AI provider returned a usable response: ${failures.map((f) => `${f.provider}: ${f.error}`).join('; ')}`);
+    this.name = 'NoUsableProviderResponseError';
+    this.failures = failures;
+  }
+}
+
 const DISAGREEMENT_THRESHOLD = 25;
 
 const avg = (a: number, b: number) => Math.round((a + b) / 2);
@@ -57,59 +67,63 @@ export const dualAnalystRun = async <T>(
     logger?: { info: LogFn; warn: LogFn };
     preferred?: 'claude' | 'codex';
     allowFallback?: boolean;
+    retries?: number;
   }
 ): Promise<DualResult<T>> => {
   const log = deps.logger;
   const preferred = deps.preferred ?? 'claude';
   const allowFallback = deps.allowFallback ?? true;
+  const strategy = allowFallback ? 'primary_with_fallback' : 'single_provider';
+  const retryBudget = Number.isFinite(deps.retries) ? Math.max(0, Math.trunc(deps.retries ?? 0)) : 0;
 
   let claude: T | null = null;
   let codex: T | null = null;
+  const failures: Array<{ provider: 'claude' | 'codex'; error: string }> = [];
 
-  const runPrimary = preferred === 'claude' ? deps.runClaude : deps.runCodex;
-  const runFallback = preferred === 'claude' ? deps.runCodex : deps.runClaude;
   const primaryLabel = preferred;
   const fallbackLabel = preferred === 'claude' ? 'codex' : 'claude';
-
-  // Step 1: Try preferred provider
-  try {
-    const result = await runPrimary(input);
-    const parsed = deps.parseResponse(result.text);
-    if (preferred === 'claude') claude = parsed; else codex = parsed;
-    await log?.info('dual_analyst', `${primaryLabel} succeeded`, { parsed: true });
-    return { claude, codex };
-  } catch (err) {
-    await log?.warn('dual_analyst', `${primaryLabel} failed`, {
-      error: err instanceof Error ? err.message : 'unknown'
+  const providersToTry: Array<{ label: 'claude' | 'codex'; run: (input: RunPromptInput) => Promise<RunPromptResult> }> = [
+    { label: primaryLabel, run: preferred === 'claude' ? deps.runClaude : deps.runCodex },
+  ];
+  if (allowFallback) {
+    providersToTry.push({
+      label: fallbackLabel,
+      run: preferred === 'claude' ? deps.runCodex : deps.runClaude,
     });
   }
 
-  // Step 2: Try fallback provider (only if allowed)
-  if (allowFallback) {
-    try {
-      const result = await runFallback(input);
-      const parsed = deps.parseResponse(result.text);
-      if (fallbackLabel === 'claude') claude = parsed; else codex = parsed;
-      await log?.info('dual_analyst', `${fallbackLabel} succeeded`, { parsed: true });
-      return { claude, codex };
-    } catch (err) {
-      await log?.warn('dual_analyst', `${fallbackLabel} failed`, {
-        error: err instanceof Error ? err.message : 'unknown'
-      });
+  for (const provider of providersToTry) {
+    const maxAttempts = Math.max(1, retryBudget + 1);
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const result = await provider.run(input);
+        const parsed = deps.parseResponse(result.text);
+        if (provider.label === 'claude') claude = parsed; else codex = parsed;
+        await log?.info('ai_provider', `${provider.label} succeeded`, {
+          parsed: true,
+          strategy,
+          preferred,
+          attempt,
+          max_attempts: maxAttempts,
+        });
+        return { claude, codex };
+      } catch (err) {
+        const error = err instanceof Error ? err.message : 'unknown';
+        failures.push({ provider: provider.label, error });
+        await log?.warn('ai_provider', `${provider.label} failed`, {
+          error,
+          strategy,
+          preferred,
+          attempt,
+          max_attempts: maxAttempts,
+          will_retry: attempt < maxAttempts,
+        });
+      }
     }
   }
 
-  // Retry primary if it failed (and fallback was skipped or also failed)
   if (claude === null && codex === null) {
-    await log?.info('dual_analyst', `retrying ${primaryLabel}`);
-    try {
-      const retry = await runPrimary(input);
-      try {
-        const parsed = deps.parseResponse(retry.text);
-        if (preferred === 'claude') claude = parsed; else codex = parsed;
-      } catch { /* parse failed */ }
-      await log?.info('dual_analyst', `${primaryLabel} retry result`, { parsed: claude !== null || codex !== null });
-    } catch { /* exhausted */ }
+    throw new NoUsableProviderResponseError(failures);
   }
 
   return { claude, codex };

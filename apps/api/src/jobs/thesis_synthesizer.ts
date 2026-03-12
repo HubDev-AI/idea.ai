@@ -19,6 +19,7 @@ export type ThesisEvidenceDraft = {
   weight: number;
   snippet: string;
   observed_at: string;
+  source?: string;
 };
 
 export type ThesisDraft = {
@@ -36,6 +37,7 @@ export type ThesisDraft = {
   avgTiming: number;
   avgBuildability: number;
   avgVirality: number;
+  firstObservedAt?: string;
   latestObservedAt: string;
   evidence: ThesisEvidenceDraft[];
   estimatedScope?: 'small' | 'medium' | 'large' | null;
@@ -345,13 +347,15 @@ export const buildThesisCandidates = (
       return toDate(right.observed_at).getTime() - toDate(left.observed_at).getTime();
     });
     const latestObservedAt = ordered[0]?.observed_at ?? new Date().toISOString();
+    const firstObservedAt = ordered[ordered.length - 1]?.observed_at ?? latestObservedAt;
     const source = dominantSource(bucket);
     const evidence = ordered.slice(0, 12).map((signal) => ({
       signal_id: signal.signal_id,
       relation: 'supporting' as const,
       weight: round2(clamp(signal.blended)),
       snippet: parseSnippet(signal.canonical_text),
-      observed_at: signal.observed_at
+      observed_at: signal.observed_at,
+      source: signal.source,
     }));
 
     drafts.push({
@@ -369,6 +373,7 @@ export const buildThesisCandidates = (
       avgTiming,
       avgBuildability,
       avgVirality,
+      firstObservedAt,
       latestObservedAt,
       evidence
     });
@@ -376,4 +381,3 @@ export const buildThesisCandidates = (
 
   return drafts.sort((left, right) => right.confidence - left.confidence);
 };
-

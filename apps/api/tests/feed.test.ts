@@ -4,6 +4,7 @@ import { buildServer } from '../src/server';
 
 describe('feed API', () => {
   const servers: FastifyInstance[] = [];
+  const recentIso = () => new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
   afterEach(async () => {
     await Promise.all(servers.map((server) => server.close()));
@@ -19,7 +20,7 @@ describe('feed API', () => {
           snippet: 'Founders repeating compliance pain',
           source_url: 'https://news.ycombinator.com/item?id=123',
           next_action: 'validate_demand',
-          updated_at: '2026-02-24T00:00:00.000Z'
+          updated_at: recentIso()
         }
       ],
       listConnectors: async () => []
@@ -39,7 +40,7 @@ describe('feed API', () => {
           snippet: 'Founders repeating compliance pain',
           source_url: 'https://news.ycombinator.com/item?id=123',
           next_action: 'validate_demand',
-          updated_at: '2026-02-24T00:00:00.000Z'
+          updated_at: expect.any(String)
         }
       ],
       page: 1,
@@ -61,7 +62,7 @@ describe('feed API', () => {
           snippet: `snippet-${index + 1}`,
           source_url: null,
           next_action: 'validate_demand',
-          updated_at: '2026-02-24T00:00:00.000Z'
+          updated_at: recentIso()
         })),
       listConnectors: async () => []
     });
@@ -79,16 +80,16 @@ describe('feed API', () => {
           snippet: 'snippet-3',
           source_url: null,
           next_action: 'validate_demand',
-          updated_at: '2026-02-24T00:00:00.000Z'
+          updated_at: expect.any(String)
         },
         {
-          idea: 'idea-4',
-          score: 63,
+          idea: 'idea-2',
+          score: 61,
           top_source: 'hacker_news',
-          snippet: 'snippet-4',
+          snippet: 'snippet-2',
           source_url: null,
           next_action: 'validate_demand',
-          updated_at: '2026-02-24T00:00:00.000Z'
+          updated_at: expect.any(String)
         }
       ],
       page: 2,
@@ -130,7 +131,7 @@ describe('feed API', () => {
           snippet: 'snippet-\udc00',
           source_url: 'https://example.com/\ud83d',
           next_action: 'validate_demand',
-          updated_at: '2026-02-24T00:00:00.000Z'
+          updated_at: recentIso()
         }
       ],
       listConnectors: async () => []

@@ -18,7 +18,22 @@ describe('GET /v1/theses', () => {
     const response = await app.inject({ method: 'GET', url: '/v1/theses' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual([]);
+    expect(response.json()).toEqual({
+      items: [],
+      page: 1,
+      page_size: 10,
+      total_items: 0,
+      total_pages: 1,
+      has_next: false,
+      has_prev: false,
+      stats: {
+        total: 0,
+        promoted: 0,
+        watching: 0,
+        totalEvidence: 0,
+        totalSources: 0,
+      }
+    });
   });
 
   it('returns theses sorted by confidence', async () => {
@@ -67,8 +82,63 @@ describe('GET /v1/theses', () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body).toHaveLength(2);
-    expect(body[0].canonicalKey).toBe('high');
+    expect(body.items).toHaveLength(2);
+    expect(body.items[0].canonicalKey).toBe('high');
+    expect(body.total_items).toBe(2);
+  });
+
+  it('sorts newest by first seen in the in-memory fallback and exposes firstSeenAt', async () => {
+    const store = new InMemoryThesisStore();
+    await store.upsert({
+      canonicalKey: 'older-but-updated',
+      title: 'Older but updated',
+      topic: 't',
+      status: 'watching',
+      confidence: 55,
+      scoreTotal: 55,
+      problemStatement: 'p',
+      targetBuyer: 'b',
+      proposedSolution: 's',
+      evidenceCount: 2,
+      avgDemand: 55,
+      avgTiming: 50,
+      avgBuildability: 45,
+      avgVirality: 20,
+      latestObservedAt: '2026-02-25T11:30:00Z',
+      firstObservedAt: '2026-02-20T08:00:00Z',
+      evidence: []
+    } as any);
+    await store.upsert({
+      canonicalKey: 'actually-newest',
+      title: 'Actually newest',
+      topic: 't',
+      status: 'candidate',
+      confidence: 50,
+      scoreTotal: 50,
+      problemStatement: 'p',
+      targetBuyer: 'b',
+      proposedSolution: 's',
+      evidenceCount: 1,
+      avgDemand: 50,
+      avgTiming: 45,
+      avgBuildability: 40,
+      avgVirality: 15,
+      latestObservedAt: '2026-02-24T09:00:00Z',
+      firstObservedAt: '2026-02-24T08:00:00Z',
+      evidence: []
+    } as any);
+
+    const app = await buildServer({ thesisStore: store });
+    servers.push(app);
+
+    const response = await app.inject({ method: 'GET', url: '/v1/theses?sort=newest' });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.items).toHaveLength(2);
+    expect(body.items[0].canonicalKey).toBe('actually-newest');
+    expect(body.items[0].firstSeenAt).toBe('2026-02-24T08:00:00.000Z');
+    expect(body.items[1].firstSeenAt).toBe('2026-02-20T08:00:00.000Z');
   });
 
   it('does not register thesis route when no store provided', async () => {

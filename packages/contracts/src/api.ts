@@ -49,7 +49,10 @@ export type RefreshMeta = {
   last_daily_run: string | null;
   hourly_interval_ms: number;
   daily_interval_ms: number;
-  refreshing: 'hourly' | 'daily' | null;
+  refreshing: {
+    hourly: boolean;
+    daily: boolean;
+  };
 };
 
 // -- Execution logs ------------------------------------------------ */
@@ -126,6 +129,7 @@ export type ThesisListItem = {
   problemStatement: string;
   sourceCount: number;
   estimatedScope: 'small' | 'medium' | 'large' | null;
+  firstSeenAt: string;
   lastSeenAt: string;
   hasDeepDive: boolean;
   profileId?: string;
@@ -173,6 +177,12 @@ export type ThesisExplainRecord = {
     timing: { score: number; weight: number; contribution: number };
     buildability: { score: number; weight: number; contribution: number };
     virality: { score: number; weight: number; contribution: number };
+    dimensionLabels: {
+      demand: string;
+      timing: string;
+      buildability: string;
+      virality: string;
+    };
     blended: number;
     weightsSource: 'optimized' | 'default';
   };
@@ -211,9 +221,16 @@ export type AgentRunResult = {
   provider: string | null;
 };
 
+export type AgentRunAccepted = {
+  accepted: boolean;
+  runId: string;
+  alreadyRunning: boolean;
+};
+
 export type AgentStatusRecord = {
   isRunning: boolean;
   intervalMs: number;
+  activeRunId: string | null;
   lastRun: {
     timestamp: string;
     thesesUpdated: number;
@@ -222,6 +239,13 @@ export type AgentStatusRecord = {
     deepDivesPerformed: number;
     journalEntriesWritten: number;
     provider: string | null;
+  } | null;
+  lastAttempt: {
+    runId: string;
+    timestamp: string;
+    status: 'running' | 'completed' | 'failed';
+    provider: string | null;
+    errorMessage: string | null;
   } | null;
   investigateNext: string | null;
 };

@@ -55,6 +55,100 @@ describe('PostgresThesisStore', () => {
     expect(result!.latestObservedAt).toBe('2026-01-15T12:00:00.000Z');
   });
 
+  it('hydrates evidence on list for downstream debate and explain routes', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'thesis-1',
+            canonical_key: 'k4',
+            title: 'T4',
+            topic: 'ops',
+            status: 'watching',
+            confidence: '70',
+            problem_statement: 'p4',
+            target_buyer: 'b4',
+            proposed_solution: 's4',
+            first_seen_at: new Date(),
+            last_seen_at: new Date('2026-01-15T12:00:00Z'),
+            evidence_count: 1,
+            source_count: 1,
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            thesis_id: 'thesis-1',
+            signal_id: 'sig-1',
+            relation: 'supporting',
+            weight: '0.9',
+            snippet: 'Strong evidence',
+            observed_at: new Date('2026-01-15T12:00:00Z'),
+          }
+        ]
+      });
+
+    const store = createPostgresThesisStore({ pool: mockPool });
+    const result = await store.list();
+
+    expect(result[0]!.evidence).toEqual([
+      {
+        signal_id: 'sig-1',
+        relation: 'supporting',
+        weight: 0.9,
+        snippet: 'Strong evidence',
+        observed_at: '2026-01-15T12:00:00.000Z',
+      }
+    ]);
+  });
+
+  it('hydrates evidence on getByKey', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'thesis-2',
+            canonical_key: 'k5',
+            title: 'T5',
+            topic: 'ops',
+            status: 'watching',
+            confidence: '70',
+            problem_statement: 'p5',
+            target_buyer: 'b5',
+            proposed_solution: 's5',
+            first_seen_at: new Date(),
+            last_seen_at: new Date('2026-01-15T12:00:00Z'),
+            evidence_count: 1,
+            source_count: 1,
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            thesis_id: 'thesis-2',
+            signal_id: 'sig-2',
+            relation: 'adjacent',
+            weight: 0.4,
+            snippet: 'Adjacent evidence',
+            observed_at: new Date('2026-01-15T13:00:00Z'),
+          }
+        ]
+      });
+
+    const store = createPostgresThesisStore({ pool: mockPool });
+    const result = await store.getByKey('k5');
+
+    expect(result!.evidence[0]).toEqual({
+      signal_id: 'sig-2',
+      relation: 'adjacent',
+      weight: 0.4,
+      snippet: 'Adjacent evidence',
+      observed_at: '2026-01-15T13:00:00.000Z',
+    });
+  });
+
   it('upsert calls INSERT ON CONFLICT', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     const store = createPostgresThesisStore({ pool: mockPool });

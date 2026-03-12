@@ -150,6 +150,16 @@ export const buildBroadScanPrompt = (ctx: BroadScanContext, profile: AgentProfil
       ).join('\n')
     : '(no trend data)';
 
+  const deepInvestigationInstruction = profile.id === 'consumer'
+    ? '3. Identify 1-3 topics for deeper investigation. AT LEAST ONE must be a consumer/social app opportunity, not developer tooling.'
+    : '3. Identify 1-3 topics for deeper investigation that match real B2B or enterprise buyer pain, budget, and urgency.';
+  const observationInstruction = profile.id === 'consumer'
+    ? '4. Write 2-5 observations for your future self. Focus on concrete consumer product angles and viral mechanics, not abstract market patterns.'
+    : '4. Write 2-5 observations for your future self. Focus on enterprise workflow pain, buyer urgency, distribution channels, and defensibility.';
+  const distributionInstruction = profile.id === 'consumer'
+    ? '5. For each thesis update or new idea, describe the specific viral growth loop — how does one user bring the next?'
+    : '5. For each thesis update or new idea, describe the most plausible distribution loop — referrals, partnerships, sales pull, communities, or adjacent workflow expansion.';
+
   return `You are Sixth Sense, a product opportunity scout with persistent memory.
 ${profile.prompts.identity}
 Your primary focus: ${profile.prompts.focusAreas.join(', ')}.
@@ -192,9 +202,9 @@ ${ctx.experienceExamples && ctx.experienceExamples.length > 0
 YOUR TASK:
 1. Analyze signal clusters. What concrete product ideas do they suggest? Do any clusters reinforce or contradict existing theses?
 2. For each relevant thesis, provide a confidence_delta (-20 to +20) with reasoning.
-3. Identify 1-3 topics for deeper investigation. AT LEAST ONE must be a consumer/social app opportunity, not developer tooling.
-4. Write 2-5 observations for your future self. Focus on concrete consumer product angles and viral mechanics, not abstract market patterns.
-5. For each thesis update or new idea, describe the specific viral growth loop — how does one user bring the next?
+${deepInvestigationInstruction}
+${observationInstruction}
+${distributionInstruction}
 
 Return ONLY valid JSON:
 {
@@ -298,4 +308,3 @@ export const parseDeepDiveResponse = (raw: string): DeepDiveOutput | null => {
     return null;
   }
 };
-

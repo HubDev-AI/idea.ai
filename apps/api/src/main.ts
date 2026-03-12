@@ -3,12 +3,13 @@ import { runCodexPrompt } from '@idea/ai-runtime/src/codex';
 import { embedText } from '@idea/ai-runtime/src/ollama';
 import { runOllamaPrompt } from '@idea/ai-runtime/src/ollama_prompt';
 import { createRouter } from '@idea/ai-runtime/src/router';
-import type { AgentStatusRecord } from '@idea/contracts/src/api';
+import type { AgentRunAccepted, AgentStatusRecord } from '@idea/contracts/src/api';
 import type { ClientToServerEvents, ServerToClientEvents } from '@idea/contracts/src/ws';
 import pg from 'pg';
 import { Server as SocketIOServer } from 'socket.io';
 import { loadEnvFile } from './config/dotenv';
 import { loadRuntimeEnv } from './config/env';
+import { aggregateAgentProfileRuns } from './jobs/agent_run_aggregation';
 import { type AgentRunResult, runResearchAgent } from './jobs/agent_runner';
 import { extractEntities } from './jobs/entity_extractor';
 import { snapshotPredictions } from './jobs/backtest_snapshot';
@@ -23,8 +24,10 @@ import { createEntityStore } from './runtime/entity_store';
 import { createExecutionLogger } from './runtime/execution_logger';
 import { createExperienceStore } from './runtime/experience_store';
 import { createPostgresJournalStore } from './runtime/journal_store';
+import { buildShutdownInterruptedError, isAgentCatchUpDue } from './runtime/agent_run_lifecycle';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresSignalStore } from './runtime/postgres_signal_store';
+import { buildStartupAgentStatus } from './runtime/agent_status_state';
 import { createPostgresThesisStore, type PaginatedThesisStore } from './runtime/postgres_thesis_store';
 import { createProviderCircuitBreaker } from './runtime/provider_circuit';
 import { InMemoryThesisStore } from './runtime/thesis_store';
@@ -67,7 +70,7 @@ const signalStore = databaseUrl
   ? createPostgresSignalStore({ databaseUrl, embedText: embedTextFn })
   : null;
 
-const readModel = createLiveReadModel(undefined, {
+const readModel = createLiveReadModel(startupEnv.agentIntervalMs, {
   ...(signalStore ? { persistentStore: signalStore } : {}),
   circuit: providerCircuit,
   ...(pool ? { pool } : {}),
@@ -96,8 +99,17 @@ const modelRouter = startupEnv.modelRoutingEnabled
     })
   : null;
 
-let agentStatus: AgentStatusRecord = { isRunning: false, intervalMs: startupEnv.agentIntervalMs, lastRun: null, investigateNext: null };
+let agentStatus: AgentStatusRecord = {
+  isRunning: false,
+  intervalMs: startupEnv.agentIntervalMs,
+  activeRunId: null,
+  lastRun: null,
+  lastAttempt: null,
+  investigateNext: null
+};
 let agentRunInFlight: Promise<AgentRunResult> | null = null;
+let agentRunInFlightId: string | null = null;
+let stateHub: StateHub | null = null;
 
 // Load last run status from DB on startup (survives restarts)
 try {
@@ -106,43 +118,51 @@ try {
     await pool.query(
       `UPDATE agent_runs SET status = 'failed', finished_at = now(), error_message = 'interrupted by server restart' WHERE status = 'running'`
     );
-    // Load last completed run for display
-    const { rows } = await pool.query(
-      `SELECT * FROM agent_runs WHERE status = 'completed' ORDER BY started_at DESC LIMIT 1`
-    );
-    const row = rows[0] as any;
-    if (row) {
-      agentStatus = {
-        isRunning: false,
+    const [{ rows: completedRows }, { rows: latestRows }] = await Promise.all([
+      pool.query(`SELECT * FROM agent_runs WHERE status = 'completed' ORDER BY started_at DESC LIMIT 1`),
+      pool.query(`SELECT * FROM agent_runs ORDER BY started_at DESC LIMIT 1`)
+    ]);
+    const completedRow = completedRows[0] as any;
+    const latestRow = latestRows[0] as any;
+    if (completedRow || latestRow) {
+      agentStatus = buildStartupAgentStatus({
         intervalMs: startupEnv.agentIntervalMs,
-        lastRun: {
-          timestamp: row.started_at,
-          thesesUpdated: row.theses_updated,
-          newCandidates: row.new_candidates,
-          clustersAnalyzed: row.clusters_analyzed,
-          deepDivesPerformed: row.deep_dives_performed,
-          journalEntriesWritten: row.journal_entries_written,
-          provider: row.provider ?? null
-        },
-        investigateNext: row.investigate_next
-      };
+        completedRow,
+        latestRow
+      });
     }
   }
 } catch { /* DB may not have the table yet */ }
 
-const executeAgentRun = async (): Promise<AgentRunResult> => {
-  if (agentRunInFlight) return agentRunInFlight;
+const startAgentRun = (): AgentRunAccepted => {
+  if (agentRunInFlight && agentRunInFlightId) {
+    return { accepted: true, runId: agentRunInFlightId, alreadyRunning: true };
+  }
 
   const runId = `agent-${Date.now()}`;
+  const startedAt = new Date().toISOString();
+  agentRunInFlightId = runId;
   const logger = createExecutionLogger({ runId });
   readModel.registerRunId(runId);
 
-  agentRunInFlight = (async () => {
-    await agentRunStore?.create(runId);
-    await logger.info('agent_runner', 'run started', { run_id: runId });
-    stateHub.emitAgentStatus({ ...agentStatus, isRunning: true });
+  agentStatus = {
+    ...agentStatus,
+    isRunning: true,
+    activeRunId: runId,
+    lastAttempt: {
+      runId,
+      timestamp: startedAt,
+      status: 'running',
+      provider: null,
+      errorMessage: null
+    }
+  };
+  stateHub?.emitAgentStatus(agentStatus);
 
+  agentRunInFlight = (async () => {
     try {
+      await agentRunStore?.create(runId);
+      await logger.info('agent_runner', 'run started', { run_id: runId });
       const agentEnv = loadRuntimeEnv(process.env);
       const profiles = loadProfiles();
 
@@ -162,6 +182,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         runId,
         preferredProvider: agentEnv.aiPrimary,
         allowFallback: agentEnv.aiFallback !== 'none',
+        retries: agentEnv.aiRetries,
         timeoutMs: agentEnv.aiTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
         pool: pool ?? undefined,
@@ -178,32 +199,10 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         )
       );
 
-      // Aggregate results across all profiles
-      const aggregated: AgentRunResult = {
-        thesesUpdated: 0,
-        newCandidates: 0,
-        alerts: [],
-        investigateNext: '',
-        journalEntriesWritten: 0,
-        clustersAnalyzed: 0,
-        deepDivesPerformed: 0,
-        debatesPerformed: 0,
-        provider: null,
-      };
-
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
         const p = profiles[i];
         if (r.status === 'fulfilled') {
-          aggregated.thesesUpdated += r.value.thesesUpdated;
-          aggregated.newCandidates += r.value.newCandidates;
-          aggregated.alerts.push(...r.value.alerts);
-          aggregated.journalEntriesWritten += r.value.journalEntriesWritten;
-          aggregated.clustersAnalyzed += r.value.clustersAnalyzed;
-          aggregated.deepDivesPerformed += r.value.deepDivesPerformed;
-          aggregated.debatesPerformed = (aggregated.debatesPerformed ?? 0) + (r.value.debatesPerformed ?? 0);
-          if (!aggregated.provider) aggregated.provider = r.value.provider;
-          if (!aggregated.investigateNext) aggregated.investigateNext = r.value.investigateNext;
           await logger.info('agent_runner', `profile ${p.id} completed`, {
             theses_updated: r.value.thesesUpdated,
             new_candidates: r.value.newCandidates,
@@ -215,6 +214,8 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         }
       }
 
+      const { aggregated, failedProfiles } = aggregateAgentProfileRuns(profiles, results);
+
       await agentRunStore?.complete(runId, aggregated);
       await logger.info('agent_runner', 'run complete', {
         theses_updated: aggregated.thesesUpdated,
@@ -223,14 +224,16 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
         deep_dives: aggregated.deepDivesPerformed,
         journal_entries: aggregated.journalEntriesWritten,
         profiles_succeeded: results.filter(r => r.status === 'fulfilled').length,
-        profiles_failed: results.filter(r => r.status === 'rejected').length,
+        profiles_failed: failedProfiles.length,
       });
 
+      const finishedAt = new Date().toISOString();
       agentStatus = {
         isRunning: false,
         intervalMs: startupEnv.agentIntervalMs,
+        activeRunId: null,
         lastRun: {
-          timestamp: new Date().toISOString(),
+          timestamp: finishedAt,
           thesesUpdated: aggregated.thesesUpdated,
           newCandidates: aggregated.newCandidates,
           clustersAnalyzed: aggregated.clustersAnalyzed,
@@ -238,24 +241,51 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
           journalEntriesWritten: aggregated.journalEntriesWritten,
           provider: aggregated.provider,
         },
+        lastAttempt: {
+          runId,
+          timestamp: finishedAt,
+          status: 'completed',
+          provider: aggregated.provider,
+          errorMessage: null
+        },
         investigateNext: aggregated.investigateNext || null,
       };
-      // Push updates via WebSocket after agent run
-      void stateHub.broadcastAll();
-      stateHub.emitThesesUpdated();
+      stateHub?.emitAgentStatus(agentStatus);
+      void stateHub?.broadcastAll();
+      stateHub?.emitThesesUpdated();
       return aggregated;
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       await agentRunStore?.fail(runId, err);
       await logger.error('agent_runner', 'run failed', {
-        error: err instanceof Error ? err.message : String(err)
+        error: errorMessage
       });
+      agentStatus = {
+        ...agentStatus,
+        isRunning: false,
+        activeRunId: null,
+        lastAttempt: {
+          runId,
+          timestamp: new Date().toISOString(),
+          status: 'failed',
+          provider: null,
+          errorMessage
+        }
+      };
+      stateHub?.emitAgentStatus(agentStatus);
       throw err;
     }
   })().finally(() => {
     agentRunInFlight = null;
+    agentRunInFlightId = null;
   });
 
-  return agentRunInFlight;
+  return { accepted: true, runId, alreadyRunning: false };
+};
+
+const executeAgentRun = async (): Promise<AgentRunResult> => {
+  startAgentRun();
+  return agentRunInFlight!;
 };
 
 const ollamaBaseUrl = startupEnv.ollamaBaseUrl;
@@ -267,8 +297,9 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getAiHealth: readModel.getAiHealth,
   getRefreshMeta: readModel.getRefreshMeta,
   triggerRefresh: async (cadence) => {
+    const refreshPromise = readModel.startRefresh(cadence);
     stateHub.pushRefreshMeta();
-    await readModel.startRefresh(cadence);
+    await refreshPromise;
     void stateHub.broadcastAll();
 
     // Entity extraction: run after refresh if both entityStore and modelRouter are available
@@ -309,8 +340,12 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getRouterStats: () => modelRouter
     ? { stats: modelRouter.getStats(), enabled: startupEnv.modelRoutingEnabled }
     : null,
-  getAgentStatus: () => ({ ...agentStatus, isRunning: agentRunInFlight !== null }),
-  triggerAgentRun: executeAgentRun,
+  getAgentStatus: () => ({
+    ...agentStatus,
+    isRunning: agentRunInFlight !== null,
+    activeRunId: agentRunInFlight !== null ? agentRunInFlightId : null
+  }),
+  triggerAgentRun: startAgentRun,
   agentRunStore,
   corsOrigins,
   pool: pool ?? undefined,
@@ -372,23 +407,23 @@ if (apiKey !== undefined) serverDeps.apiKey = apiKey;
 const app = await buildServer(serverDeps);
 
 // -- Socket.IO + StateHub -----------------------------------------------
-const allowedOrigins = corsOrigins.length > 0
-  ? corsOrigins
-  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
-
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(app.server, {
   cors: {
-    origin: allowedOrigins,
+    origin: corsOrigins.length > 0 ? corsOrigins : true,
     methods: ['GET', 'POST'],
   },
   path: '/socket.io/',
 });
 
 const infraCheckDeps = serverDeps.infraStatusDeps!;
-const stateHub = new StateHub(io, {
+stateHub = new StateHub(io, {
   getConnectors: readModel.listConnectors,
   getAiHealth: readModel.getAiHealth,
-  getAgentStatus: () => ({ ...agentStatus, isRunning: agentRunInFlight !== null }),
+  getAgentStatus: () => ({
+    ...agentStatus,
+    isRunning: agentRunInFlight !== null,
+    activeRunId: agentRunInFlight !== null ? agentRunInFlightId : null
+  }),
   getInfraStatus: async () => {
     const [pgResult, ollamaResult, embStats, diskResult] = await Promise.allSettled([
       infraCheckDeps.checkPostgres(),
@@ -440,6 +475,46 @@ readModel.setOnRefreshComplete(() => {
   stateHub.pushRefreshMeta();
 });
 
+const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+const triggerRefreshCadence = (cadence: 'hourly' | 'daily', source: 'startup' | 'periodic') => {
+  const refreshPromise = readModel.startRefresh(cadence);
+  stateHub.pushRefreshMeta();
+  void refreshPromise.then(() => stateHub.broadcastAll()).catch((err) => {
+    console.error(`${source} ${cadence} refresh failed:`, err);
+  });
+  return refreshPromise;
+};
+
+const scheduleDueRefreshes = async ({
+  hourlyLastRunAt,
+  dailyLastRunAt,
+  hourlyIntervalMs,
+}: {
+  hourlyLastRunAt: number;
+  dailyLastRunAt: number;
+  hourlyIntervalMs: number;
+}, source: 'startup' | 'periodic'): Promise<void> => {
+  const now = Date.now();
+  const hourlyDue = hourlyLastRunAt === 0 || now - hourlyLastRunAt > hourlyIntervalMs;
+  const dailyDue = dailyLastRunAt === 0 || now - dailyLastRunAt > DAILY_INTERVAL_MS;
+  const started: Promise<unknown>[] = [];
+
+  if (hourlyDue) {
+    started.push(triggerRefreshCadence('hourly', source));
+  }
+  if (dailyDue) {
+    started.push(triggerRefreshCadence('daily', source));
+  }
+
+  if (started.length === 0) {
+    await stateHub.broadcastAll();
+    return;
+  }
+
+  await Promise.allSettled(started);
+};
+
 let agentTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupTimer: ReturnType<typeof setInterval> | undefined;
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -485,9 +560,25 @@ const shutdown = async () => {
         new Promise((_, reject) => setTimeout(() => reject(new Error('shutdown timeout')), SHUTDOWN_TIMEOUT_MS))
       ]);
     } catch {
-      // Run was interrupted or timed out — agentRunStore.fail() already called in executeAgentRun's catch block
+      if (agentRunInFlightId) {
+        const error = buildShutdownInterruptedError(agentRunInFlightId);
+        await agentRunStore?.fail(agentRunInFlightId, error);
+        agentStatus = {
+          ...agentStatus,
+          isRunning: false,
+          activeRunId: null,
+          lastAttempt: {
+            runId: agentRunInFlightId,
+            timestamp: new Date().toISOString(),
+            status: 'failed',
+            provider: null,
+            errorMessage: error.message
+          }
+        };
+      }
     }
     agentRunInFlight = null;
+    agentRunInFlightId = null;
   }
 
   // readModel.close() closes the shared signalStore pool — don't close it again
@@ -525,18 +616,16 @@ app
     // Only refresh on startup if data is actually stale (avoids re-ingesting on every restart)
     void (async () => {
       const state = await readModel.peekState();
-      const isStale = state.lastHourlyRunAt === 0 || Date.now() - state.lastHourlyRunAt > runtimeEnv.agentIntervalMs;
-      if (isStale) {
-        await readModel.startRefresh();
-      }
-      stateHub.broadcastAll();
+      await scheduleDueRefreshes({
+        hourlyLastRunAt: state.lastHourlyRunAt,
+        dailyLastRunAt: state.lastDailyRunAt,
+        hourlyIntervalMs: runtimeEnv.agentIntervalMs,
+      }, 'startup');
     })().catch(() => {});
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
 
     // If overdue from a previous session, run immediately then start the regular interval
-    const lastRunTs = agentStatus.lastRun?.timestamp;
-    const isOverdue = lastRunTs && (Date.now() - new Date(lastRunTs).getTime()) > runtimeEnv.agentIntervalMs;
-    if (isOverdue) {
+    if (isAgentCatchUpDue(agentStatus, runtimeEnv.agentIntervalMs)) {
       void executeAgentRun().catch((err) => {
         console.error('research agent catch-up run failed:', err);
       });
@@ -550,10 +639,14 @@ app
 
     // Periodic connector refresh (was driven by client polling before WebSocket migration)
     refreshTimer = setInterval(() => {
-      stateHub.pushRefreshMeta();
-      void readModel.startRefresh().then(() => stateHub.broadcastAll()).catch((err) => {
-        console.error('periodic refresh failed:', err);
-      });
+      const meta = readModel.getRefreshMeta();
+      const hourlyLastRunAt = meta.last_hourly_run ? new Date(meta.last_hourly_run).getTime() : 0;
+      const dailyLastRunAt = meta.last_daily_run ? new Date(meta.last_daily_run).getTime() : 0;
+      void scheduleDueRefreshes({
+        hourlyLastRunAt,
+        dailyLastRunAt,
+        hourlyIntervalMs: runtimeEnv.agentIntervalMs,
+      }, 'periodic');
     }, runtimeEnv.agentIntervalMs);
 
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
