@@ -218,7 +218,7 @@ const buildMockFetch = (overrides?: { failSignals?: boolean; failTheses?: boolea
           JSON.stringify({
             items: mockSignals,
             page: 1,
-            page_size: 8,
+            page_size: 10,
             total_items: 1,
             total_pages: 1,
             has_next: false,

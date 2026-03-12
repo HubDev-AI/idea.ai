@@ -30,9 +30,16 @@ import { ThesisDeepDiveModal } from './components/ThesisDeepDiveModal';
 import { connectorDisplayName, connectorSourceKey } from './connectorNames';
 import { useSocket } from './useSocket';
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+const DEFAULT_SIGNAL_PAGE_SIZE = 10;
+const DEFAULT_THESIS_PAGE_SIZE = 10;
 const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
+
+const parsePageSize = (value: string, fallback: number): number => {
+  const parsed = Number(value);
+  return PAGE_SIZE_OPTIONS.some((size) => size === parsed) ? parsed : fallback;
+};
 
 const toTimestamp = (value: string | null | undefined): number | null => {
   if (!value) return null;
@@ -112,10 +119,12 @@ const App = () => {
   const toastIdRef = useRef(0);
   const [requestedPage, setRequestedPage] = useState(1);
   const [requestedThesisPage, setRequestedThesisPage] = useState(1);
+  const [signalPageSize, setSignalPageSize] = useState<number>(DEFAULT_SIGNAL_PAGE_SIZE);
+  const [thesisPageSize, setThesisPageSize] = useState<number>(DEFAULT_THESIS_PAGE_SIZE);
   const [thesisSortField, setThesisSortField] = useState<ThesisSortField>('newest');
   const [thesisPageInfo, setThesisPageInfo] = useState({
     page: 1,
-    pageSize: 10,
+    pageSize: DEFAULT_THESIS_PAGE_SIZE,
     totalItems: 0,
     totalPages: 1,
     hasNext: false,
@@ -139,7 +148,7 @@ const App = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [pageInfo, setPageInfo] = useState({
     page: 1,
-    pageSize: PAGE_SIZE,
+    pageSize: DEFAULT_SIGNAL_PAGE_SIZE,
     totalItems: 0,
     totalPages: 1,
     hasNext: false,
@@ -272,7 +281,7 @@ const App = () => {
       try {
         const result = await fetchSignals({
           page: requestedPage,
-          pageSize: PAGE_SIZE,
+          pageSize: signalPageSize,
           ...(sourceFilter !== 'all' ? { source: sourceFilter } : {}),
           ...(thesisFilter !== null ? { thesisKey: thesisFilter } : {}),
           sort: sortField,
@@ -299,7 +308,7 @@ const App = () => {
     void loadSignals();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedPage, sourceFilter, thesisFilter, sortField, ws.signalsUpdatedAt]);
+  }, [requestedPage, signalPageSize, sourceFilter, thesisFilter, sortField, ws.signalsUpdatedAt]);
 
   // Fetch theses on page/sort/filter change or when server pushes thesesUpdated
   useEffect(() => {
@@ -308,7 +317,7 @@ const App = () => {
       try {
         const tp = await fetchTheses({
           page: requestedThesisPage,
-          pageSize: 10,
+          pageSize: thesisPageSize,
           sort: thesisSortField,
           profile: activeProfile,
           ...(labelFilter !== 'all' ? { label: labelFilter } : {}),
@@ -329,7 +338,7 @@ const App = () => {
     void loadTheses();
     return () => { isCancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedThesisPage, thesisSortField, activeProfile, labelFilter, ws.thesesUpdatedAt]);
+  }, [requestedThesisPage, thesisPageSize, thesisSortField, activeProfile, labelFilter, ws.thesesUpdatedAt]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: renderedLogs+logDrawerOpen trigger scroll-to-bottom
   useEffect(() => {
@@ -585,6 +594,20 @@ const App = () => {
                   <option value="latest">Latest Activity</option>
                   <option value="evidence">Most Evidence</option>
                 </select>
+                <select
+                  className="source-filter"
+                  value={thesisPageSize}
+                  onChange={(e) => {
+                    setThesisPageSize(parsePageSize(e.target.value, DEFAULT_THESIS_PAGE_SIZE));
+                    setRequestedThesisPage(1);
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}/page
+                    </option>
+                  ))}
+                </select>
                 {thesisPageInfo.totalPages > 1 && (
                   <>
                     <button
@@ -696,6 +719,20 @@ const App = () => {
                   <option value="score">By Score</option>
                   <option value="virality">By Virality</option>
                   <option value="demand">By Demand</option>
+                </select>
+                <select
+                  className="source-filter"
+                  value={signalPageSize}
+                  onChange={(e) => {
+                    setSignalPageSize(parsePageSize(e.target.value, DEFAULT_SIGNAL_PAGE_SIZE));
+                    setRequestedPage(1);
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}/page
+                    </option>
+                  ))}
                 </select>
                 {thesisFilter && (
                   <div className="filter-chip">
