@@ -526,7 +526,7 @@ const runRetentionCleanup = async () => {
   const retentionDays = startupEnv.retentionDays;
   if (retentionDays <= 0) return; // 0 = disabled
   try {
-    await pool.query(`DELETE FROM scored_signals WHERE observed_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
+    await pool.query(`DELETE FROM scored_signals WHERE updated_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
     await pool.query(`DELETE FROM signal_embeddings WHERE signal_id NOT IN (SELECT signal_id FROM scored_signals)`);
     await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
     await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
