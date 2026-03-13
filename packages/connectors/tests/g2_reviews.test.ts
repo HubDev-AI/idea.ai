@@ -7,7 +7,7 @@ describe('g2 connector', () => {
     const mockFetch = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve(html) });
     const events = await fetchG2Trending({ fetchImpl: mockFetch as any });
     expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events[0].source).toBe('g2_reviews');
+    expect(events[0]!.source).toBe('g2_reviews');
   });
 
   it('returns empty on error', async () => {

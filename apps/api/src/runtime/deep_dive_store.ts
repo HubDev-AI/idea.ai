@@ -56,6 +56,8 @@ export const createDeepDiveStore = ({ pool }: { pool: Pool }): DeepDiveStore => 
        RETURNING *`,
       [canonicalKey, data.summary, data.howItWorks, data.growthStrategy, data.buildSuggestions, data.generatedBy]
     );
-    return rowToDeepDive(result.rows[0]);
+    const saveRow = result.rows[0];
+    if (!saveRow) throw new Error('Deep dive save returned no row');
+    return rowToDeepDive(saveRow);
   },
 });

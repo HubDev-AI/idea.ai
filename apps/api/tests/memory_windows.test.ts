@@ -11,9 +11,10 @@ describe('memory window refresh', () => {
           source: 'hn',
           canonical_text: 'soc2 pain',
           observed_at: '2026-02-22T00:00:00.000Z',
-          pain: 78,
+          demand: 78,
           timing: 66,
           buildability: 59,
+          virality: 0,
           blended: 69
         },
         {
@@ -22,9 +23,10 @@ describe('memory window refresh', () => {
           source: 'hn',
           canonical_text: 'audit pain',
           observed_at: '2026-01-29T00:00:00.000Z',
-          pain: 67,
+          demand: 67,
           timing: 58,
           buildability: 61,
+          virality: 0,
           blended: 62
         }
       ],

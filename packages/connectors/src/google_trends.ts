@@ -24,7 +24,7 @@ export const fetchGoogleTrends = async (
   let match: RegExpExecArray | null = itemRegex.exec(xml);
 
   while (match !== null && results.length < limit) {
-    const item = match[1];
+    const item = match[1] ?? '';
     const title = item.match(/<title><!\[CDATA\[(.*?)\]\]>/)?.[1]
       ?? item.match(/<title>(.*?)<\/title>/)?.[1] ?? '';
     const link = item.match(/<link>(.*?)<\/link>/)?.[1] ?? '';

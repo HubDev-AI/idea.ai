@@ -37,8 +37,8 @@ export const getActiveWeights = async (
       [profileId],
     );
 
-    if (rows.length > 0) {
-      const row = rows[0];
+    const row = rows[0];
+    if (row !== undefined) {
       return {
         profileId,
         demand: row.demand_weight,
@@ -52,7 +52,7 @@ export const getActiveWeights = async (
     // DB error — fall through to defaults
   }
 
-  const defaults = PROFILE_DEFAULT_WEIGHTS[profileId] ?? PROFILE_DEFAULT_WEIGHTS.consumer;
+  const defaults = PROFILE_DEFAULT_WEIGHTS[profileId] ?? PROFILE_DEFAULT_WEIGHTS['consumer']!;
   return {
     profileId,
     demand: defaults.demand,

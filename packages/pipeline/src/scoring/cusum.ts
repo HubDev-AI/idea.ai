@@ -20,7 +20,7 @@ export const detectChangePoints = (
   const changePoints: number[] = [];
 
   for (let i = 1; i < values.length; i++) {
-    const diff = values[i] - values[i - 1];
+    const diff = values[i]! - values[i - 1]!;
     posSum = Math.max(0, posSum + diff - drift);
     negSum = Math.max(0, negSum - diff - drift);
 

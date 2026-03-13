@@ -15,10 +15,10 @@ describe('lobsters connector', () => {
 
     const events = await fetchLobstersEvents(mockLoader, 25);
     expect(events).toHaveLength(1);
-    expect(events[0].source).toBe('lobsters');
-    expect(events[0].source_item_id).toBe('lobsters:abc123');
-    expect(events[0].text).toContain('dotfiles');
-    expect(events[0].url).toBe('https://example.com/dotfiles');
+    expect(events[0]!.source).toBe('lobsters');
+    expect(events[0]!.source_item_id).toBe('lobsters:abc123');
+    expect(events[0]!.text).toContain('dotfiles');
+    expect(events[0]!.url).toBe('https://example.com/dotfiles');
   });
 
   it('respects limit', async () => {
@@ -48,6 +48,6 @@ describe('lobsters connector', () => {
     }];
 
     const events = await fetchLobstersEvents(mockLoader, 25);
-    expect(events[0].url).toBe('https://lobste.rs/s/xyz');
+    expect(events[0]!.url).toBe('https://lobste.rs/s/xyz');
   });
 });

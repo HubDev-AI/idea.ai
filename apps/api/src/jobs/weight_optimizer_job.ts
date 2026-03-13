@@ -41,10 +41,11 @@ export const runWeightOptimization = async (deps: WeightOptDeps): Promise<OptRes
   const improvement = precision - (Number.isNaN(currentPrecision) ? 0 : currentPrecision);
 
   if (improvement < deps.minImprovement) {
+    const cp = Number.isNaN(currentPrecision) ? undefined : currentPrecision;
     return {
       skipped: true,
       reason: `Improvement ${(improvement * 100).toFixed(1)}% below threshold ${(deps.minImprovement * 100).toFixed(1)}%`,
-      currentPrecision: Number.isNaN(currentPrecision) ? undefined : currentPrecision,
+      ...(cp !== undefined ? { currentPrecision: cp } : {}),
       precision,
     };
   }
@@ -58,10 +59,11 @@ export const runWeightOptimization = async (deps: WeightOptDeps): Promise<OptRes
      precision, null, rows.length, deps.profileId ?? 'consumer']
   );
 
+  const cpFinal = Number.isNaN(currentPrecision) ? undefined : currentPrecision;
   return {
     skipped: false,
     newWeights: weights,
     precision,
-    currentPrecision: Number.isNaN(currentPrecision) ? undefined : currentPrecision,
+    ...(cpFinal !== undefined ? { currentPrecision: cpFinal } : {}),
   };
 };

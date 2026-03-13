@@ -69,9 +69,10 @@ export const registerScoringHealthRoute = (
          FROM thesis_predictions
          WHERE outcome_checked_at IS NOT NULL`,
       );
-      if (rows.length > 0) {
-        const total = parseInt(rows[0].total, 10);
-        const validated = parseInt(rows[0].validated, 10);
+      const statsRow = rows[0];
+      if (statsRow !== undefined) {
+        const total = parseInt(statsRow.total, 10);
+        const validated = parseInt(statsRow.validated, 10);
         predictionTrackRecord = {
           total,
           validated,
@@ -88,8 +89,9 @@ export const registerScoringHealthRoute = (
       const { rows } = await deps.pool.query<{ cnt: string }>(
         `SELECT COUNT(*)::text AS cnt FROM experience_library`,
       );
-      if (rows.length > 0) {
-        experienceLibrarySize = parseInt(rows[0].cnt, 10);
+      const cntRow = rows[0];
+      if (cntRow !== undefined) {
+        experienceLibrarySize = parseInt(cntRow.cnt, 10);
       }
     } catch {
       // DB not available

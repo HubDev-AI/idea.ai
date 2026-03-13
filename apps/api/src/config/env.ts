@@ -121,7 +121,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
       if (raw === 'none' || raw === 'false') return 'none' as const;
       // Legacy: AI_PROVIDER_FALLBACK=true → infer fallback as the other provider
       if (env.AI_PROVIDER_FALLBACK === 'true') {
-        return ((env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase() === 'codex' ? 'claude' : 'codex') as const;
+        return ((env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase() === 'codex' ? 'claude' : 'codex') as 'claude' | 'codex';
       }
       return 'none' as const;
     })(),

@@ -45,8 +45,8 @@ describe('loadProfiles', () => {
   it('returns enabled profiles', () => {
     const profiles = loadProfiles();
     expect(profiles).toHaveLength(2);
-    expect(profiles[0].id).toBe('consumer');
-    expect(profiles[1].id).toBe('b2b');
+    expect(profiles[0]!.id).toBe('consumer');
+    expect(profiles[1]!.id).toBe('b2b');
   });
 
   it('getProfile returns correct profile', () => {

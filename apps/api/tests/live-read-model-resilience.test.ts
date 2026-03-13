@@ -356,7 +356,7 @@ describe('live read model resilience', () => {
       daily: true,
     });
 
-    releaseDaily?.();
+    (releaseDaily as unknown as () => void)();
 
     await Promise.all([dailyPromise, hourlyPromise]);
 

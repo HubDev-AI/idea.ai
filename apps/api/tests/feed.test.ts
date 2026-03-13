@@ -105,8 +105,8 @@ describe('feed API', () => {
     const server = await buildServer({
       listSignals: async () => [],
       listConnectors: async () => [
-        { name: 'hn', status: 'active', last_run: '2026-02-24T01:00:00.000Z' },
-        { name: 'exa_byo', status: 'disabled', last_run: null }
+        { name: 'hn', status: 'active' as const, last_run: '2026-02-24T01:00:00.000Z', cadence: 'hourly' as const },
+        { name: 'exa_byo', status: 'disabled' as const, last_run: null, cadence: null }
       ]
     });
 
@@ -116,8 +116,8 @@ describe('feed API', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([
-      { name: 'hn', status: 'active', last_run: '2026-02-24T01:00:00.000Z' },
-      { name: 'exa_byo', status: 'disabled', last_run: null }
+      { name: 'hn', status: 'active', last_run: '2026-02-24T01:00:00.000Z', cadence: 'hourly' },
+      { name: 'exa_byo', status: 'disabled', last_run: null, cadence: null }
     ]);
   });
 

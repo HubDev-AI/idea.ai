@@ -24,6 +24,6 @@ describe('twitter BYO connector', () => {
 
     expect(result.status).toBe('active');
     expect(result.events).toHaveLength(1);
-    expect(result.events[0].source).toBe('twitter_trending');
+    expect(result.events[0]!.source).toBe('twitter_trending');
   });
 });

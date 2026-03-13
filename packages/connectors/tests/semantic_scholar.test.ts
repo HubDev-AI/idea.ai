@@ -26,9 +26,9 @@ describe('fetchSemanticScholar', () => {
     });
 
     expect(events.length).toBe(1);
-    expect(events[0].source).toBe('semantic_scholar');
-    expect(events[0].text).toContain('Retrieval-Augmented Generation');
-    expect(events[0].engagement_count).toBe(450);
+    expect(events[0]!.source).toBe('semantic_scholar');
+    expect(events[0]!.text).toContain('Retrieval-Augmented Generation');
+    expect(events[0]!.engagement_count).toBe(450);
   });
 
   it('returns empty array on API failure', async () => {
@@ -58,6 +58,6 @@ describe('fetchSemanticScholar', () => {
     });
 
     expect(events.length).toBe(1);
-    expect(events[0].text).toContain('Valid Paper');
+    expect(events[0]!.text).toContain('Valid Paper');
   });
 });
