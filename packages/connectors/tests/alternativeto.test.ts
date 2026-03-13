@@ -25,10 +25,10 @@ describe('alternativeto connector', () => {
     const results = await fetchAlternativeTo(mockLoader, 10);
 
     expect(results).toHaveLength(2);
-    expect(results[0].source).toBe('alternativeto');
-    expect(results[0].text).toContain('Notion');
-    expect(results[0].url).toContain('alternativeto.net');
-    expect(results[0].source_item_id).toMatch(/^altto:/);
+    expect(results[0]!.source).toBe('alternativeto');
+    expect(results[0]!.text).toContain('Notion');
+    expect(results[0]!.url).toContain('alternativeto.net');
+    expect(results[0]!.source_item_id).toMatch(/^altto:/);
   });
 
   it('respects limit parameter', async () => {

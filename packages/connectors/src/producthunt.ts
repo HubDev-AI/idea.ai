@@ -17,7 +17,7 @@ const defaultLoader: ProductHuntLoaderFn = async (limit) => {
   let match: RegExpExecArray | null = entryRegex.exec(response);
 
   while (match !== null && results.length < limit) {
-    const entry = match[1];
+    const entry = match[1] ?? '';
     const title = entry.match(/<title>(.*?)<\/title>/)?.[1] ?? '';
     const link = entry.match(/<link[^>]+href="([^"]+)"/)?.[1] ?? '';
     const content = entry.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1] ?? '';

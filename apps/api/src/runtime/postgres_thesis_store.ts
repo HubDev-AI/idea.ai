@@ -50,7 +50,7 @@ const toIsoString = (v: unknown): string => {
 };
 
 const validScopes = new Set(['small', 'medium', 'large']);
-const toScope = (v: unknown): ThesisDraft['estimatedScope'] => {
+const toScope = (v: unknown): 'small' | 'medium' | 'large' | null => {
   const s = String(v ?? '');
   return validScopes.has(s) ? (s as 'small' | 'medium' | 'large') : null;
 };
@@ -79,7 +79,7 @@ const rowToDraft = (
   evidence,
   estimatedScope: toScope(row.estimated_scope),
   profileId: row.profile_id ?? 'consumer',
-  label: row.label ?? null,
+  label: (row.label ?? null) as 'favourite' | 'later' | 'dismissed' | null,
   posteriorConfidence: toNumber(row.posterior_confidence ?? row.confidence),
   velocity: row.velocity != null ? toNumber(row.velocity) : null,
   corroborationScore: row.corroboration_score != null ? toNumber(row.corroboration_score) : null,
@@ -210,6 +210,9 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
     if (!result.rows[0]) return null;
     const row = result.rows[0];
     const d = rowToDraft(row);
+    const dExt = d as ReturnType<typeof rowToDraft>;
+    const vel = dExt.velocity;
+    const corr = dExt.corroborationScore;
     return {
       canonicalKey: d.canonicalKey,
       title: d.title,
@@ -217,17 +220,17 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       status: d.status,
       evidenceCount: d.evidenceCount,
       problemStatement: d.problemStatement,
-      sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
+      sourceCount: dExt.sourceCount ?? 0,
       estimatedScope: d.estimatedScope ?? null,
       firstSeenAt: d.firstObservedAt ?? d.latestObservedAt ?? new Date().toISOString(),
       lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
       hasDeepDive: row.has_deep_dive === true,
-      profileId: (d as ReturnType<typeof rowToDraft>).profileId ?? 'consumer',
-      label: (d as ReturnType<typeof rowToDraft>).label ?? null,
-      posteriorConfidence: (d as ReturnType<typeof rowToDraft>).posteriorConfidence ?? d.confidence,
-      velocity: (d as ReturnType<typeof rowToDraft>).velocity ?? undefined,
-      corroborationScore: (d as ReturnType<typeof rowToDraft>).corroborationScore ?? undefined,
-      debateVerdict: (row.debate_verdict ?? null) as ThesisListItem['debateVerdict'],
+      profileId: dExt.profileId ?? 'consumer',
+      label: dExt.label ?? null,
+      posteriorConfidence: dExt.posteriorConfidence ?? d.confidence,
+      ...(vel != null ? { velocity: vel } : {}),
+      ...(corr != null ? { corroborationScore: corr } : {}),
+      debateVerdict: (row.debate_verdict ?? null) as 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null,
     };
   },
 
@@ -360,30 +363,35 @@ export const createPostgresThesisStore = ({ pool }: { pool: Pool }): PaginatedTh
       LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
     const result = await pool.query<ThesisRow & { has_deep_dive: boolean; debate_verdict: string | null }>(sql, [...params, pageSize, offset]);
-    const items = result.rows.map(rowToDraft);
+    const items = result.rows.map((row) => rowToDraft(row));
     const deepDiveFlags = new Map(result.rows.map((r) => [r.canonical_key, r.has_deep_dive]));
     const debateVerdicts = new Map(result.rows.map((r) => [r.canonical_key, r.debate_verdict ?? null]));
 
     return {
-      items: items.map((d) => ({
-        canonicalKey: d.canonicalKey,
-        title: d.title,
-        confidence: d.confidence,
-        status: d.status,
-        evidenceCount: d.evidenceCount,
-        problemStatement: d.problemStatement,
-        sourceCount: (d as ReturnType<typeof rowToDraft>).sourceCount ?? 0,
-        estimatedScope: d.estimatedScope ?? null,
-        firstSeenAt: d.firstObservedAt ?? d.latestObservedAt ?? new Date().toISOString(),
-        lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
-        hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
-        profileId: (d as ReturnType<typeof rowToDraft>).profileId ?? 'consumer',
-        label: (d as ReturnType<typeof rowToDraft>).label ?? null,
-        posteriorConfidence: (d as ReturnType<typeof rowToDraft>).posteriorConfidence ?? d.confidence,
-        velocity: (d as ReturnType<typeof rowToDraft>).velocity ?? undefined,
-        corroborationScore: (d as ReturnType<typeof rowToDraft>).corroborationScore ?? undefined,
-        debateVerdict: (debateVerdicts.get(d.canonicalKey) ?? null) as 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null,
-      })),
+      items: items.map((d) => {
+        const dExt = d as ReturnType<typeof rowToDraft>;
+        const vel = dExt.velocity;
+        const corr = dExt.corroborationScore;
+        return {
+          canonicalKey: d.canonicalKey,
+          title: d.title,
+          confidence: d.confidence,
+          status: d.status,
+          evidenceCount: d.evidenceCount,
+          problemStatement: d.problemStatement,
+          sourceCount: dExt.sourceCount ?? 0,
+          estimatedScope: d.estimatedScope ?? null,
+          firstSeenAt: d.firstObservedAt ?? d.latestObservedAt ?? new Date().toISOString(),
+          lastSeenAt: d.latestObservedAt ?? new Date().toISOString(),
+          hasDeepDive: deepDiveFlags.get(d.canonicalKey) === true,
+          profileId: dExt.profileId ?? 'consumer',
+          label: dExt.label ?? null,
+          posteriorConfidence: dExt.posteriorConfidence ?? d.confidence,
+          ...(vel != null ? { velocity: vel } : {}),
+          ...(corr != null ? { corroborationScore: corr } : {}),
+          debateVerdict: (debateVerdicts.get(d.canonicalKey) ?? null) as 'strong_opportunity' | 'needs_investigation' | 'contested' | 'likely_noise' | null,
+        };
+      }),
       page: safePage,
       page_size: pageSize,
       total_items: totalItems,

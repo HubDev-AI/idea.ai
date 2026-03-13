@@ -65,6 +65,6 @@ describe('getActiveWeights', () => {
   it('falls back to consumer defaults for unknown profile', async () => {
     const result = await getActiveWeights(mockPool([]), 'unknown');
     expect(result.source).toBe('default');
-    expect(result.demand).toBe(PROFILE_DEFAULT_WEIGHTS.consumer.demand);
+    expect(result.demand).toBe(PROFILE_DEFAULT_WEIGHTS['consumer']!.demand);
   });
 });

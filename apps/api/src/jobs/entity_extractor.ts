@@ -60,7 +60,7 @@ export const extractEntities = async (input: EntityExtractionInput): Promise<num
     const id = await input.entityStore.upsertEntity({
       entity_type: entity.type as EntityType,
       name: entity.name.toLowerCase().trim(),
-      description: entity.description,
+      ...(entity.description !== undefined ? { description: entity.description } : {}),
     });
     entityIdMap.set(`${entity.type}:${entity.name.toLowerCase().trim()}`, id);
   }

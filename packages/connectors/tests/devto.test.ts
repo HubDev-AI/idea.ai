@@ -16,10 +16,10 @@ describe('devto connector', () => {
 
     const events = await fetchDevtoEvents(mockLoader, 30);
     expect(events).toHaveLength(1);
-    expect(events[0].source).toBe('devto');
-    expect(events[0].source_item_id).toBe('devto:12345');
-    expect(events[0].text).toContain('Building a CLI in Rust');
-    expect(events[0].text).toContain('How I built');
+    expect(events[0]!.source).toBe('devto');
+    expect(events[0]!.source_item_id).toBe('devto:12345');
+    expect(events[0]!.text).toContain('Building a CLI in Rust');
+    expect(events[0]!.text).toContain('How I built');
   });
 
   it('respects limit', async () => {

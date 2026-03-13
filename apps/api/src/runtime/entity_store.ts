@@ -45,7 +45,9 @@ export const createEntityStore = (deps: { pool: Pool }): EntityStore => ({
        RETURNING id`,
       [input.entity_type, input.name, input.description ?? null, embVal]
     );
-    return rows[0].id;
+    const idRow = rows[0];
+    if (!idRow) throw new Error('Entity upsert returned no row');
+    return idRow.id;
   },
 
   async upsertRelation(input) {

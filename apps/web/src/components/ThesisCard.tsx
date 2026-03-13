@@ -74,15 +74,18 @@ export const ThesisCard: React.FC<ThesisCardProps> = ({ thesis, profileDisplay, 
               {profileDisplay.badge}
             </span>
           )}
-          {thesis.estimatedScope && scopeLabel[thesis.estimatedScope] && (
-            <span
-              className="thesis-scope-badge"
-              style={{ borderColor: scopeLabel[thesis.estimatedScope].color, color: scopeLabel[thesis.estimatedScope].color }}
-              title={`${thesis.estimatedScope} app`}
-            >
-              {scopeLabel[thesis.estimatedScope].text}
-            </span>
-          )}
+          {thesis.estimatedScope && (() => {
+            const scopeInfo = scopeLabel[thesis.estimatedScope!];
+            return scopeInfo ? (
+              <span
+                className="thesis-scope-badge"
+                style={{ borderColor: scopeInfo.color, color: scopeInfo.color }}
+                title={`${thesis.estimatedScope} app`}
+              >
+                {scopeInfo.text}
+              </span>
+            ) : null;
+          })()}
           {thesis.debateVerdict && (
             <span
               className={`thesis-verdict-badge verdict-${thesis.debateVerdict.replace(/_/g, '-')}`}

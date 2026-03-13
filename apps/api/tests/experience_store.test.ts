@@ -38,7 +38,7 @@ describe('ExperienceStore', () => {
     const store = createExperienceStore({ pool: pool as any });
     const results = await store.listValidated(5);
     expect(results).toHaveLength(1);
-    expect(results[0].thesis_key).toBe('k1');
+    expect(results[0]!.thesis_key).toBe('k1');
   });
 
   it('retrieves similar experiences by embedding', async () => {

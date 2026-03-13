@@ -19,7 +19,8 @@ describe('memory-aware scoring', () => {
             demand: 85,
             timing: 70,
             source: 'hn',
-            observed_at: '2026-02-20T00:00:00.000Z'
+            observed_at: '2026-02-20T00:00:00.000Z',
+            canonical_text: 'compliance pain'
           }
         ],
         windows: [

@@ -21,8 +21,8 @@ describe('appstore connector', () => {
     const events = await fetchAppStoreTrending({ categories: ['social-networking'], fetchImpl: mockFetch });
 
     expect(events).toHaveLength(1);
-    expect(events[0].source).toBe('appstore_trending');
-    expect(events[0].source_item_id).toBe('appstore:12345');
-    expect(events[0].text).toContain('Cool App');
+    expect(events[0]!.source).toBe('appstore_trending');
+    expect(events[0]!.source_item_id).toBe('appstore:12345');
+    expect(events[0]!.text).toContain('Cool App');
   });
 });

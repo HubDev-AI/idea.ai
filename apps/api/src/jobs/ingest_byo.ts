@@ -78,10 +78,12 @@ export const runByoConnectorIngestion = async (
   ): Promise<ByoConnectorResult> => {
     if (deps.spendStore) {
       const spent = await deps.spendStore.getSpent(connector);
+      const apiKey = env[connector === 'exa_byo' ? 'EXA_API_KEY' : connector === 'perigon_byo' ? 'PERIGON_API_KEY' : 'X_BEARER_TOKEN'];
+      const budgetValue = env[connector === 'exa_byo' ? 'EXA_DAILY_BUDGET_USD' : connector === 'perigon_byo' ? 'PERIGON_DAILY_BUDGET_USD' : 'X_DAILY_BUDGET_USD'];
       const guard = evaluateByoGuard({
         connector,
-        apiKey: env[connector === 'exa_byo' ? 'EXA_API_KEY' : connector === 'perigon_byo' ? 'PERIGON_API_KEY' : 'X_BEARER_TOKEN'],
-        budgetValue: env[connector === 'exa_byo' ? 'EXA_DAILY_BUDGET_USD' : connector === 'perigon_byo' ? 'PERIGON_DAILY_BUDGET_USD' : 'X_DAILY_BUDGET_USD'],
+        ...(apiKey !== undefined ? { apiKey } : {}),
+        ...(budgetValue !== undefined ? { budgetValue } : {}),
         fallbackBudget: 5,
         spentUsd: spent,
       });

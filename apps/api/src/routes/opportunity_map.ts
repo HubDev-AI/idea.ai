@@ -44,7 +44,7 @@ export const registerOpportunityMapRoute = (
         velocity: row.velocity ?? 0,
         supply: 0,
         demand: row.evidence_count,
-        problemStatement: row.problem_statement ?? undefined,
+        ...(row.problem_statement != null ? { problemStatement: row.problem_statement } : {}),
         status: row.status,
       });
     }

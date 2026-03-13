@@ -321,7 +321,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         source: s.source,
         demand: s.demand,
         timing: s.timing,
-        virality: s.virality
+        ...(s.virality !== undefined ? { virality: s.virality } : {})
       }))
     })),
     recentJournal: recentJournal.map((j) => ({
@@ -427,6 +427,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
 
   for (let di = 0; di < debateCandidates.length; di++) {
     const thesis = debateCandidates[di];
+    if (!thesis) continue;
     try {
       const evidence = thesis.evidence.map(e => e.snippet).filter(Boolean);
       const useClaude = di % 2 === 0;
@@ -500,7 +501,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
         source: s.source,
         demand: s.demand,
         timing: s.timing,
-        virality: s.virality
+        ...(s.virality !== undefined ? { virality: s.virality } : {})
       }));
 
     // Similarity search for historical signals
@@ -699,7 +700,7 @@ export const runResearchAgent = async (deps: AgentRunnerDeps): Promise<AgentRunR
       if (!bestMetrics) {
         const matchingCluster = clusters.find((c) =>
           c.label.toLowerCase().includes(thesis.topic.toLowerCase()) ||
-          thesis.title.toLowerCase().includes(c.label.toLowerCase().split(' ')[0])
+          thesis.title.toLowerCase().includes(c.label.toLowerCase().split(' ')[0] ?? '')
         );
         if (matchingCluster) {
           bestMetrics = clusterMetrics.get(matchingCluster.id);

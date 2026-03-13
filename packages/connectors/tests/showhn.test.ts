@@ -15,9 +15,9 @@ describe('showhn connector', () => {
 
     const events = await fetchShowHnEvents(mockLoader, 25);
     expect(events).toHaveLength(1);
-    expect(events[0].source).toBe('showhn');
-    expect(events[0].source_item_id).toBe('showhn:99999');
-    expect(events[0].text).toContain('dev tool');
+    expect(events[0]!.source).toBe('showhn');
+    expect(events[0]!.source_item_id).toBe('showhn:99999');
+    expect(events[0]!.text).toContain('dev tool');
   });
 
   it('filters items with empty titles', async () => {
@@ -28,6 +28,6 @@ describe('showhn connector', () => {
 
     const events = await fetchShowHnEvents(mockLoader, 25);
     expect(events).toHaveLength(1);
-    expect(events[0].text).toBe('Real title');
+    expect(events[0]!.text).toBe('Real title');
   });
 });

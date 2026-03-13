@@ -144,6 +144,7 @@ describe('PostgresSignalStore', () => {
         demand: 70,
         timing: 80,
         buildability: 60,
+        virality: 0,
         blended: 72
       },
       embeddingRecord: {
@@ -179,6 +180,7 @@ describe('PostgresSignalStore', () => {
         demand: 50,
         timing: 50,
         buildability: 50,
+        virality: 0,
         blended: 50
       },
       embeddingRecord: null
@@ -222,6 +224,7 @@ describe('PostgresSignalStore', () => {
         demand: 50,
         timing: 50,
         buildability: 50,
+        virality: 0,
         blended: 50
       },
       embeddingRecord: {

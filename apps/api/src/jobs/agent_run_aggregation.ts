@@ -34,7 +34,7 @@ export const aggregateAgentProfileRuns = (
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
     const profile = profiles[i];
-    if (!profile) continue;
+    if (!result || !profile) continue;
 
     if (result.status === 'fulfilled') {
       aggregated.thesesUpdated += result.value.thesesUpdated;

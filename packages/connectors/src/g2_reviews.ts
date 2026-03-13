@@ -23,7 +23,7 @@ export async function fetchG2Trending(opts: G2Options = {}): Promise<RawEventInp
     let match: RegExpExecArray | null = categoryPattern.exec(html);
     while (match !== null && events.length < limit) {
       const [, slug, name] = match;
-      const trimmed = name.trim();
+      const trimmed = (name ?? '').trim();
       if (trimmed.length >= 3) {
         events.push({
           source: 'g2_reviews',

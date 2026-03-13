@@ -92,7 +92,8 @@ describe('agent runner', () => {
       byType: vi.fn().mockResolvedValue([]),
       byThesisKey: vi.fn().mockResolvedValue([]),
       findSimilar: vi.fn().mockResolvedValue([]),
-      count: vi.fn().mockResolvedValue(0)
+      count: vi.fn().mockResolvedValue(0),
+      close: vi.fn().mockResolvedValue(undefined)
     };
 
     const result = await runResearchAgent({
@@ -133,7 +134,8 @@ describe('agent runner', () => {
       byType: vi.fn().mockResolvedValue([]),
       byThesisKey: vi.fn().mockResolvedValue([]),
       findSimilar: vi.fn().mockResolvedValue([]),
-      count: vi.fn().mockResolvedValue(0)
+      count: vi.fn().mockResolvedValue(0),
+      close: vi.fn().mockResolvedValue(undefined)
     };
 
     const result = await runResearchAgent({

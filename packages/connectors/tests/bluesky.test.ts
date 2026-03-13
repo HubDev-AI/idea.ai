@@ -21,10 +21,10 @@ describe('bluesky connector', () => {
 
     const events = await fetchBlueskyEvents(mockLoader, 30);
     expect(events).toHaveLength(1);
-    expect(events[0].source).toBe('bluesky');
-    expect(events[0].text).toContain('side project');
-    expect(events[0].url).toBe('https://bsky.app/profile/dev.bsky.social/post/xyz789');
-    expect(events[0].engagement_count).toBe(33);
+    expect(events[0]!.source).toBe('bluesky');
+    expect(events[0]!.text).toContain('side project');
+    expect(events[0]!.url).toBe('https://bsky.app/profile/dev.bsky.social/post/xyz789');
+    expect(events[0]!.engagement_count).toBe(33);
   });
 
   it('filters short text', async () => {

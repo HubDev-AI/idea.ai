@@ -74,7 +74,8 @@ describe('deep-dive dedup', () => {
           growth_strategy: 'g',
           build_suggestions: 'b',
         }),
-        provider: 'claude',
+        provider: 'claude' as const,
+        meta: {} as Record<string, unknown>,
       };
     };
 
@@ -86,7 +87,8 @@ describe('deep-dive dedup', () => {
           growth_strategy: 'g',
           build_suggestions: 'b',
         }),
-        provider: 'codex',
+        provider: 'codex' as const,
+        meta: {} as Record<string, unknown>,
       };
     };
 

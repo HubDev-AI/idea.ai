@@ -36,19 +36,22 @@ const toNumber = (value: unknown): number => {
 };
 
 
-const rowToEntry = (row: Record<string, unknown>): JournalEntry => ({
-  id: toNumber(row.id),
-  run_id: String(row.run_id ?? ''),
-  entry_type: String(row.entry_type ?? 'run_summary') as JournalEntryType,
-  topic: String(row.topic ?? ''),
-  insight: String(row.insight ?? ''),
-  narrative: row.narrative != null ? String(row.narrative) : null,
-  confidence: toNumber(row.confidence),
-  thesis_keys: Array.isArray(row.thesis_keys) ? row.thesis_keys.map(String) : [],
-  signal_ids: Array.isArray(row.signal_ids) ? row.signal_ids.map(String) : [],
-  embedding: null, // Don't return embedding blobs in queries
-  created_at: row.created_at ? new Date(String(row.created_at)).toISOString() : undefined
-});
+const rowToEntry = (row: Record<string, unknown>): JournalEntry => {
+  const createdAt = row.created_at ? new Date(String(row.created_at)).toISOString() : undefined;
+  return {
+    id: toNumber(row.id),
+    run_id: String(row.run_id ?? ''),
+    entry_type: String(row.entry_type ?? 'run_summary') as JournalEntryType,
+    topic: String(row.topic ?? ''),
+    insight: String(row.insight ?? ''),
+    narrative: row.narrative != null ? String(row.narrative) : null,
+    confidence: toNumber(row.confidence),
+    thesis_keys: Array.isArray(row.thesis_keys) ? row.thesis_keys.map(String) : [],
+    signal_ids: Array.isArray(row.signal_ids) ? row.signal_ids.map(String) : [],
+    embedding: null, // Don't return embedding blobs in queries
+    ...(createdAt !== undefined ? { created_at: createdAt } : {}),
+  };
+};
 
 export const createPostgresJournalStore = ({
   databaseUrl

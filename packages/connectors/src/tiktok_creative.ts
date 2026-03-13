@@ -7,6 +7,7 @@ type TikTokTrend = {
 };
 
 type TikTokResponse = {
+  code?: number;
   data?: {
     trend_list?: TikTokTrend[];
   };

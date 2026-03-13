@@ -41,7 +41,7 @@ const defaultLoader: DevtoLoaderFn = async () => {
 
 export const fetchDevtoEvents = async (
   loadItems: DevtoLoaderFn = defaultLoader,
-  limit = OPEN_CONNECTOR_LIMITS.devto
+  limit: number = OPEN_CONNECTOR_LIMITS.devto
 ): Promise<RawEventInput[]> => {
   const items = await loadItems();
 

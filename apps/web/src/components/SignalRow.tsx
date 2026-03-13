@@ -30,10 +30,10 @@ export const SignalRow = ({ signal }: SignalRowProps) => {
       <div className="signal-top">
         {safeHref(signal.source_url) ? (
           <a className="signal-idea signal-idea-link" href={safeHref(signal.source_url)!} target="_blank" rel="noreferrer">
-            {signal.idea.split('|')[0].trim()}
+            {(signal.idea.split('|')[0] ?? signal.idea).trim()}
           </a>
         ) : (
-          <h3 className="signal-idea">{signal.idea.split('|')[0].trim()}</h3>
+          <h3 className="signal-idea">{(signal.idea.split('|')[0] ?? signal.idea).trim()}</h3>
         )}
         <span className="score">{signal.score}</span>
       </div>

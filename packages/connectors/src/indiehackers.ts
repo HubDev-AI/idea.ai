@@ -15,10 +15,10 @@ const parsePostsFromHtml = (html: string, limit: number): RawEventInput[] => {
   let match: RegExpExecArray | null = linkPattern.exec(html);
 
   while (match !== null && results.length < limit) {
-    const path = match[1];
-    const title = decodeEntities(match[3].replace(/<[^>]*>/g, '').trim());
+    const path = match[1] ?? '';
+    const title = decodeEntities((match[3] ?? '').replace(/<[^>]*>/g, '').trim());
 
-    if (title && title.length >= 5 && !seen.has(path)) {
+    if (title && title.length >= 5 && path && !seen.has(path)) {
       seen.add(path);
 
       results.push({
@@ -49,7 +49,7 @@ const defaultLoader: IndieHackersLoaderFn = async (limit) => {
 
 export const fetchIndieHackersEvents = async (
   loadEvents: IndieHackersLoaderFn = defaultLoader,
-  limit = OPEN_CONNECTOR_LIMITS.indiehackers
+  limit: number = OPEN_CONNECTOR_LIMITS.indiehackers
 ): Promise<RawEventInput[]> => {
   const events = await loadEvents(limit);
   return events.slice(0, limit);

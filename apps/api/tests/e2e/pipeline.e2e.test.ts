@@ -38,7 +38,8 @@ describe('pipeline e2e', () => {
               demand: 74,
               timing: 68,
               source: 'hn',
-              observed_at: '2026-02-20T00:00:00.000Z'
+              observed_at: '2026-02-20T00:00:00.000Z',
+              canonical_text: 'history signal'
             }
           ],
           windows: [

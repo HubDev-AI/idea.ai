@@ -14,7 +14,7 @@ export type ThesesRouteDeps = {
   signalStore?: PostgresSignalStore | null;
   deepDiveStore?: DeepDiveStore | null;
   deepDiveAi?: DeepDiveGeneratorDeps | null;
-  logger?: Pick<ExecutionLogger, 'info' | 'debug' | 'error'>;
+  logger?: Pick<ExecutionLogger, 'info' | 'debug' | 'error' | 'warn'>;
 };
 
 const inFlightDives = new Map<string, Promise<unknown>>();
@@ -311,7 +311,7 @@ export const registerThesesRoute = (
             targetBuyer: thesis.targetBuyer,
             proposedSolution: thesis.proposedSolution,
             confidence: thesis.confidence,
-          }, { ...deps.deepDiveAi!, logger: deps.logger });
+          }, { ...deps.deepDiveAi!, ...(deps.logger ? { logger: deps.logger } : {}) });
 
           // Save and return
           const saved = await deps.deepDiveStore!.save(key, {

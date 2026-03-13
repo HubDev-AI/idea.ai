@@ -16,10 +16,10 @@ describe('mastodon connector', () => {
 
     const events = await fetchMastodonEvents(mockLoader, 30);
     expect(events).toHaveLength(1);
-    expect(events[0].source).toBe('mastodon');
-    expect(events[0].text).not.toContain('<p>');
-    expect(events[0].text).toContain('CLI tool');
-    expect(events[0].text).toContain('dotfiles');
+    expect(events[0]!.source).toBe('mastodon');
+    expect(events[0]!.text).not.toContain('<p>');
+    expect(events[0]!.text).toContain('CLI tool');
+    expect(events[0]!.text).toContain('dotfiles');
   });
 
   it('filters short content', async () => {
