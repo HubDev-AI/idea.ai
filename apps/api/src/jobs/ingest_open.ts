@@ -1,5 +1,6 @@
 import { fetchAlternativeTo } from '@idea/connectors/src/alternativeto';
 import { fetchAppStoreTrending } from '@idea/connectors/src/appstore';
+import { fetchBetaList } from '@idea/connectors/src/betalist';
 import { fetchBlueskyEvents } from '@idea/connectors/src/bluesky';
 import { type Cadence, OPEN_CONNECTOR_CADENCE, type RawEventInput } from '@idea/connectors/src/common/http';
 import { fetchDevtoEvents } from '@idea/connectors/src/devto';
@@ -23,7 +24,7 @@ import { fetchTikTokCreative } from '@idea/connectors/src/tiktok_creative';
 import { fetchYcCompanyEvents } from '@idea/connectors/src/yc_companies';
 import type { ExecutionLogger } from '../runtime/execution_logger';
 
-export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew' | 'google_trends' | 'tiktok_creative' | 'alternativeto' | 'stackoverflow' | 'g2_reviews' | 'npm_trends' | 'semantic_scholar';
+export type OpenConnectorName = 'hn' | 'github_issues' | 'greenhouse' | 'lever' | 'yc_companies' | 'reddit' | 'producthunt' | 'appstore_trending' | 'betalist' | 'indiehackers' | 'lobsters' | 'devto' | 'showhn' | 'mastodon' | 'bluesky' | 'homebrew' | 'google_trends' | 'tiktok_creative' | 'alternativeto' | 'stackoverflow' | 'g2_reviews' | 'npm_trends' | 'semantic_scholar';
 
 export type OpenConnectorStatus = {
   name: OpenConnectorName;
@@ -46,7 +47,7 @@ type OpenIngestionDeps = {
   concurrency?: number;
 };
 
-const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews', 'npm_trends', 'semantic_scholar'];
+const CONNECTOR_ORDER: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'betalist', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews', 'npm_trends', 'semantic_scholar'];
 
 const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   hn: () => fetchHnEvents(),
@@ -63,6 +64,7 @@ const defaultLoaders: Record<OpenConnectorName, OpenConnectorLoader> = {
   },
   producthunt: () => fetchProductHunt(),
   appstore_trending: () => fetchAppStoreTrending(),
+  betalist: () => fetchBetaList(),
   indiehackers: () => fetchIndieHackersEvents(),
   lobsters: () => fetchLobstersEvents(),
   devto: () => fetchDevtoEvents(),
