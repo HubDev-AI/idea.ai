@@ -109,4 +109,31 @@ describe('betalist connector', () => {
 
     expect(events[0]!.text).not.toContain('Topics:');
   });
+
+  it('returns [] without throwing when main page fetch fails', async () => {
+    const events = await fetchBetaList({
+      loadMainPage: async () => { throw new Error('network error'); },
+      loadPage: async () => STARTUP_PAGE_HTML,
+    });
+
+    expect(events).toEqual([]);
+  });
+
+  it('caps text at 2000 characters', async () => {
+    const longDescription = 'A'.repeat(2100);
+    const pageWithLongDescription = `
+      <html><body>
+        <h1>My Startup</h1>
+        <p>${longDescription}</p>
+        <time datetime="2026-03-10T00:00:00.000Z">March 10</time>
+      </body></html>
+    `;
+
+    const events = await fetchBetaList({
+      loadMainPage: async () => '<a href="/startups/my-startup">My Startup</a>',
+      loadPage: async () => pageWithLongDescription,
+    });
+
+    expect(events[0]!.text.length).toBeLessThanOrEqual(2000);
+  });
 });
