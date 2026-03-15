@@ -99,6 +99,34 @@ const modelRouter = startupEnv.modelRoutingEnabled
     })
   : null;
 
+// Route function for entity extraction — uses Ollama routing when available,
+// otherwise falls back to Claude CLI directly (same as agent runner).
+const routeEntity = modelRouter
+  ? modelRouter.route
+  : (_task: string, prompt: string) => runClaudePrompt({ prompt }).then(r => r.text);
+
+const runEntityExtraction = async (): Promise<void> => {
+  if (!entityStore || !signalStore) return;
+  try {
+    const rEnv = loadRuntimeEnv(process.env);
+    const signals = await signalStore.listAllSignals(rEnv.entityExtractBatchSize);
+    for (const signal of signals) {
+      try {
+        await extractEntities({
+          signalText: signal.canonical_text,
+          signalId: signal.signal_id,
+          route: routeEntity,
+          entityStore,
+        });
+      } catch {
+        // Non-critical — skip individual signal failures
+      }
+    }
+  } catch (err) {
+    console.error('[entity-extraction] failed:', err);
+  }
+};
+
 let agentStatus: AgentStatusRecord = {
   isRunning: false,
   intervalMs: startupEnv.agentIntervalMs,
@@ -302,28 +330,7 @@ const serverDeps: Partial<ServerDeps> = {
     stateHub?.pushRefreshMeta();
     await refreshPromise;
     void stateHub?.broadcastAll();
-
-    // Entity extraction: run after refresh if both entityStore and modelRouter are available
-    if (entityStore && modelRouter && signalStore) {
-      try {
-        const rEnv = loadRuntimeEnv(process.env);
-        const signals = await signalStore.listAllSignals(rEnv.entityExtractBatchSize);
-        for (const signal of signals) {
-          try {
-            await extractEntities({
-              signalText: signal.canonical_text,
-              signalId: signal.signal_id,
-              route: modelRouter.route,
-              entityStore,
-            });
-          } catch {
-            // Non-critical — skip individual signal failures
-          }
-        }
-      } catch {
-        // Non-critical — entity extraction is best-effort
-      }
-    }
+    void runEntityExtraction();
   },
   thesisStore,
   signalStore,
@@ -483,7 +490,10 @@ const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const triggerRefreshCadence = (cadence: 'hourly' | 'daily', source: 'startup' | 'periodic') => {
   const refreshPromise = readModel.startRefresh(cadence);
   stateHub?.pushRefreshMeta();
-  void refreshPromise.then(() => stateHub?.broadcastAll()).catch((err) => {
+  void refreshPromise.then(async () => {
+    void stateHub?.broadcastAll();
+    void runEntityExtraction();
+  }).catch((err) => {
     console.error(`${source} ${cadence} refresh failed:`, err);
   });
   return refreshPromise;
