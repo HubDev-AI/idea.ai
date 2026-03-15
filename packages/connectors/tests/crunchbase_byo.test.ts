@@ -27,7 +27,7 @@ describe('crunchbase byo connector', () => {
 
     const events = await fetchCrunchbase({ apiKey: 'test-key', fetchImpl: mockFetch as any });
     expect(events).toHaveLength(1);
-    expect(events[0].source).toBe('crunchbase');
-    expect(events[0].text).toContain('AI compliance tool');
+    expect(events[0]!.source).toBe('crunchbase');
+    expect(events[0]!.text).toContain('AI compliance tool');
   });
 });

@@ -24,8 +24,8 @@ describe('fetchNpmTrends', () => {
     });
 
     expect(events.length).toBeGreaterThan(0);
-    expect(events[0].source).toBe('npm_trends');
-    expect(events[0].text).toContain('ai-agents');
+    expect(events[0]!.source).toBe('npm_trends');
+    expect(events[0]!.text).toContain('ai-agents');
   });
 
   it('returns empty array when fetch fails', async () => {
@@ -45,6 +45,6 @@ describe('fetchNpmTrends', () => {
       fetchImpl: mockFetch,
     });
 
-    expect(events[0].source_item_id).toMatch(/^npm:ai-agents:\d{4}-\d{2}-\d{2}$/);
+    expect(events[0]!.source_item_id).toMatch(/^npm:ai-agents:\d{4}-\d{2}-\d{2}$/);
   });
 });

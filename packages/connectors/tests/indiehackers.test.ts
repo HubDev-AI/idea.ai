@@ -14,8 +14,8 @@ describe('indiehackers connector', () => {
     const events = await fetchIndieHackersEvents(mockLoader, 20);
 
     expect(events).toHaveLength(1);
-    expect(events[0].source).toBe('indiehackers');
-    expect(events[0].text).toContain('Building a SaaS');
+    expect(events[0]!.source).toBe('indiehackers');
+    expect(events[0]!.text).toContain('Building a SaaS');
   });
 
   it('respects limit', async () => {

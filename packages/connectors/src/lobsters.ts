@@ -19,7 +19,7 @@ const defaultLoader: LobstersLoaderFn = async () =>
 
 export const fetchLobstersEvents = async (
   loadItems: LobstersLoaderFn = defaultLoader,
-  limit = OPEN_CONNECTOR_LIMITS.lobsters
+  limit: number = OPEN_CONNECTOR_LIMITS.lobsters
 ): Promise<RawEventInput[]> => {
   const items = await loadItems();
 

@@ -18,11 +18,11 @@ describe('homebrew connector', () => {
     const events = await fetchHomebrewEvents(mockLoader, 50);
     // gh and node are dev-related, ffmpeg may or may not match (short name)
     expect(events.length).toBeGreaterThanOrEqual(2);
-    expect(events[0].source).toBe('homebrew');
-    expect(events[0].source_item_id).toBe('brew:gh');
-    expect(events[0].text).toContain('gh');
-    expect(events[0].text).toContain('installs');
-    expect(events[0].url).toContain('formulae.brew.sh');
+    expect(events[0]!.source).toBe('homebrew');
+    expect(events[0]!.source_item_id).toBe('brew:gh');
+    expect(events[0]!.text).toContain('gh');
+    expect(events[0]!.text).toContain('installs');
+    expect(events[0]!.url).toContain('formulae.brew.sh');
   });
 
   it('filters non-dev formulae', async () => {

@@ -71,7 +71,7 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
 export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv => {
   const result: RuntimeEnv = {
     hourlyConnectors: parseCsv(env.HOURLY_CONNECTORS, ['hn', 'github_issues', 'reddit']),
-    dailyConnectors: parseCsv(env.DAILY_CONNECTORS, ['greenhouse', 'lever', 'yc_companies', 'producthunt', 'appstore_trending', 'indiehackers', 'google_trends']),
+    dailyConnectors: parseCsv(env.DAILY_CONNECTORS, ['greenhouse', 'lever', 'yc_companies', 'producthunt', 'appstore_trending', 'betalist', 'indiehackers', 'google_trends']),
     exaDailyBudgetUsd: parseNumber(env.EXA_DAILY_BUDGET_USD, 5),
     perigonDailyBudgetUsd: parseNumber(env.PERIGON_DAILY_BUDGET_USD, 5),
     ollamaBaseUrl: env.OLLAMA_BASE_URL ?? 'http://localhost:11434',
@@ -121,7 +121,7 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
       if (raw === 'none' || raw === 'false') return 'none' as const;
       // Legacy: AI_PROVIDER_FALLBACK=true → infer fallback as the other provider
       if (env.AI_PROVIDER_FALLBACK === 'true') {
-        return ((env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase() === 'codex' ? 'claude' : 'codex') as const;
+        return ((env.AI_PRIMARY ?? env.AI_PROVIDER ?? '').toLowerCase() === 'codex' ? 'claude' : 'codex') as 'claude' | 'codex';
       }
       return 'none' as const;
     })(),

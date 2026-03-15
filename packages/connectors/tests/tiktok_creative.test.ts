@@ -16,10 +16,10 @@ describe('tiktok_creative connector', () => {
     const results = await fetchTikTokCreative(mockLoader, 10);
 
     expect(results).toHaveLength(2);
-    expect(results[0].source).toBe('tiktok_creative');
-    expect(results[0].text).toContain('aidatingapp');
-    expect(results[0].engagement_count).toBe(5000000);
-    expect(results[0].source_item_id).toMatch(/^tiktok:/);
+    expect(results[0]!.source).toBe('tiktok_creative');
+    expect(results[0]!.text).toContain('aidatingapp');
+    expect(results[0]!.engagement_count).toBe(5000000);
+    expect(results[0]!.source_item_id).toMatch(/^tiktok:/);
   });
 
   it('returns empty array when API structure changes', async () => {

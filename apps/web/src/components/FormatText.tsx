@@ -38,7 +38,7 @@ export const FormatText: React.FC<{ text: string }> = ({ text }) => {
           const rest = trimmed.slice(headingMatch[0].length).trim();
           return (
             <React.Fragment key={bi}>
-              <h4 className="explain-formatted-heading">{renderInline(headingMatch[1])}</h4>
+              <h4 className="explain-formatted-heading">{renderInline(headingMatch[1] ?? '')}</h4>
               {rest && <p className="explain-formatted-para">{renderInline(rest)}</p>}
             </React.Fragment>
           );

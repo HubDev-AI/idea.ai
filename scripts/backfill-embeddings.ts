@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const pg = require('pg') as typeof import('pg');
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const pg = require('pg') as any;
 
 import { embedText } from '../packages/ai-runtime/src/ollama';
 
@@ -14,13 +15,13 @@ const pool = new pg.Pool({ connectionString: DATABASE_URL, max: 4 });
 
 const run = async () => {
   // Find signals missing embeddings OR still using local-hash fallback
-  const { rows } = await pool.query<{ signal_id: string; canonical_text: string }>(`
+  const { rows } = await pool.query(`
     SELECT sm.signal_id, sm.canonical_text
     FROM scored_signals sm
     LEFT JOIN signal_embeddings se ON sm.signal_id = se.signal_id
     WHERE se.signal_id IS NULL
        OR se.model = 'local-hash-v1'
-  `);
+  `) as { rows: { signal_id: string; canonical_text: string }[] };
 
   console.log(`Backfilling ${rows.length} missing embeddings via Ollama (${OLLAMA_MODEL})...`);
 
@@ -30,7 +31,7 @@ const run = async () => {
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
     const results = await Promise.allSettled(
-      batch.map(async (row) => {
+      batch.map(async (row: { signal_id: string; canonical_text: string }) => {
         const embedding = await embedText(row.canonical_text, {
           model: OLLAMA_MODEL,
           baseUrl: OLLAMA_BASE_URL,

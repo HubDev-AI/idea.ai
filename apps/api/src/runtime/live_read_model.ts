@@ -46,7 +46,7 @@ import {
 } from './signal_quality';
 
 const DEFAULT_REFRESH_MS = 60 * 60 * 1000;
-const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews', 'npm_trends', 'semantic_scholar'];
+const OPEN_CONNECTORS: OpenConnectorName[] = ['hn', 'github_issues', 'greenhouse', 'lever', 'yc_companies', 'reddit', 'producthunt', 'appstore_trending', 'betalist', 'indiehackers', 'lobsters', 'devto', 'showhn', 'mastodon', 'bluesky', 'homebrew', 'google_trends', 'tiktok_creative', 'alternativeto', 'stackoverflow', 'g2_reviews', 'npm_trends', 'semantic_scholar'];
 
 type Snapshot = {
   refreshedAt: number;
@@ -310,7 +310,7 @@ const applyPersistedConnectorStates = (
   const seeded = buildInitialConnectors(env);
   const seededByName = connectorMap(seeded);
 
-  return seeded.map((connector) => {
+  return seeded.map((connector): ConnectorStatusRecord => {
     const persistedRow = persisted.find((row) => row.connector_name === connector.name);
     if (!persistedRow || connector.status === 'disabled') {
       return connector;
@@ -646,8 +646,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
             })
           : Promise.resolve(emptyIngestion),
         cadence === 'daily'
-          ? runByoConnectorIngestion(process.env, { logger, spendStore: opts?.byoSpendStore ?? undefined })
-          : Promise.resolve({ connectors: { exa: { status: 'skipped' as const, events: [] }, perigon: { status: 'skipped' as const, events: [] }, twitter: { status: 'skipped' as const, events: [] } } })
+          ? runByoConnectorIngestion(process.env, { logger, ...(opts?.byoSpendStore ? { spendStore: opts.byoSpendStore } : {}) })
+          : Promise.resolve({ run_id: '', connectors: { exa: { status: 'skipped' as const, events: [], telemetry: { connector: 'exa_byo', skipped: true, budget_usd: 0 } }, perigon: { status: 'skipped' as const, events: [], telemetry: { connector: 'perigon_byo', skipped: true, budget_usd: 0 } }, twitter: { status: 'skipped' as const, events: [], telemetry: { connector: 'twitter_byo', skipped: true, budget_usd: 0 } } } })
       ]);
 
       if (shutdownController.signal.aborted) {
@@ -683,7 +683,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
       const aiPostScrapeBatch = await analyzePostScrapeBatchWithAi({
         settings: aiPostScrapeSettings,
         logger,
-        circuit,
+        ...(circuit ? { circuit } : {}),
         inputs: selectedSignalInputs.map((entry) => ({
           id: entry.signalId,
           source: entry.event.source,
@@ -740,8 +740,9 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
           );
           for (let ri = 0; ri < results.length; ri++) {
             const r = results[ri];
-            if (r.status === 'fulfilled' && r.value) {
-              embeddingCache.set(batch[ri].signalId, r.value);
+            const batchItem = batch[ri];
+            if (r && batchItem && r.status === 'fulfilled' && r.value) {
+              embeddingCache.set(batchItem.signalId, r.value);
             }
           }
         }
@@ -826,7 +827,7 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
               source: event.source,
               settings: aiJudgeSettings,
               logger,
-              circuit
+              ...(circuit ? { circuit } : {}),
             });
             judgeScores = aiJudgeResult.judgeScores;
 

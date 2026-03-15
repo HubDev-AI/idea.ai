@@ -31,7 +31,7 @@ import { buildStartupAgentStatus } from './runtime/agent_status_state';
 import { createPostgresThesisStore, type PaginatedThesisStore } from './runtime/postgres_thesis_store';
 import { createProviderCircuitBreaker } from './runtime/provider_circuit';
 import { InMemoryThesisStore } from './runtime/thesis_store';
-import { buildServer } from './server';
+import { buildServer, type ServerDeps } from './server';
 import { StateHub } from './ws/state_hub';
 
 loadEnvFile();
@@ -98,6 +98,34 @@ const modelRouter = startupEnv.modelRoutingEnabled
       ollamaTimeoutMs: startupEnv.ollamaTaskTimeoutMs,
     })
   : null;
+
+// Route function for entity extraction — uses Ollama routing when available,
+// otherwise falls back to Claude CLI directly (same as agent runner).
+const routeEntity = modelRouter
+  ? modelRouter.route
+  : (_task: string, prompt: string) => runClaudePrompt({ prompt }).then(r => r.text);
+
+const runEntityExtraction = async (): Promise<void> => {
+  if (!entityStore || !signalStore) return;
+  try {
+    const rEnv = loadRuntimeEnv(process.env);
+    const signals = await signalStore.listAllSignals(rEnv.entityExtractBatchSize);
+    for (const signal of signals) {
+      try {
+        await extractEntities({
+          signalText: signal.canonical_text,
+          signalId: signal.signal_id,
+          route: routeEntity,
+          entityStore,
+        });
+      } catch {
+        // Non-critical — skip individual signal failures
+      }
+    }
+  } catch (err) {
+    console.error('[entity-extraction] failed:', err);
+  }
+};
 
 let agentStatus: AgentStatusRecord = {
   isRunning: false,
@@ -185,7 +213,7 @@ const startAgentRun = (): AgentRunAccepted => {
         retries: agentEnv.aiRetries,
         timeoutMs: agentEnv.aiTimeoutMs,
         maxClusters: agentEnv.agentMaxClusters,
-        pool: pool ?? undefined,
+        ...(pool ? { pool } : {}),
         debateEnabled: agentEnv.debateEnabled,
         debateConfidenceThreshold: agentEnv.debateConfidenceThreshold,
         debateMaxPerRun: agentEnv.debateMaxPerRun,
@@ -202,6 +230,7 @@ const startAgentRun = (): AgentRunAccepted => {
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
         const p = profiles[i];
+        if (!r || !p) continue;
         if (r.status === 'fulfilled') {
           await logger.info('agent_runner', `profile ${p.id} completed`, {
             theses_updated: r.value.thesesUpdated,
@@ -290,7 +319,7 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
 
 const ollamaBaseUrl = startupEnv.ollamaBaseUrl;
 
-const serverDeps: Parameters<typeof buildServer>[0] = {
+const serverDeps: Partial<ServerDeps> = {
   listSignals: readModel.listSignals,
   listConnectors: readModel.listConnectors,
   listLogs: readModel.listLogs,
@@ -298,31 +327,10 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   getRefreshMeta: readModel.getRefreshMeta,
   triggerRefresh: async (cadence) => {
     const refreshPromise = readModel.startRefresh(cadence);
-    stateHub.pushRefreshMeta();
+    stateHub?.pushRefreshMeta();
     await refreshPromise;
-    void stateHub.broadcastAll();
-
-    // Entity extraction: run after refresh if both entityStore and modelRouter are available
-    if (entityStore && modelRouter && signalStore) {
-      try {
-        const rEnv = loadRuntimeEnv(process.env);
-        const signals = await signalStore.listAllSignals(rEnv.entityExtractBatchSize);
-        for (const signal of signals) {
-          try {
-            await extractEntities({
-              signalText: signal.canonical_text,
-              signalId: signal.signal_id,
-              route: modelRouter.route,
-              entityStore,
-            });
-          } catch {
-            // Non-critical — skip individual signal failures
-          }
-        }
-      } catch {
-        // Non-critical — entity extraction is best-effort
-      }
-    }
+    void stateHub?.broadcastAll();
+    void runEntityExtraction();
   },
   thesisStore,
   signalStore,
@@ -348,7 +356,7 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
   triggerAgentRun: startAgentRun,
   agentRunStore,
   corsOrigins,
-  pool: pool ?? undefined,
+  ...(pool ? { pool } : {}),
   entityStore,
   infraStatusDeps: {
     checkPostgres: async () => {
@@ -372,8 +380,8 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
           const kb = parseInt(duOutput.split('\t')[0] ?? '0', 10);
           if (kb > 0) sizeMb = Math.round(kb / 1024);
         } catch { /* disk check optional */ }
-        if (!hasModel) return { ok: false, reason: `model '${embedModel}' not installed — run: ollama pull ${embedModel}`, sizeMb };
-        return { ok: true, sizeMb };
+        if (!hasModel) return { ok: false as const, reason: `model '${embedModel}' not installed — run: ollama pull ${embedModel}`, ...(sizeMb !== undefined ? { sizeMb } : {}) };
+        return { ok: true as const, ...(sizeMb !== undefined ? { sizeMb } : {}) };
       } catch (err) {
         return { ok: false, reason: err instanceof Error ? err.message : 'connection failed' };
       }
@@ -382,25 +390,27 @@ const serverDeps: Parameters<typeof buildServer>[0] = {
       if (!signalStore) return { total: 0, withEmbedding: 0, fallbackModel: 'none' };
       return signalStore.getEmbeddingStats();
     },
-    getDiskStats: pool ? async () => {
-      const dbSize = await pool.query<{ size_mb: number }>(
-        `SELECT (pg_database_size(current_database()) / 1024 / 1024)::int AS size_mb`
-      );
-      const tables = await pool.query<{ name: string; size_mb: number; rows: number }>(
-        `SELECT
-           relname AS name,
-           (pg_total_relation_size(c.oid) / 1024 / 1024)::int AS size_mb,
-           reltuples::int AS rows
-         FROM pg_class c
-         JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'public' AND c.relkind = 'r'
-         ORDER BY pg_total_relation_size(c.oid) DESC`
-      );
-      return {
-        dbSizeMb: Number(dbSize.rows[0]?.size_mb ?? 0),
-        tableSizes: tables.rows.map((r) => ({ name: r.name, sizeMb: Number(r.size_mb), rows: Math.max(0, Number(r.rows)) }))
-      };
-    } : undefined
+    ...(pool ? {
+      getDiskStats: async () => {
+        const dbSize = await pool.query<{ size_mb: number }>(
+          `SELECT (pg_database_size(current_database()) / 1024 / 1024)::int AS size_mb`
+        );
+        const tables = await pool.query<{ name: string; size_mb: number; rows: number }>(
+          `SELECT
+             relname AS name,
+             (pg_total_relation_size(c.oid) / 1024 / 1024)::int AS size_mb,
+             reltuples::int AS rows
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public' AND c.relkind = 'r'
+           ORDER BY pg_total_relation_size(c.oid) DESC`
+        );
+        return {
+          dbSizeMb: Number(dbSize.rows[0]?.size_mb ?? 0),
+          tableSizes: tables.rows.map((r) => ({ name: r.name, sizeMb: Number(r.size_mb), rows: Math.max(0, Number(r.rows)) }))
+        };
+      }
+    } : {})
   }
 };
 if (apiKey !== undefined) serverDeps.apiKey = apiKey;
@@ -472,15 +482,18 @@ stateHub = new StateHub(io, {
 // Push refresh state (including refreshingCadence=null) to WebSocket clients
 // after any background refresh completes (e.g. fire-and-forget from ensureFresh)
 readModel.setOnRefreshComplete(() => {
-  stateHub.pushRefreshMeta();
+  stateHub?.pushRefreshMeta();
 });
 
 const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const triggerRefreshCadence = (cadence: 'hourly' | 'daily', source: 'startup' | 'periodic') => {
   const refreshPromise = readModel.startRefresh(cadence);
-  stateHub.pushRefreshMeta();
-  void refreshPromise.then(() => stateHub.broadcastAll()).catch((err) => {
+  stateHub?.pushRefreshMeta();
+  void refreshPromise.then(async () => {
+    void stateHub?.broadcastAll();
+    void runEntityExtraction();
+  }).catch((err) => {
     console.error(`${source} ${cadence} refresh failed:`, err);
   });
   return refreshPromise;
@@ -526,7 +539,7 @@ const runRetentionCleanup = async () => {
   const retentionDays = startupEnv.retentionDays;
   if (retentionDays <= 0) return; // 0 = disabled
   try {
-    await pool.query(`DELETE FROM scored_signals WHERE observed_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
+    await pool.query(`DELETE FROM scored_signals WHERE updated_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
     await pool.query(`DELETE FROM signal_embeddings WHERE signal_id NOT IN (SELECT signal_id FROM scored_signals)`);
     await pool.query(`DELETE FROM agent_journal WHERE created_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
     await pool.query(`DELETE FROM agent_runs WHERE started_at < NOW() - INTERVAL '1 day' * $1`, [retentionDays]);
@@ -669,7 +682,7 @@ app
               .map(s => ({ source: s.source, canonical_text: s.canonical_text }));
           },
           validateAfterDays: runtimeEnv.backtestValidateAfterDays,
-          experienceStore: experienceStore ?? undefined,
+          ...(experienceStore ? { experienceStore } : {}),
           getThesisSummary: async (thesisKey: string) => {
             const thesis = await thesisStore.getByKey(thesisKey);
             if (!thesis) return null;

@@ -51,7 +51,7 @@ describe('ScoringHealth', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/v1/scoring-health?profile=consumer');
+      expect(String((fetchMock.mock.calls as unknown as unknown[][])[0]?.[0])).toContain('/v1/scoring-health?profile=consumer');
     });
   });
 });

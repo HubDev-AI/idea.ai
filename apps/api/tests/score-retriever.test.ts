@@ -22,6 +22,7 @@ describe('retriever-backed scoring', () => {
         demand: 82,
         timing: 69,
         buildability: 58,
+        virality: 0,
         blended: 72
       }),
       indexSignalMemory({
@@ -35,6 +36,7 @@ describe('retriever-backed scoring', () => {
         demand: 76,
         timing: 61,
         buildability: 62,
+        virality: 0,
         blended: 67
       })
     ]);

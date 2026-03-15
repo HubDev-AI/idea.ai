@@ -13,7 +13,7 @@ type YcCompanyHit = {
   long_description?: string;
   website?: string;
   batch?: string;
-  launched_at?: string;
+  launched_at?: number | string;
 };
 
 type YcConfigLoader = () => Promise<YcAlgoliaConfig>;
@@ -71,18 +71,19 @@ const defaultHitsLoader: YcHitsLoader = async (config, limit) => {
 
 const defaultTimestamp = (): string => new Date().toISOString();
 
-const toSourceTimestamp = (value: string | undefined): string => {
-  if (!value) {
+const toSourceTimestamp = (value: number | string | undefined): string => {
+  if (value === undefined || value === null || value === '') {
     return defaultTimestamp();
   }
 
-  const date = new Date(value);
+  // Algolia returns launched_at as Unix seconds (number), not milliseconds
+  const ms = typeof value === 'number' ? value * 1000 : Date.parse(value);
 
-  if (Number.isNaN(date.getTime())) {
+  if (Number.isNaN(ms)) {
     return defaultTimestamp();
   }
 
-  return date.toISOString();
+  return new Date(ms).toISOString();
 };
 
 const toText = (hit: YcCompanyHit): string => {

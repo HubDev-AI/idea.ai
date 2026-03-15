@@ -45,7 +45,10 @@ const resolveWeightLabels = (profileId: string): WeightLabels => {
   const labels: Partial<WeightLabels> = {};
   const canonicalNames: (keyof WeightLabels)[] = ['demand', 'timing', 'buildability', 'virality'];
   for (let i = 0; i < Math.min(dims.length, canonicalNames.length); i += 1) {
-    labels[canonicalNames[i]] = dims[i].name
+    const canonKey = canonicalNames[i];
+    const dim = dims[i];
+    if (!canonKey || !dim) continue;
+    labels[canonKey] = dim.name
       .split('_')
       .map((part) => part[0]?.toUpperCase() + part.slice(1))
       .join(' ');
@@ -87,7 +90,10 @@ const resolveWeights = async (
     // Map the first four dimensions onto canonical names in order
     const canonicalNames: (keyof Weights)[] = ['demand', 'timing', 'buildability', 'virality'];
     for (let i = 0; i < Math.min(dims.length, 4); i++) {
-      w[canonicalNames[i]] = dims[i].weight;
+      const canonKey = canonicalNames[i];
+      const dim = dims[i];
+      if (!canonKey || !dim) continue;
+      w[canonKey] = dim.weight;
     }
     return {
       weights: {
@@ -169,18 +175,18 @@ export const registerThesisExplainRoute = (
         [key],
       );
 
-      if (debateRes.rows.length > 0) {
-        const row = debateRes.rows[0];
-        const v = row.moderator_verdict as any;
+      const debateRow = debateRes.rows[0];
+      if (debateRow !== undefined) {
+        const v = debateRow.moderator_verdict as any;
         debate = {
-          bullCase: row.bull_case,
-          bearCase: row.bear_case,
+          bullCase: debateRow.bull_case,
+          bearCase: debateRow.bear_case,
           verdict: String(v?.verdict ?? 'unknown'),
           confidence: Number(v?.confidence ?? 0),
           bullStrength: Number(v?.bull_strength ?? 0),
           bearStrength: Number(v?.bear_strength ?? 0),
           missingEvidence: Array.isArray(v?.missing_evidence) ? v.missing_evidence : [],
-          debatedAt: new Date(row.created_at).toISOString(),
+          debatedAt: new Date(debateRow.created_at).toISOString(),
         };
       }
     }
@@ -239,8 +245,8 @@ export const registerThesisExplainRoute = (
          WHERE canonical_key = $1`,
         [key],
       );
-      if (confRes.rows.length > 0) {
-        const cr = confRes.rows[0];
+      const cr = confRes.rows[0];
+      if (cr !== undefined) {
         if (cr.prior_confidence != null) bayesianTrail.prior = Number(cr.prior_confidence);
         if (cr.posterior_confidence != null) bayesianTrail.posterior = Number(cr.posterior_confidence);
       }

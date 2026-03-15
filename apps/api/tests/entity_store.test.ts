@@ -51,7 +51,7 @@ describe('EntityStore', () => {
     const store = createEntityStore({ pool: pool as any });
     const pains = await store.findUnaddressedPains(5);
     expect(pains).toHaveLength(1);
-    expect(pains[0].name).toBe('agent memory');
+    expect(pains[0]!.name).toBe('agent memory');
   });
 
   it('finds emerging technologies without products', async () => {

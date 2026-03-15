@@ -25,10 +25,10 @@ describe('google_trends connector', () => {
     const results = await fetchGoogleTrends(mockLoader, 10);
 
     expect(results).toHaveLength(2);
-    expect(results[0].source).toBe('google_trends');
-    expect(results[0].text).toContain('AI dating app');
-    expect(results[0].url).toContain('trends.google.com');
-    expect(results[0].source_item_id).toMatch(/^gtrends:/);
+    expect(results[0]!.source).toBe('google_trends');
+    expect(results[0]!.text).toContain('AI dating app');
+    expect(results[0]!.url).toContain('trends.google.com');
+    expect(results[0]!.source_item_id).toMatch(/^gtrends:/);
   });
 
   it('respects limit parameter', async () => {
@@ -61,7 +61,7 @@ describe('google_trends connector', () => {
 
     const mockLoader = vi.fn().mockResolvedValue(mockRss);
     const results = await fetchGoogleTrends(mockLoader, 10);
-    expect(results[0].url).toContain('vibe%20coding');
+    expect(results[0]!.url).toContain('vibe%20coding');
   });
 
   it('uses current timestamp when pubDate is missing', async () => {
@@ -80,7 +80,7 @@ describe('google_trends connector', () => {
     const mockLoader = vi.fn().mockResolvedValue(mockRss);
     const results = await fetchGoogleTrends(mockLoader, 10);
     const after = new Date();
-    const ts = new Date(results[0].source_timestamp);
+    const ts = new Date(results[0]!.source_timestamp);
     expect(ts.getTime()).toBeGreaterThanOrEqual(before.getTime());
     expect(ts.getTime()).toBeLessThanOrEqual(after.getTime());
   });
@@ -100,6 +100,6 @@ describe('google_trends connector', () => {
 
     const mockLoader = vi.fn().mockResolvedValue(mockRss);
     const results = await fetchGoogleTrends(mockLoader, 10);
-    expect(results[0].source_item_id).toBe('gtrends:ai-health-app');
+    expect(results[0]!.source_item_id).toBe('gtrends:ai-health-app');
   });
 });

@@ -7,7 +7,7 @@ import type { StateHubDeps, StateHubConfig } from '../src/ws/state_hub';
 
 const makeStubDeps = (): StateHubDeps => ({
   getConnectors: async () => [],
-  getAiHealth: async () => ({ providers: [], refreshed_at: null }),
+  getAiHealth: async () => ({ run_id: null, refreshed_at: null, provider_setting: 'claude' as const, primary_provider: 'claude' as const, judge_mode: 'single' as const, fallback_enabled: false, retry_budget: 0, post_scrape_enabled: false, post_scrape_max_signals: 0, judge_max_signals: 0, providers: [] }),
   getAgentStatus: () => ({ isRunning: false, intervalMs: 0, activeRunId: null, lastRun: null, lastAttempt: null, investigateNext: null }),
   getInfraStatus: async () => ({ postgres: 'ok' as const, ollama: 'ok' as const, embeddings: { total: 0, withEmbedding: 0, fallbackModel: 'none' } }),
   getRefreshMeta: () => ({

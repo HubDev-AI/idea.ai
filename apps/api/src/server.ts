@@ -141,9 +141,9 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
   registerConnectorRoute(app, {
     listConnectors: resolvedDeps.listConnectors,
     signalStore: resolvedDeps.signalStore ?? null,
-    getRefreshMeta: resolvedDeps.getRefreshMeta,
-    triggerRefresh: resolvedDeps.triggerRefresh,
-    logger: resolvedDeps.logger
+    ...(resolvedDeps.getRefreshMeta ? { getRefreshMeta: resolvedDeps.getRefreshMeta } : {}),
+    ...(resolvedDeps.triggerRefresh ? { triggerRefresh: resolvedDeps.triggerRefresh } : {}),
+    ...(resolvedDeps.logger ? { logger: resolvedDeps.logger } : {}),
   });
   registerLogsRoute(app, { listLogs: resolvedDeps.listLogs });
   registerAiHealthRoute(app, {
@@ -167,7 +167,7 @@ export const buildServer = async (deps: Partial<ServerDeps> = {}): Promise<Fasti
       signalStore: resolvedDeps.signalStore ?? null,
       deepDiveStore: resolvedDeps.deepDiveStore ?? null,
       deepDiveAi: resolvedDeps.deepDiveAi ?? null,
-      logger: resolvedDeps.logger
+      ...(resolvedDeps.logger ? { logger: resolvedDeps.logger } : {}),
     });
     registerThesisExplainRoute(app, {
       store: resolvedDeps.thesisStore,

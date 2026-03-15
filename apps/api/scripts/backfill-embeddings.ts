@@ -25,13 +25,14 @@ const embedText = async (text: string): Promise<number[] | null> => {
 const main = async () => {
   const pool = new pg.Pool({ connectionString: DATABASE_URL, max: 2 });
 
-  const { rows: [{ count }] } = await pool.query<{ count: number }>(
+  const { rows: [countRow] } = await pool.query<{ count: number }>(
     `SELECT COUNT(*)::int as count
      FROM scored_signals sm
      LEFT JOIN signal_embeddings se ON se.signal_id = sm.signal_id
      WHERE se.signal_id IS NULL`
   );
 
+  const count = countRow?.count ?? 0;
   console.log(`${count} signals missing embeddings`);
   if (count === 0) {
     await pool.end();

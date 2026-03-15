@@ -11,7 +11,7 @@ describe('BYO spend store', () => {
 
     await store.record('exa_byo', 0.03);
     expect(mockQuery).toHaveBeenCalledTimes(1);
-    expect(mockQuery.mock.calls[0][0]).toContain('INSERT INTO byo_spend');
+    expect(mockQuery.mock.calls[0]![0]).toContain('INSERT INTO byo_spend');
 
     const spent = await store.getSpent('exa_byo');
     expect(spent).toBe(0.03);

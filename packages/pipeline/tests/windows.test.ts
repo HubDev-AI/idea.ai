@@ -14,6 +14,7 @@ describe('trend windows', () => {
           demand: 80,
           timing: 60,
           buildability: 50,
+          virality: 0,
           blended: 66
         },
         {
@@ -25,6 +26,7 @@ describe('trend windows', () => {
           demand: 70,
           timing: 55,
           buildability: 60,
+          virality: 0,
           blended: 62
         }
       ],

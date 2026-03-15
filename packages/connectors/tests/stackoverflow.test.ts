@@ -24,10 +24,10 @@ describe('fetchStackOverflow', () => {
 
     const events = await fetchStackOverflow({ fetchImpl: mockFetch });
     expect(events.length).toBe(1);
-    expect(events[0].source).toBe('stackoverflow');
-    expect(events[0].text).toContain('prisma');
-    expect(events[0].text).toContain('[UNANSWERED]');
-    expect(events[0].engagement_count).toBeDefined();
+    expect(events[0]!.source).toBe('stackoverflow');
+    expect(events[0]!.text).toContain('prisma');
+    expect(events[0]!.text).toContain('[UNANSWERED]');
+    expect(events[0]!.engagement_count).toBeDefined();
   });
 
   it('includes engagement_count from views + score', async () => {
@@ -51,7 +51,7 @@ describe('fetchStackOverflow', () => {
     })) as unknown as typeof fetch;
 
     const events = await fetchStackOverflow({ fetchImpl: mockFetch });
-    expect(events[0].engagement_count).toBe(1025);
+    expect(events[0]!.engagement_count).toBe(1025);
   });
 
   it('returns empty array on API failure', async () => {
