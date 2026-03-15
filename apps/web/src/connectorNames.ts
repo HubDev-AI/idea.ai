@@ -8,6 +8,7 @@ export const connectorDisplayName: Record<string, string> = {
   reddit: 'Reddit',
   producthunt: 'Product Hunt',
   appstore_trending: 'App Store',
+  betalist: 'BetaList',
   indiehackers: 'IndieHackers',
   lobsters: 'Lobsters',
   devto: 'Dev.to',
