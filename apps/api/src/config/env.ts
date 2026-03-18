@@ -26,6 +26,8 @@ export type RuntimeEnv = {
   agentScheduleCron: string;
   agentDualAnalyst: boolean;
   agentIntervalMs: number;
+  connectorRefreshMs: number;
+  connectorDailyRefreshMs: number;
   agentMaxClusters: number;
   shutdownTimeoutMs: number;
   wsInfraPollMs: number;
@@ -84,6 +86,8 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     agentScheduleCron: env.AGENT_SCHEDULE_CRON ?? '0 */4 * * *',
     agentDualAnalyst: env.AGENT_DUAL_ANALYST === 'true',
     agentIntervalMs: parseNumber(env.AGENT_INTERVAL_MS, 60 * 60 * 1000),
+    connectorRefreshMs: parseNumber(env.CONNECTOR_REFRESH_MS, 60 * 60 * 1000),
+    connectorDailyRefreshMs: parseNumber(env.CONNECTOR_DAILY_REFRESH_MS, 24 * 60 * 60 * 1000),
     agentMaxClusters: parseNumber(env.AGENT_MAX_CLUSTERS, 50),
     shutdownTimeoutMs: parseNumber(env.SHUTDOWN_TIMEOUT_MS, 15_000),
     wsInfraPollMs: parseNumber(env.WS_INFRA_POLL_MS, 10_000),
