@@ -70,7 +70,7 @@ const signalStore = databaseUrl
   ? createPostgresSignalStore({ databaseUrl, embedText: embedTextFn })
   : null;
 
-const readModel = createLiveReadModel(startupEnv.agentIntervalMs, {
+const readModel = createLiveReadModel(startupEnv.connectorRefreshMs, {
   ...(signalStore ? { persistentStore: signalStore } : {}),
   circuit: providerCircuit,
   ...(pool ? { pool } : {}),
@@ -504,7 +504,7 @@ readModel.setOnRefreshComplete(() => {
   stateHub?.pushRefreshMeta();
 });
 
-const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DAILY_INTERVAL_MS = startupEnv.connectorDailyRefreshMs;
 
 const triggerRefreshCadence = (cadence: 'hourly' | 'daily', source: 'startup' | 'periodic') => {
   const refreshPromise = readModel.startRefresh(cadence);
@@ -665,7 +665,7 @@ app
       await scheduleDueRefreshes({
         hourlyLastRunAt: state.lastHourlyRunAt,
         dailyLastRunAt: state.lastDailyRunAt,
-        hourlyIntervalMs: runtimeEnv.agentIntervalMs,
+        hourlyIntervalMs: runtimeEnv.connectorRefreshMs,
       }, 'startup');
     })().catch(() => {});
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
@@ -691,9 +691,9 @@ app
       void scheduleDueRefreshes({
         hourlyLastRunAt,
         dailyLastRunAt,
-        hourlyIntervalMs: runtimeEnv.agentIntervalMs,
+        hourlyIntervalMs: runtimeEnv.connectorRefreshMs,
       }, 'periodic');
-    }, runtimeEnv.agentIntervalMs);
+    }, runtimeEnv.connectorRefreshMs);
 
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
     void runRetentionCleanup();
