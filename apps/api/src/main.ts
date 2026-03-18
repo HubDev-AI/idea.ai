@@ -70,7 +70,7 @@ const signalStore = databaseUrl
   ? createPostgresSignalStore({ databaseUrl, embedText: embedTextFn })
   : null;
 
-const readModel = createLiveReadModel(startupEnv.agentIntervalMs, {
+const readModel = createLiveReadModel(startupEnv.connectorRefreshMs, {
   ...(signalStore ? { persistentStore: signalStore } : {}),
   circuit: providerCircuit,
   ...(pool ? { pool } : {}),
@@ -319,6 +319,46 @@ const executeAgentRun = async (): Promise<AgentRunResult> => {
 
 const ollamaBaseUrl = startupEnv.ollamaBaseUrl;
 
+// --- Ollama health cache --------------------------------------------------
+// Extracted so it can be called from both the warmup loop and the status route.
+const performOllamaCheck = async (): Promise<{ ok: boolean; reason?: string; sizeMb?: number }> => {
+  const embedModel = startupEnv.ollamaEmbedModel;
+  try {
+    const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return { ok: false, reason: `ollama returned ${res.status}` };
+    const data = await res.json() as { models?: { name: string; size?: number }[] };
+    const hasModel = data.models?.some((m) => m.name.startsWith(embedModel)) ?? false;
+    let sizeMb: number | undefined;
+    try {
+      const { execSync } = await import('node:child_process');
+      const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+      const duOutput = execSync(`du -sk "${home}/.ollama" 2>/dev/null`, { timeout: 3000 }).toString().trim();
+      const kb = parseInt(duOutput.split('\t')[0] ?? '0', 10);
+      if (kb > 0) sizeMb = Math.round(kb / 1024);
+    } catch { /* disk check optional */ }
+    if (!hasModel) return { ok: false as const, reason: `model '${embedModel}' not installed — run: ollama pull ${embedModel}`, ...(sizeMb !== undefined ? { sizeMb } : {}) };
+    return { ok: true as const, ...(sizeMb !== undefined ? { sizeMb } : {}) };
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : 'connection failed' };
+  }
+};
+
+// Cache with 8s TTL — just under the 10s WS poll interval so every poll gets a
+// fresh check, while still protecting the HTTP endpoint from burst calls.
+const OLLAMA_STATUS_TTL_MS = 8_000;
+let ollamaStatusCache: { result: { ok: boolean; reason?: string; sizeMb?: number }; ts: number } | null = null;
+
+const checkOllama = async (): Promise<{ ok: boolean; reason?: string; sizeMb?: number }> => {
+  const now = Date.now();
+  if (ollamaStatusCache && now - ollamaStatusCache.ts < OLLAMA_STATUS_TTL_MS) {
+    return ollamaStatusCache.result;
+  }
+  const result = await performOllamaCheck();
+  ollamaStatusCache = { result, ts: Date.now() };
+  return result;
+};
+// -------------------------------------------------------------------------
+
 const serverDeps: Partial<ServerDeps> = {
   listSignals: readModel.listSignals,
   listConnectors: readModel.listConnectors,
@@ -364,28 +404,7 @@ const serverDeps: Partial<ServerDeps> = {
       await signalStore.ping();
       return true;
     },
-    checkOllama: async () => {
-      const embedModel = startupEnv.ollamaEmbedModel;
-      try {
-        const res = await fetch(`${ollamaBaseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
-        if (!res.ok) return { ok: false, reason: `ollama returned ${res.status}` };
-        const data = await res.json() as { models?: { name: string; size?: number }[] };
-        const hasModel = data.models?.some((m) => m.name.startsWith(embedModel)) ?? false;
-        // Get actual disk usage from ~/.ollama directory
-        let sizeMb: number | undefined;
-        try {
-          const { execSync } = await import('node:child_process');
-          const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
-          const duOutput = execSync(`du -sk "${home}/.ollama" 2>/dev/null`, { timeout: 3000 }).toString().trim();
-          const kb = parseInt(duOutput.split('\t')[0] ?? '0', 10);
-          if (kb > 0) sizeMb = Math.round(kb / 1024);
-        } catch { /* disk check optional */ }
-        if (!hasModel) return { ok: false as const, reason: `model '${embedModel}' not installed — run: ollama pull ${embedModel}`, ...(sizeMb !== undefined ? { sizeMb } : {}) };
-        return { ok: true as const, ...(sizeMb !== undefined ? { sizeMb } : {}) };
-      } catch (err) {
-        return { ok: false, reason: err instanceof Error ? err.message : 'connection failed' };
-      }
-    },
+    checkOllama,
     getEmbeddingStats: async () => {
       if (!signalStore) return { total: 0, withEmbedding: 0, fallbackModel: 'none' };
       return signalStore.getEmbeddingStats();
@@ -485,7 +504,7 @@ readModel.setOnRefreshComplete(() => {
   stateHub?.pushRefreshMeta();
 });
 
-const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DAILY_INTERVAL_MS = startupEnv.connectorDailyRefreshMs;
 
 const triggerRefreshCadence = (cadence: 'hourly' | 'daily', source: 'startup' | 'periodic') => {
   const refreshPromise = readModel.startRefresh(cadence);
@@ -626,13 +645,27 @@ app
     stateHub.startPolling();
     const runtimeEnv = loadRuntimeEnv(process.env);
 
+    // Warm up Ollama status cache — retries in background until the container is ready.
+    // Prevents the Ollama indicator from staying red during Docker startup races.
+    void (async () => {
+      const WARMUP_TIMEOUT_MS = 60_000;
+      const WARMUP_RETRY_MS = 3_000;
+      const deadline = Date.now() + WARMUP_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        const result = await performOllamaCheck();
+        ollamaStatusCache = { result, ts: Date.now() };
+        if (result.ok) break;
+        await new Promise<void>((r) => setTimeout(r, WARMUP_RETRY_MS));
+      }
+    })().catch(() => {});
+
     // Only refresh on startup if data is actually stale (avoids re-ingesting on every restart)
     void (async () => {
       const state = await readModel.peekState();
       await scheduleDueRefreshes({
         hourlyLastRunAt: state.lastHourlyRunAt,
         dailyLastRunAt: state.lastDailyRunAt,
-        hourlyIntervalMs: runtimeEnv.agentIntervalMs,
+        hourlyIntervalMs: runtimeEnv.connectorRefreshMs,
       }, 'startup');
     })().catch(() => {});
     setTimeout(() => stateHub.pushRefreshMeta(), 500);
@@ -658,9 +691,9 @@ app
       void scheduleDueRefreshes({
         hourlyLastRunAt,
         dailyLastRunAt,
-        hourlyIntervalMs: runtimeEnv.agentIntervalMs,
+        hourlyIntervalMs: runtimeEnv.connectorRefreshMs,
       }, 'periodic');
-    }, runtimeEnv.agentIntervalMs);
+    }, runtimeEnv.connectorRefreshMs);
 
     cleanupTimer = setInterval(() => void runRetentionCleanup(), CLEANUP_INTERVAL_MS);
     void runRetentionCleanup();
