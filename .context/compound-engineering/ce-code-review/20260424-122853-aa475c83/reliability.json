@@ -1,0 +1,155 @@
+{
+  "reviewer": "reliability",
+  "findings": [
+    {
+      "title": "task_get catch block marks task as retrieved after swallowing error — failed task results silently dropped",
+      "severity": "P1",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 247,
+      "confidence": 0.97,
+      "autofix_class": "add_error_path",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Move retrieved.add(taskId) inside the try block after events.push succeeds. On catch, skip the taskId so it remains pending for the next poll iteration, or track a per-task error set and exclude from the final retrieved count.",
+      "why_it_matters": "A 429 or 5xx on googleOrganicTaskGetAdvanced logs one line then silently counts the task as done. poll_summary.retrieved overstates success. Callers see status='active' and non-zero retrieved, masking partial data loss.",
+      "evidence": [
+        "Line 242: catch block logs only; does not rethrow",
+        "Line 247: retrieved.add(taskId) executes unconditionally after the catch block closes — outside the try/catch scope"
+      ]
+    },
+    {
+      "title": "No HTTP timeout on any fetch call — POST, tasks_ready, and task_get all hang indefinitely",
+      "severity": "P1",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 131,
+      "confidence": 0.90,
+      "autofix_class": "add_timeout",
+      "owner": "connector",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Pass an AbortSignal with a per-call deadline to fetchImpl. Example: const ac = new AbortController(); setTimeout(() => ac.abort(), 30_000); fetchImpl(url, { ...init, signal: ac.signal }). Apply per-call, not shared across the batch.",
+      "why_it_matters": "If DataForSEO is slow, each HTTP call blocks the poll loop indefinitely. Poll ceiling check runs between calls, not during them, so it cannot rescue a hung call. With serial POST chunks and 500 tasks the entire daily refresh stalls.",
+      "evidence": [
+        "Lines 131-141: fetch wrapper sets only Authorization and Content-Type headers, no signal property",
+        "Lines 181, 184, 192: sleep, tasks_ready, and task_get all use the same unconstrained fetchImpl"
+      ]
+    },
+    {
+      "title": "tasks_ready throw (e.g. 429 or network error) escapes uncaught and aborts the entire poll loop",
+      "severity": "P1",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 184,
+      "confidence": 0.95,
+      "autofix_class": "add_error_path",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Wrap line 184 in try/catch. On error, log and continue to the next poll iteration (backoff already applied by pollDelay). Track consecutive failures and break after a threshold to avoid spinning on a permanent error.",
+      "why_it_matters": "A single 429 from tasks_ready propagates out of the while loop and is caught by runSafely which returns status='error' with empty events array. All prior completed tasks' results are lost even if most tasks had already been successfully fetched.",
+      "evidence": [
+        "Line 184: no try/catch wrapping googleOrganicTasksReady()",
+        "ingest_byo.ts lines 57-64: runSafely catches and returns toErroredResult with empty events"
+      ]
+    },
+    {
+      "title": "googleOrganicTaskPost throw (chunk failure) abandons already-submitted earlier chunks — paid tasks never retrieved",
+      "severity": "P1",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 159,
+      "confidence": 0.92,
+      "autofix_class": "add_error_path",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Wrap line 159 in try/catch. On chunk POST failure, log the chunk index and continue to next chunk. Do not skip the poll phase for already-registered task IDs even if later chunks fail.",
+      "why_it_matters": "With 500 tasks / 100 per chunk = 5 POST calls. If chunk 2 throws, chunks 0-1's 200 tasks are registered on DataForSEO (billed) but the for loop throws, runSerpByoConnector propagates, poll never runs. Those tasks expire unread.",
+      "evidence": [
+        "Lines 147-167: for loop calls googleOrganicTaskPost with no try/catch",
+        "Line 176: startTime and poll loop are unreachable if the for loop throws"
+      ]
+    },
+    {
+      "title": "Poll ceiling startTime measured after serial POST loop — 10-minute guarantee drifts by POST duration",
+      "severity": "P2",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 176,
+      "confidence": 0.95,
+      "autofix_class": "correctness_fix",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Move const startTime = Date.now() to before the POST loop (before line 147). Or use an absolute deadline: const deadline = Date.now() + pollCeilingMs set before the POST loop, then replace the while condition with Date.now() < deadline.",
+      "why_it_matters": "With 500 tasks / 5 chunks, each POST call taking 2s = 10s of POST time excluded from the ceiling. Under load each POST call can take longer. The 10-minute ceiling claim is violated.",
+      "evidence": [
+        "Lines 147-167: serial POST loop with no timeout",
+        "Line 176: const startTime = Date.now() is 9 source lines after the POST loop closes at line 167"
+      ]
+    },
+    {
+      "title": "Poll timeout returns status='active' with 0 events — caller cannot distinguish full timeout from empty SERP results",
+      "severity": "P2",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 256,
+      "confidence": 0.97,
+      "autofix_class": "status_fix",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "When timedOut is true and retrieved.size < totalTasks, return status: 'error' (or a distinct 'partial' status) rather than 'active'. toConnectorStatus in live_read_model.ts maps 'active' to a healthy indicator in the UI.",
+      "why_it_matters": "If tasks_ready returns empty continuously for 10 minutes (queued but never processed), the connector exits with status='active', events=[], poll_summary.timed_out=true. The scheduler treats this as a successful zero-event run and will not alert.",
+      "evidence": [
+        "Lines 251-253: timedOut set to true but status unchanged",
+        "Line 256: return { status: 'active', ... } unconditional regardless of timedOut"
+      ]
+    },
+    {
+      "title": "COST_PER_CALL['dataforseo_serp_byo'] = 0 — spendStore.record(0) is a no-op, daily budget guard never trips",
+      "severity": "P2",
+      "file": "apps/api/src/jobs/ingest_byo.ts",
+      "line": 16,
+      "confidence": 0.97,
+      "autofix_class": "correctness_fix",
+      "owner": "platform",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Cast the connector result to SerpConnectorResult and pass result.estimated_spend_usd ?? 0 to spendStore.record instead of COST_PER_CALL lookup. Alternatively, set a conservative per-run sentinel (e.g. 0.01) so the guard can accumulate and eventually trip.",
+      "why_it_matters": "Budget guard in runWithSpend uses spentUsd from spendStore. If record is always called with 0, getSpent always returns 0, the guard never blocks the connector regardless of DATAFORSEO_DAILY_BUDGET_USD. A runaway batch will spend without limit.",
+      "evidence": [
+        "ingest_byo.ts line 16: dataforseo_serp_byo: 0",
+        "ingest_byo.ts line 126: deps.spendStore.record(connector, COST_PER_CALL[connector] ?? 0.01) — fallback 0.01 never reached because key exists with value 0",
+        "dataforseo_serp_byo.ts line 98: estimatedSpendUsd computed but never returned to spendStore"
+      ]
+    },
+    {
+      "title": "sleep() up to 120s has no AbortSignal — graceful shutdown blocked for up to 2 minutes per poll iteration",
+      "severity": "P2",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 181,
+      "confidence": 0.88,
+      "autofix_class": "add_shutdown_hook",
+      "owner": "connector",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Accept an optional AbortSignal parameter in runSerpByoConnector. Replace sleep(pollDelay) with a cancellable sleep that resolves early on abort. Thread shutdownController.signal from live_read_model.ts through runByoConnectorIngestion deps into the connector.",
+      "why_it_matters": "live_read_model.ts has a shutdownController but its signal is not passed into runByoConnectorIngestion. A graceful shutdown request after the poll enters sleep(120000) will wait up to 2 minutes before the loop can check for abort — which it never does because there is no abort check in the loop.",
+      "evidence": [
+        "Line 181: await sleep(pollDelay) where pollDelay reaches DEFAULT_POLL_MAX_MS = 120_000",
+        "Line 41: sleep = (ms) => new Promise((r) => setTimeout(r, ms)) — no signal parameter",
+        "live_read_model.ts line 660: runByoConnectorIngestion called without passing shutdownController.signal",
+        "dataforseo_serp_byo.ts line 80: function signature has no AbortSignal parameter"
+      ]
+    }
+  ],
+  "residual_risks": [
+    "dataforseo-client SDK may have internal timeout defaults not visible in this diff — finding 2 confidence reduced from 0.95 to 0.90 to reflect this possibility.",
+    "tasks_ready may return a global queue (all account tasks) rather than only this run's tasks. If readyItems contains task IDs not in taskIdToQuery, the filter at line 189 handles it correctly, but a large stale queue could cause noisy filtering and slow the loop.",
+    "DATAFORSEO_SERP_DEPTH set to a non-numeric string (e.g. 'disabled') parses to NaN; Math.max(1, NaN) = NaN in JavaScript, resulting in task.depth = NaN sent to the API. This could cause a silent API rejection or unexpected cost tier."
+  ],
+  "testing_gaps": [
+    "No test for tasks_ready throwing — should verify the throw propagates as status='error' with events from previously-retrieved tasks preserved (not empty).",
+    "No test for googleOrganicTaskPost throwing on chunk 2 of 3 — should verify orphaned task count or that the connector returns status='error' rather than partially succeeding.",
+    "No test for poll loop completing with timedOut=true and retrieved.size=0 — should verify status is not 'active' for a full no-result timeout.",
+    "No test confirming spendStore.record receives a non-zero value for dataforseo_serp_byo — the zero-sentinel issue is invisible to the existing resilience tests."
+  ]
+}

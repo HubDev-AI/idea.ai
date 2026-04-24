@@ -1,0 +1,175 @@
+{
+  "reviewer": "testing",
+  "findings": [
+    {
+      "title": "poll_timeout sets status='active' but no test verifies events array content + status is appropriate",
+      "severity": "P2",
+      "file": "packages/connectors/tests/dataforseo_serp_byo.test.ts",
+      "line": 294,
+      "confidence": 0.90,
+      "autofix_class": "add_test_case",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add assertion: expect(result.events).toHaveLength(0) and consider whether status='active' with zero events and timed_out=true is the intended contract vs 'error'. Current test only checks poll_summary fields.",
+      "why_it_matters": "If timeout fires before any task_get completes, events is empty but status is 'active'. Downstream dedupeEvents/toConnectorStatus treat this as a successful run, masking the timeout.",
+      "evidence": [
+        "Source line 251-253: `if (retrieved.size < totalTasks) { timedOut = true; }` — no status change.",
+        "Test line 308: `expect(result.poll_summary?.timed_out).toBe(true)` — does not assert events or status."
+      ]
+    },
+    {
+      "title": "Per-task 500 error: test asserts poll_summary.retrieved=2 but task2 failed — retrieved should be 1 or error events should be absent",
+      "severity": "P2",
+      "file": "packages/connectors/tests/dataforseo_serp_byo.test.ts",
+      "line": 316,
+      "confidence": 0.85,
+      "autofix_class": "fix_assertion",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "The source adds the taskId to `retrieved` even on catch (line 247). So retrieved.size=2 is correct but the assertion should also verify events contain only task1's results and no task2 events exist.",
+      "why_it_matters": "Test passes even if the catch block accidentally adds events from the failed task. No assertion confirms the failed task contributed zero events.",
+      "evidence": [
+        "Source lines 242-248: catch block logs but then `retrieved.add(taskId)` still fires unconditionally.",
+        "Test line 349: `expect(result.poll_summary?.retrieved).toBe(2)` — no assertion on events.length or event domains."
+      ]
+    },
+    {
+      "title": "Rate-limit (429) and network error paths have no test",
+      "severity": "P2",
+      "file": "packages/connectors/tests/dataforseo_serp_byo.test.ts",
+      "line": null,
+      "confidence": 0.88,
+      "autofix_class": "add_test_case",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add test: mockFetch throws a network error on task_post. Verify result.status is 'error' (or that the thrown error propagates correctly). Add separate test for 429 response on tasks_ready, verifying poll continues or surfaces error.",
+      "why_it_matters": "The source has no explicit 429/rate-limit handling — a 429 from tasks_ready is treated as a normal empty-result response, silently causing all tasks to time out. No test exercises this path.",
+      "evidence": [
+        "Source lines 184-185: `api.googleOrganicTasksReady()` return is consumed without status_code check.",
+        "No test in dataforseo_serp_byo.test.ts exercises fetch throwing or returning 4xx."
+      ]
+    },
+    {
+      "title": "live_read_model.ts serp deduplication path (serpByoEvents spread) has no test",
+      "severity": "P2",
+      "file": "apps/api/src/runtime/live_read_model.ts",
+      "line": 666,
+      "confidence": 0.82,
+      "autofix_class": "add_test_case",
+      "owner": "platform",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add a test to live-read-model-resilience.test.ts that passes a byo result with dataforseo_serp_byo events and verifies they appear in the deduped event set. Also verify toConnectorStatus returns a record with name='dataforseo_serp_byo' when serpByo.status='active'.",
+      "why_it_matters": "The optional-chaining `?.events ?? []` on the cast Record means a typo in the connector name key silently drops all SERP events. No test catches this regression.",
+      "evidence": [
+        "Source line 667: `const serpByoEvents = (byo.connectors as Record<string, { events: RawEventInput[] }>)['dataforseo_serp_byo']?.events ?? [];`",
+        "live-read-model-resilience.test.ts: 0 matches for dataforseo_serp_byo, serp, or dedupeEvents."
+      ]
+    },
+    {
+      "title": "toConnectorStatus + buildInitialConnectors for serp have no test exercising the disabled/active/error branches",
+      "severity": "P2",
+      "file": "apps/api/src/runtime/live_read_model.ts",
+      "line": 439,
+      "confidence": 0.85,
+      "autofix_class": "add_test_case",
+      "owner": "platform",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Test toErrorFirstSnapshot with (a) both lists populated -> status='error', (b) empty lists -> status='disabled'. Test buildInitialConnectors with languages+keywords set -> status='active'.",
+      "why_it_matters": "The ternary at line 443 has three outcomes (error/disabled, two cases). Neither is covered by any added test. The condition `(env.boringSitesLanguages ?? []).length > 0 && (env.boringSitesKeywords ?? []).length > 0` is duplicated in two functions and could diverge.",
+      "evidence": [
+        "Source lines 439-449 and 464: two separate status derivations for serp using boringSitesLanguages/boringSitesKeywords.",
+        "grep for dataforseo_serp_byo in live-read-model-resilience.test.ts: 0 matches."
+      ]
+    },
+    {
+      "title": "ingest-byo-resilience tests use vi.doMock but don't reset module registry — isolation between the two SERP tests is not guaranteed",
+      "severity": "P3",
+      "file": "apps/api/tests/ingest-byo-resilience.test.ts",
+      "line": 44,
+      "confidence": 0.72,
+      "autofix_class": "test_isolation",
+      "owner": "platform",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Add `vi.resetModules()` in a beforeEach or between the two SERP tests. Without it, the second vi.doMock may pick up the cached module from the first test, running the wrong mock.",
+      "why_it_matters": "The two tests mock different behaviors of runSerpByoConnector. If vitest caches the first mock, the second test always passes regardless of the second mock's behavior.",
+      "evidence": [
+        "Test lines 44-73: two it() blocks both call vi.doMock + dynamic import without vi.resetModules().",
+        "Vitest docs: vi.doMock does not auto-reset the module registry."
+      ]
+    },
+    {
+      "title": "AIO text 4 KB cap (slice(0, 4096)) and empty-string→null branch have no test",
+      "severity": "P3",
+      "file": "packages/connectors/tests/dataforseo_serp_byo.test.ts",
+      "line": null,
+      "confidence": 0.80,
+      "autofix_class": "add_test_case",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add fixture with aio.markdown = 'x'.repeat(5000). Assert aio_text length is 4096. Add fixture with aio.markdown = '' and assert aio_text is null.",
+      "why_it_matters": "The 4 KB cap is a security control against prompt injection from attacker-controlled SERP content. No test verifies the cap fires.",
+      "evidence": [
+        "Source line 54: `return text.slice(0, 4096) || null;`",
+        "No test in dataforseo_serp_byo.test.ts constructs an oversized markdown string."
+      ]
+    },
+    {
+      "title": "entity_route.ts: fallback throws when fallbackProvider is configured but also fails — no test for double-failure",
+      "severity": "P3",
+      "file": "apps/api/tests/entity-route.test.ts",
+      "line": null,
+      "confidence": 0.75,
+      "autofix_class": "add_test_case",
+      "owner": "platform",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add test: both runCodex and runClaude throw. With AI_PRIMARY=codex, AI_FALLBACK=claude, verify the error from runClaude propagates out of route().",
+      "why_it_matters": "The source has no try/catch wrapping the fallback call. If the fallback also throws, the error propagates unmodified. This is probably intentional but should be documented by a test.",
+      "evidence": [
+        "Source lines 45-52: catch block calls runSingleProvider(fallbackProvider, ...) without try/catch.",
+        "entity-route.test.ts has no test where both primary and fallback throw."
+      ]
+    }
+  ],
+  "residual_risks": [
+    {
+      "title": "CHUNK_SIZE=100 chunking path is never exercised — only single-query tests exist",
+      "confidence": 0.70,
+      "note": "The chunkArray function and multi-chunk POST loop (source lines 145-167) are not exercised by any test. The batch-cap test (line 262) caps at 3 and posts one chunk. A test with >100 inputs would cover the second-chunk path."
+    },
+    {
+      "title": "tasks_ready response with tasks[0].result=null (missing result) silently yields empty readyItems",
+      "confidence": 0.65,
+      "note": "Source line 185: `readyRes.tasks?.[0]?.result ?? []`. If DataForSEO returns tasks without a result key, polling loops to ceiling. No test covers this shape."
+    }
+  ],
+  "testing_gaps": [
+    {
+      "description": "live_read_model.ts: serpByoEvents dedup path and toConnectorStatus SERP branch",
+      "files": ["apps/api/src/runtime/live_read_model.ts"],
+      "missing_test_file": "apps/api/tests/live-read-model-resilience.test.ts"
+    },
+    {
+      "description": "dataforseo_serp_byo.ts: 429/network error on task_post or tasks_ready",
+      "files": ["packages/connectors/src/dataforseo_serp_byo.ts"],
+      "missing_test_file": "packages/connectors/tests/dataforseo_serp_byo.test.ts"
+    },
+    {
+      "description": "extractAioText: 4KB cap and empty-string→null path",
+      "files": ["packages/connectors/src/dataforseo_serp_byo.ts"],
+      "missing_test_file": "packages/connectors/tests/dataforseo_serp_byo.test.ts"
+    },
+    {
+      "description": "toErrorFirstSnapshot / buildInitialConnectors serp status branches (disabled vs error vs active)",
+      "files": ["apps/api/src/runtime/live_read_model.ts"],
+      "missing_test_file": "apps/api/tests/live-read-model-resilience.test.ts"
+    }
+  ]
+}

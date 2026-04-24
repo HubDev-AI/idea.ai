@@ -46,8 +46,12 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+const isAio = (i: BaseSerpApiElementItem): i is AiOverviewSerpElementItem => i.type === 'ai_overview';
+const isPaa = (i: BaseSerpApiElementItem): i is PeopleAlsoAskSerpElementItem => i.type === 'people_also_ask';
+const isOrganic = (i: BaseSerpApiElementItem): i is OrganicSerpElementItem => i.type === 'organic';
+
 function extractAioText(items: BaseSerpApiElementItem[]): string | null {
-  const aio = items.find((i) => i.type === 'ai_overview') as AiOverviewSerpElementItem | undefined;
+  const aio = items.find(isAio);
   if (!aio) return null;
   const text = aio.markdown ?? '';
   // Cap at 4 KB — reduces LLM prompt injection surface from attacker-controlled SERP content
@@ -57,15 +61,13 @@ function extractAioText(items: BaseSerpApiElementItem[]): string | null {
 function extractPaaEntries(
   items: BaseSerpApiElementItem[]
 ): Array<{ question: string; snippet: string }> | null {
-  const paa = items.find((i) => i.type === 'people_also_ask') as
-    | PeopleAlsoAskSerpElementItem
-    | undefined;
+  const paa = items.find(isPaa);
   if (!paa?.items) return null;
 
   const entries = paa.items
     .map((e) => ({
-      question: String(e.title ?? ''),
-      snippet: String(e.expanded_element?.[0]?.['description'] ?? ''),
+      question: String(e.title ?? '').slice(0, 200),
+      snippet: String(e.expanded_element?.[0]?.['description'] ?? '').slice(0, 500),
     }))
     .filter((e) => e.question);
 
@@ -95,7 +97,6 @@ export const runSerpByoConnector = async (
   const depth = Math.max(1, parseInt(env.DATAFORSEO_SERP_DEPTH ?? '10', 10));
   // Cost is per-task (not per-result): depth ≤10 = $0.0006, depth 100 = $0.00465; AIO add-on = +$0.0006
   const baseCostPerTask = depth <= 10 ? 0.0006 : 0.00465;
-  const estimatedSpendUsd = inputs.length * (baseCostPerTask + 0.0006);
 
   // 3. R15 locale validation — reject unsupported (country, language) pairs
   const localeRejections: Array<{ country_code: string; language_code: string }> = [];
@@ -124,25 +125,32 @@ export const runSerpByoConnector = async (
   // 4. R18 batch cap
   const maxBatch = Math.max(1, parseInt(env.DATAFORSEO_MAX_BATCH_PER_RUN ?? '500', 10));
   const capped = valid.slice(0, maxBatch);
+  const estimatedSpendUsd = capped.length * (baseCostPerTask + 0.0006);
 
   // 5. Build SerpApi with injected fetch + Basic Auth header
   // NEVER include Authorization header in error logs (base64 decodes to plaintext login:password)
   const apiKey = env.DATAFORSEO_API_KEY!;
+  const fetchTimeoutMs = Math.max(5_000, parseInt(env.DATAFORSEO_FETCH_TIMEOUT_MS ?? '30000', 10));
   const api = new SerpApi('https://api.dataforseo.com', {
-    fetch: (url: RequestInfo, init?: RequestInit): Promise<Response> =>
-      fetchImpl(url as string, {
+    fetch: (url: RequestInfo, init?: RequestInit): Promise<Response> => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), fetchTimeoutMs);
+      return fetchImpl(url as string, {
         ...init,
+        signal: controller.signal,
         headers: {
           ...(init?.headers ?? {}),
-          Authorization: `Basic ${apiKey}`,
+          Authorization: `Basic ${apiKey.replace(/[\r\n]/g, '')}`,
           'Content-Type': 'application/json',
         },
-      }),
+      }).finally(() => clearTimeout(timer));
+    },
   });
 
   // 6. POST in chunks of 100 (DataForSEO limit)
   const taskIdToQuery = new Map<string, ValidatedQuery>();
   const chunks = chunkArray(capped, CHUNK_SIZE);
+  const startTime = Date.now();
 
   for (const chunk of chunks) {
     const tasks = chunk.map((q) => {
@@ -156,13 +164,17 @@ export const runSerpByoConnector = async (
       return task;
     });
 
-    const res = await api.googleOrganicTaskPost(tasks);
-    const taskList = res.tasks ?? [];
-    for (let i = 0; i < taskList.length; i++) {
-      const taskInfo = taskList[i];
-      if (taskInfo?.id && chunk[i]) {
-        taskIdToQuery.set(taskInfo.id, chunk[i]);
+    try {
+      const res = await api.googleOrganicTaskPost(tasks);
+      const taskList = res.tasks ?? [];
+      for (let i = 0; i < taskList.length; i++) {
+        const taskInfo = taskList[i];
+        if (taskInfo?.id && chunk[i]) {
+          taskIdToQuery.set(taskInfo.id, chunk[i]);
+        }
       }
+    } catch (err) {
+      console.error(`[dataforseo_serp_byo] chunk POST failed (${chunk.length} tasks):`, err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -173,7 +185,6 @@ export const runSerpByoConnector = async (
   const totalTasks = taskIdToQuery.size;
   const retrieved = new Set<string>();
   const events: RawEventInput[] = [];
-  const startTime = Date.now();
   let timedOut = false;
   let pollDelay = pollInitialMs;
 
@@ -181,7 +192,11 @@ export const runSerpByoConnector = async (
     await sleep(pollDelay);
     pollDelay = Math.min(pollDelay * 2, DEFAULT_POLL_MAX_MS);
 
-    const readyRes = await api.googleOrganicTasksReady();
+    const readyRes = await api.googleOrganicTasksReady().catch((err: unknown) => {
+      console.error('[dataforseo_serp_byo] tasks_ready poll failed:', err instanceof Error ? err.message : String(err));
+      return null;
+    });
+    if (!readyRes) continue;
     const readyItems = readyRes.tasks?.[0]?.result ?? [];
 
     for (const readyItem of readyItems) {
@@ -209,8 +224,8 @@ export const runSerpByoConnector = async (
           const paaEntries = paaPresent ? extractPaaEntries(items) : null;
 
           for (const item of items) {
-            if (item.type !== 'organic') continue;
-            const organic = item as OrganicSerpElementItem;
+            if (!isOrganic(item)) continue;
+            const organic = item;
             // Truncate title/snippet to limit prompt injection surface at extraction boundary
             const title = String(organic.title ?? '').slice(0, 500);
             const snippet = String(organic.description ?? '').slice(0, 1000);
@@ -239,9 +254,9 @@ export const runSerpByoConnector = async (
             });
           }
         }
-      } catch {
+      } catch (err) {
         // Per-task error: log task ID and nothing else (never log Authorization / apiKey)
-        console.error(`[dataforseo_serp_byo] task ${taskId} fetch failed`);
+        console.error(`[dataforseo_serp_byo] task ${taskId} fetch failed:`, err instanceof Error ? err.message : String(err));
       }
 
       retrieved.add(taskId);

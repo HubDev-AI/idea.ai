@@ -1,0 +1,67 @@
+{
+  "reviewer": "correctness",
+  "findings": [
+    {
+      "title": "retrieved.add(taskId) outside catch block — failed tasks counted as retrieved, masking errors in poll_summary",
+      "severity": "medium",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 247,
+      "confidence": 0.90,
+      "autofix_class": "track-separate-counter",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add a failedCount counter inside the catch block. Move retrieved.add(taskId) inside the try block after event emission succeeds, or keep it outside but add poll_summary.failed_count to distinguish 'attempted but errored' from 'retrieved with data'.",
+      "why_it_matters": "When googleOrganicTaskGetAdvanced throws, the catch logs and execution falls through to line 247. retrieved.size reaches totalTasks even if all tasks errored; timed_out=false; status='active' with events=[]. Caller has no signal that anything failed.",
+      "evidence": [
+        "Line 242-245: catch logs error. Line 247: retrieved.add executes unconditionally.",
+        "Test line 349: asserts poll_summary.retrieved===2 even when task2 returned HTTP 500."
+      ]
+    },
+    {
+      "title": "Task POST response mapped to original queries by array index, not by tag — wrong metadata if API reorders entries",
+      "severity": "medium",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 163,
+      "confidence": 0.65,
+      "autofix_class": "use-tag-lookup",
+      "owner": "connector",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Parse the tag field from the POST response entry to reconstruct the original query, rather than relying on taskList[i] to chunk[i] positional alignment. Alternatively build a Map keyed by 'keyword|location_code|language_code' from the submitted tasks and look up by those fields in the response.",
+      "why_it_matters": "If DataForSEO returns response entries in a different order than submitted (e.g. due to per-task validation errors shifting positions), taskIdToQuery binds the wrong ValidatedQuery to a task ID. All emitted events for that task carry wrong keyword/country_code/language_code metadata.",
+      "evidence": [
+        "Lines 161-165: for loop maps by index i. chunk[i] is the submitted query at position i.",
+        "Line 155: tag set to 'keyword|country|lang' but never used in lines 161-165.",
+        "DataForSEO API does not guarantee response order matches submission order when per-task errors occur."
+      ]
+    },
+    {
+      "title": "estimatedSpendUsd computed from inputs.length before locale validation and batch cap — overstates actual spend",
+      "severity": "low",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 98,
+      "confidence": 0.85,
+      "autofix_class": "move-computation",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Move the estimatedSpendUsd computation to after line 126 (after capped is defined) and use capped.length * (baseCostPerTask + 0.0006). This gives the actual number of tasks that will be POSTed.",
+      "why_it_matters": "inputs.length includes locale-rejected and batch-capped queries that never reach the API. When DATAFORSEO_MAX_BATCH_PER_RUN is set low or many locales are unsupported, the estimate can be significantly higher than actual spend.",
+      "evidence": [
+        "Line 98: estimatedSpendUsd = inputs.length * cost.",
+        "Lines 101-111: locale validation reduces to valid.length.",
+        "Line 126: batch cap reduces to capped.length.",
+        "estimatedSpendUsd is never recomputed after these reductions."
+      ]
+    }
+  ],
+  "residual_risks": [
+    "Poll ceiling is a soft limit: the while condition at line 180 is checked at loop top only. One full iteration (sleep up to 120s + tasksReady fetch + N sequential taskGetAdvanced fetches) can overshoot pollCeilingMs by the sum of those network times. With 500 tasks ready in one round, actual wall time can substantially exceed the 10-minute ceiling.",
+    "lookupDataForSeoLocale falls back to the bare country key at line 29. If a multi-language country ever gets a bare key added to dataforseo_location_map.json (currently clean — no bare BE/CH/CA keys exist), that fallback would silently return the wrong language for requests that specify a non-default language for that country."
+  ],
+  "testing_gaps": [
+    "No test where ALL tasks fail googleOrganicTaskGetAdvanced — would surface that status='active', events=[], poll_summary.retrieved===total, timed_out=false with no error signal. The existing per-task error test (line 316) only covers partial failure (1 of 2 tasks fails).",
+    "No test for POST response returning fewer entries than the submitted chunk size — partial positional alignment path (taskList.length < chunk.length) is untested."
+  ]
+}

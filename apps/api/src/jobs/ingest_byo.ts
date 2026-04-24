@@ -18,7 +18,7 @@ const COST_PER_CALL: Record<string, number> = {
 
 // Minimal smoke-test fixture for criterion validation before Language-First Pruning Gate ships.
 // Production default is [] (no queries run until SerpQuery[] population is wired up).
-export const SMOKE_TEST_SERP_INPUTS: SerpQuery[] = [
+const SMOKE_TEST_SERP_INPUTS: SerpQuery[] = [
   { keyword: 'salary calculator', country_code: 'DE', language_code: 'de' },
 ];
 
