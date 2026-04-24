@@ -1,0 +1,39 @@
+{
+  "run_id": "20260424-122853-aa475c83",
+  "branch": "feat/dataforseo-serp-byo-connector",
+  "head_sha": "6605086fbda6ccb29836b057e191d796cdd03fb7",
+  "verdict": "Applied",
+  "fixes_applied": 10,
+  "fixes_summary": [
+    "F2: PAA entries capped 200/500 chars (prompt injection surface)",
+    "F3: googleOrganicTasksReady wrapped in .catch — poll cycle survives transient errors",
+    "F4: chunk POST wrapped in try/catch — partial chunk failures skip, not crash",
+    "F5: AbortController timeout (DATAFORSEO_FETCH_TIMEOUT_MS, default 30s) added to fetchImpl",
+    "F6: startTime moved before POST loop (poll ceiling accuracy)",
+    "F13: catch block logs err.message (error attribution)",
+    "F17: estimatedSpendUsd computed from capped.length not inputs.length",
+    "F18: Authorization header CRLF stripped (header injection)",
+    "F20: SMOKE_TEST_SERP_INPUTS export removed",
+    "F26: type predicates replace unsafe `as` casts"
+  ],
+  "deferred": [
+    "F1: retrieved.add already after catch — false positive",
+    "F7: timeout status — poll_summary.timed_out is the signal, intentional",
+    "F8: COST_PER_CALL=0 sentinel — intentional, documented",
+    "F9: sleep AbortSignal — P3, defer",
+    "F10: BaseSerpApiElementItem[] cast — SDK limitation",
+    "F11: positional task-ID pairing — P2, defer to follow-up",
+    "F12: BCP-47 normalization — handled by buildSerpQueries caller",
+    "F14: unbound method — resolved by F26",
+    "F15: SERP metadata in agent prompts — intentional design",
+    "F16: 429 test missing — P2, defer to follow-up",
+    "F19: composite key duplication — advisory, location map audit",
+    "F21: SerpQuery ownership — P3 refactor",
+    "F22: serial googleOrganicTaskGetAdvanced — P3 perf",
+    "F23: serial chunk POST — P3 perf",
+    "F24: buildInitialConnectors API key gate — different file",
+    "F25: config split boringSitesLanguages — advisory",
+    "F27: ?? [] kept for test mock compat"
+  ],
+  "completed_at": "2026-04-24T15:00:00Z"
+}

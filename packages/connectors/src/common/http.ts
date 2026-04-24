@@ -5,6 +5,7 @@ export type RawEventInput = {
   text: string;
   url: string;
   engagement_count?: number;
+  metadata?: Record<string, unknown>;
 };
 
 export type Cadence = 'hourly' | 'daily';

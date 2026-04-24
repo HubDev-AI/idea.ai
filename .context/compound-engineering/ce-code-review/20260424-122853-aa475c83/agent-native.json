@@ -1,0 +1,75 @@
+{
+  "reviewer": "agent-native",
+  "findings": [
+    {
+      "title": "SERP source vocabulary absent from agent prompts; rich metadata dropped at persistence boundary",
+      "severity": "warning",
+      "file": "apps/api/src/jobs/research_agent.ts",
+      "line": 135,
+      "confidence": 0.88,
+      "autofix_class": "prompt_update + schema_extension",
+      "owner": "platform",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Option A (low effort): Add a source vocabulary note to buildBroadScanPrompt and buildDeepDivePrompt explaining that dataforseo_serp signals are organic SERP results for the configured BORING_SITES_KEYWORDS queries across BORING_SITES_LANGUAGES locales, and that higher organic_position means a stronger existing-market signal. Option B (higher effort): Extend SignalMemoryRecord schema and scored_signals table with a nullable metadata JSONB column; pass metadata.keyword and metadata.organic_position through indexSignalMemory and persist them. As a partial fix, embed keyword context into canonical_text at construction time in the buildRetrieverQueryText call at live_read_model.ts:741.",
+      "why_it_matters": "The research agent sees [dataforseo_serp] signals in broadScan (line 135) and deepDive (lines 219, 223) prompts but has no vocabulary to interpret them. It cannot distinguish a rank-1 organic result from a rank-10 one, cannot correlate signals by search keyword or locale, and cannot reason about what SERP placement means as a market signal. The connector collects rich metadata (keyword, country_code, language_code, organic_position, aio_text, paa_entries) but this is dropped at the DB persistence boundary — the .strict() schema at contracts/memory.ts:6 permanently excludes it. The ai_post_scrape enrichment step also receives dataforseo_serp source but its prompt has no SERP vocabulary either.",
+      "evidence": [
+        "apps/api/src/jobs/research_agent.ts:135 — [${s.source}] in broadScanPrompt cluster block; no SERP source vocabulary in prompt",
+        "apps/api/src/jobs/research_agent.ts:219,223 — [${s.source}] in deepDivePrompt current and historical signal blocks",
+        "apps/api/src/jobs/ai_post_scrape.ts:121 — source field in post-scrape payload; prompt (lines 128-130) has no SERP vocabulary",
+        "packages/connectors/src/dataforseo_serp_byo.ts:224-238 — metadata.keyword, organic_position, paa_entries, aio_text, etc. populated in RawEventInput",
+        "apps/api/src/runtime/live_read_model.ts:904-918 — indexSignalMemory called with text/source/topic only; event.metadata not passed",
+        "apps/api/src/runtime/postgres_signal_store.ts:86-103 — scored_signals INSERT has no metadata column",
+        "packages/contracts/src/memory.ts:6-20 — signalMemoryRecordSchema is .strict() with no metadata field"
+      ]
+    },
+    {
+      "title": "buildInitialConnectors shows 'active' for dataforseo_serp_byo when BORING_SITES vars set but DATAFORSEO_API_KEY absent",
+      "severity": "observation",
+      "file": "apps/api/src/runtime/live_read_model.ts",
+      "line": 468,
+      "confidence": 0.82,
+      "autofix_class": "config_gate",
+      "owner": "platform",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add dataforseoApiKey to RuntimeEnv (matching exaApiKey/perigonApiKey/xBearerToken) and gate line 468 on it in addition to boringSitesLanguages/Keywords. Alternatively, accept current behavior and document that initial status can show 'active' for up to one refresh interval when API key is absent — connector correctly skips and status self-corrects to 'disabled' post-run.",
+      "why_it_matters": "Other BYO connectors (exa, perigon, twitter) gate initial status on the typed API key in RuntimeEnv (lines 465-467). dataforseo_serp_byo only gates on boringSitesLanguages/Keywords. If BORING_SITES_LANGUAGES + BORING_SITES_KEYWORDS are set but DATAFORSEO_API_KEY is absent, /v1/connectors returns 'active' until the first daily refresh, then corrects to 'disabled'. Operators and any agent watching connector health see a false 'active' signal. Self-correcting but misleading.",
+      "evidence": [
+        "apps/api/src/runtime/live_read_model.ts:468 — gates on boringSitesLanguages/Keywords only, not DATAFORSEO_API_KEY",
+        "apps/api/src/runtime/live_read_model.ts:465-467 — exa/perigon/twitter gate on typed API key fields from RuntimeEnv",
+        "apps/api/src/runtime/live_read_model.ts:296 — mapByoStatus: 'skipped' maps to { status: 'disabled', last_run: null }",
+        "packages/connectors/src/dataforseo_serp_byo.ts:83-88 — connector correctly guards on DATAFORSEO_API_KEY via evaluateByoGuard; returns { status: 'skipped' } when key absent"
+      ]
+    },
+    {
+      "title": "SERP connector config split across typed RuntimeEnv (boringSites) and raw process.env (credentials/budget/depth)",
+      "severity": "observation",
+      "file": "apps/api/src/runtime/live_read_model.ts",
+      "line": 660,
+      "confidence": 0.78,
+      "autofix_class": "config_consolidation",
+      "owner": "platform",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add dataforseoApiKey, dataforseoDailyBudgetUsd, and optionally dataforseoSerpDepth to RuntimeEnv alongside boringSitesLanguages/Keywords (apps/api/src/config/env.ts). This matches the typed approach for other BYO connectors and enables the buildInitialConnectors gate fix. Pass these through the runByoConnectorIngestion call instead of raw process.env.",
+      "why_it_matters": "runByoConnectorIngestion at line 660 receives process.env (raw) while serpInputs are built from typed RuntimeEnv. DATAFORSEO_API_KEY, DATAFORSEO_DAILY_BUDGET_USD, and DATAFORSEO_SERP_DEPTH stay in raw process.env while boringSitesLanguages/Keywords are typed. Tests or environments that override RuntimeEnv do not affect connector credentials. This inconsistency blocks the buildInitialConnectors gate fix since DATAFORSEO_API_KEY is not accessible as a typed RuntimeEnv field.",
+      "evidence": [
+        "apps/api/src/runtime/live_read_model.ts:660 — runByoConnectorIngestion(process.env, { serpInputs: buildSerpQueries(env.boringSitesLanguages, env.boringSitesKeywords) })",
+        "apps/api/src/config/env.ts:66-67 — boringSitesLanguages/Keywords in RuntimeEnv; no dataforseoApiKey",
+        "apps/api/src/jobs/ingest_byo.ts:72 — API_KEY_ENV maps dataforseo_serp_byo to DATAFORSEO_API_KEY (read from raw process.env at runtime)"
+      ]
+    }
+  ],
+  "residual_risks": [
+    "PAA entries (extractPaaEntries, packages/connectors/src/dataforseo_serp_byo.ts:57-73) lack the title/snippet truncation applied to organic results (lines 215-216). PAA data currently flows only into dropped metadata and is not an active injection path. If metadata is later persisted and injected into prompts, PAA question/snippet fields become an untruncated prompt injection surface for adversarial SERP content.",
+    "runByoConnectorIngestion is called with raw process.env at live_read_model.ts:660. Any test or staging environment that substitutes RuntimeEnv values will not affect DATAFORSEO credentials or budget limits passed to the connector."
+  ],
+  "testing_gaps": [
+    "No test covers the pre-run / post-run status transition: BORING_SITES_LANGUAGES + BORING_SITES_KEYWORDS set, DATAFORSEO_API_KEY absent → buildInitialConnectors returns 'active', first daily refresh returns connector status 'skipped', /v1/connectors then returns 'disabled'. The status flip is load-bearing for operator UX.",
+    "No test asserts that dataforseo_serp signals flow through to the input of buildBroadScanPrompt or buildDeepDivePrompt — only connector-level event emission is covered (packages/connectors/tests/dataforseo_serp_byo.test.ts). An integration test from runByoConnectorIngestion through to the agent prompt context would catch future regressions in the signal flow path."
+  ]
+}
+
+=== LEARNINGS ===
+docs/solutions/ does not exist in this repository. No past solutions found for DataForSEO API polling patterns, BYO connector issues, circuit breaker integration, or prompt injection from SERP data.

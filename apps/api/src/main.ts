@@ -25,6 +25,7 @@ import { createExecutionLogger } from './runtime/execution_logger';
 import { createExperienceStore } from './runtime/experience_store';
 import { createPostgresJournalStore } from './runtime/journal_store';
 import { buildShutdownInterruptedError, isAgentCatchUpDue } from './runtime/agent_run_lifecycle';
+import { createEntityRoute } from './runtime/entity_route';
 import { createLiveReadModel } from './runtime/live_read_model';
 import { createPostgresSignalStore } from './runtime/postgres_signal_store';
 import { buildStartupAgentStatus } from './runtime/agent_status_state';
@@ -99,11 +100,13 @@ const modelRouter = startupEnv.modelRoutingEnabled
     })
   : null;
 
-// Route function for entity extraction — uses Ollama routing when available,
-// otherwise falls back to Claude CLI directly (same as agent runner).
-const routeEntity = modelRouter
-  ? modelRouter.route
-  : (_task: string, prompt: string) => runClaudePrompt({ prompt }).then(r => r.text);
+// Entity extraction should follow the configured provider preference rather than
+// silently hardcoding Claude when model routing is disabled.
+const routeEntity = createEntityRoute({
+  modelRouter,
+  runClaude: runClaudePrompt,
+  runCodex: runCodexPrompt,
+});
 
 const runEntityExtraction = async (): Promise<void> => {
   if (!entityStore || !signalStore) return;

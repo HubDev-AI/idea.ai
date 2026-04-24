@@ -1,0 +1,68 @@
+{
+  "reviewer": "security",
+  "findings": [
+    {
+      "title": "PAA question and snippet fields have no length cap before entering metadata",
+      "severity": "medium",
+      "file": "/Users/vladimirtrifonov/src/ai/idea.ai/packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 65,
+      "confidence": 0.75,
+      "autofix_class": "one-liner",
+      "owner": "connector-team",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "In extractPaaEntries, cap each field: question: String(e.title ?? '').slice(0, 200), snippet: String(e.expanded_element?.[0]?.['description'] ?? '').slice(0, 500)",
+      "why_it_matters": "PAA entries are stored in metadata.paa_entries and duplicated on every organic row. If downstream code ever promotes metadata fields into an LLM prompt, attacker-controlled SERP content (PAA questions/snippets are Google-rendered but can be manipulated via adversarial pages) would flow in without bounds. The aio_text path is capped at 4096 bytes; the PAA path is not, creating an inconsistency that could be silently exploited when metadata access is added.",
+      "evidence": [
+        "dataforseo_serp_byo.ts:65-70: question: String(e.title ?? ''), snippet: String(e.expanded_element?.[0]?.['description'] ?? '') — no .slice()",
+        "dataforseo_serp_byo.ts:53-54: aio text capped at 4096 — inconsistency with PAA path",
+        "live_read_model.ts:700-705: LLM pipeline currently only accesses event.text, not metadata — risk is latent, not currently exploitable"
+      ]
+    },
+    {
+      "title": "Authorization header built from raw env var without newline sanitization",
+      "severity": "low",
+      "file": "/Users/vladimirtrifonov/src/ai/idea.ai/packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 137,
+      "confidence": 0.62,
+      "autofix_class": "one-liner",
+      "owner": "connector-team",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Sanitize before interpolation: const safeKey = (env.DATAFORSEO_API_KEY ?? '').replace(/[\\r\\n]/g, ''); Authorization: `Basic ${safeKey}`",
+      "why_it_matters": "HTTP header injection: if DATAFORSEO_API_KEY contains \\r\\n, an attacker who controls the env var (e.g. via .env file injection or misconfigured secret management) can inject additional HTTP headers into requests to the DataForSEO API, potentially bypassing auth or exfiltrating data. Exploitation requires controlling the env var, which reduces severity.",
+      "evidence": [
+        "dataforseo_serp_byo.ts:130: const apiKey = env.DATAFORSEO_API_KEY!;",
+        "dataforseo_serp_byo.ts:137: Authorization: `Basic ${apiKey}` — raw interpolation into header value"
+      ]
+    },
+    {
+      "title": "API_KEY bypass: server starts without API_KEY if HOST is not explicitly set",
+      "severity": "info",
+      "file": "/Users/vladimirtrifonov/src/ai/idea.ai/apps/api/src/main.ts",
+      "line": 46,
+      "confidence": 0.65,
+      "autofix_class": "config",
+      "owner": "infra",
+      "requires_verification": true,
+      "pre_existing": true,
+      "suggested_fix": "Pre-existing pattern, not introduced by this diff. No change needed here.",
+      "why_it_matters": "Pre-existing: when HOST defaults to 127.0.0.1 and API_KEY is unset, all routes (including newly added entity extraction triggers) are unauthenticated. entity_route.ts is an internal function, not an HTTP route, so no new endpoint was added — confirmed safe for this diff.",
+      "evidence": [
+        "main.ts:46-53: apiKey guard only exits on non-localhost HOST without API_KEY",
+        "server.ts:118-128: auth hook only installed when apiKey is truthy",
+        "entity_route.ts: no registerXxxRoute call — not an HTTP endpoint"
+      ]
+    }
+  ],
+  "residual_risks": [
+    "metadata.paa_entries and metadata.aio_text are written to every organic SERP event but currently no downstream code reads them. If future code promotes these into LLM prompts without re-checking caps, the aio_text cap (4096 bytes) would hold but PAA content is unbounded.",
+    "BORING_SITES_KEYWORDS values are passed as-is to the DataForSEO SDK keyword field. No validation prevents very long strings or special characters. The DataForSEO SDK serializes to JSON so there is no shell/SQL injection risk, but keyword length is not bounded at the connector layer.",
+    "The DataForSEO API key is passed as a pre-encoded Basic Auth token without verification that it is valid base64. A malformed key will cause API 401s but no security issue beyond DoS of the connector."
+  ],
+  "testing_gaps": [
+    "No test verifies that PAA entries with very long question/snippet strings are capped before being stored in metadata.",
+    "No test exercises the DATAFORSEO_API_KEY containing newline characters to confirm header injection is prevented.",
+    "No integration test for entity_route.ts fallback path when preferredProvider throws and fallbackProvider is null — the error propagation path is untested."
+  ]
+}

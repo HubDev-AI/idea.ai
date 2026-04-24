@@ -1,0 +1,113 @@
+{
+  "reviewer": "adversarial",
+  "findings": [
+    {
+      "title": "PAA snippet fields have no length cap — larger injection surface than AIO by file-level contract",
+      "severity": "high",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 65,
+      "confidence": 0.95,
+      "autofix_class": "manual",
+      "owner": "human",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add .slice(0, 500) on question and .slice(0, 1000) on snippet inside extractPaaEntries (lines 67-68), matching the title/description caps at lines 215-216. Also cap paa.items to 5 entries.",
+      "why_it_matters": "AIO text is explicitly capped at 4KB to reduce LLM prompt injection surface. PAA entries have no cap and are duplicated into metadata.paa_entries on every organic row (up to 10 rows per task), making the PAA path a larger uncapped injection surface than the guarded AIO field.",
+      "evidence": [
+        "extractPaaEntries lines 65-70: paa.items.map with String(e.title) and String(e.expanded_element?.[0]?.description) — no .slice() applied",
+        "paaEntries is attached to metadata.paa_entries on every organic item at line 236, not once per task",
+        "AIO cap at line 54: text.slice(0, 4096) with explicit comment 'reduces LLM prompt injection surface from attacker-controlled SERP content'",
+        "PAA: 8 entries × 800 chars each × 10 organic rows = 64KB uncapped per task vs 4KB AIO cap",
+        "Attacker controls PAA content via their website's People Also Ask appearance; content flows directly to LLM prompt"
+      ]
+    },
+    {
+      "title": "Positional task-ID assignment assumes API response order matches submission order",
+      "severity": "medium",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 161,
+      "confidence": 0.70,
+      "autofix_class": "manual",
+      "owner": "human",
+      "requires_verification": true,
+      "pre_existing": false,
+      "suggested_fix": "Parse taskInfo.tag (set at line 155 as keyword|country|language) to reverse-lookup the original query object, rather than relying on taskList[i] == chunk[i] positional alignment.",
+      "why_it_matters": "If DataForSEO reorders or omits entries in the POST response (e.g. partial success), the wrong keyword/country/language is permanently associated with a task ID. All organic events from that task carry wrong coordinates, silently corrupting AIO-survival scoring.",
+      "evidence": [
+        "Line 155: task.tag set to keyword|country|language — contains all correlation data but is never used for reverse-lookup",
+        "Lines 161-165: taskIdToQuery.set(taskInfo.id, chunk[i]) assumes position i in response equals position i in request",
+        "DataForSEO API documentation does not guarantee response-order == submission-order",
+        "Partial success responses (some tasks queued, some rejected inline) shift array indices, silently misaligning all subsequent entries"
+      ]
+    },
+    {
+      "title": "retrieved.add outside try permanently drops tasks on transient fetch errors — no retry possible",
+      "severity": "medium",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 247,
+      "confidence": 0.95,
+      "autofix_class": "manual",
+      "owner": "human",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Move retrieved.add(taskId) inside the try block after event extraction succeeds. On catch, do not add to retrieved — allow the next poll iteration to retry the task.",
+      "why_it_matters": "A transient 500 or network error on googleOrganicTaskGetAdvanced causes the task to be permanently counted as done with zero events emitted. The poll loop advances toward totalTasks and exits normally; the SERP event corpus is silently incomplete with no error signal.",
+      "evidence": [
+        "Lines 242-245: catch block executes console.error only, does not rethrow",
+        "Line 247: retrieved.add(taskId) runs unconditionally in the outer for-loop body, after the catch block exits",
+        "If googleOrganicTaskGetAdvanced throws for every task in a poll round, retrieved.size still increments to totalTasks and loop exits normally with events=[]",
+        "No retry mechanism exists; task IDs are not re-queued on error"
+      ]
+    },
+    {
+      "title": "Cascade: partial chunk POST leaves orphaned DataForSEO tasks — next run double-bills for same queries",
+      "severity": "medium",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 159,
+      "confidence": 0.80,
+      "autofix_class": "advisory",
+      "owner": "human",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Collect the set of successfully-posted task IDs before the poll loop. If the POST for-loop throws mid-way, surface the partial task set in the error response so an operator can cancel or poll them separately.",
+      "why_it_matters": "DataForSEO charges per task submitted regardless of whether results are ever fetched. Orphaned tasks from failed chunks remain in the account queue. The next daily refresh re-posts the same queries generating new task IDs, incurring double spend. At worst, stale tasks from prior restarts bleed into a future run's tasks_ready queue.",
+      "evidence": [
+        "Lines 147-167: sequential for-loop over chunks; if chunk[N].googleOrganicTaskPost throws, the exception propagates out of runSerpByoConnector",
+        "runSafely in ingest_byo.ts catches the throw and returns status=error with events=[] — no partial task cleanup",
+        "Chunks 0..N-1 tasks were already submitted to DataForSEO and billed before the throw",
+        "tasks_ready guard at line 189 (!taskIdToQuery.has(taskId)) correctly rejects unknown IDs, but only within the same process instance — a restarted process has an empty taskIdToQuery and cannot identify orphaned tasks"
+      ]
+    },
+    {
+      "title": "Composition: COST_PER_CALL sentinel of 0 makes spendStore budget guard permanently dead code for SERP",
+      "severity": "medium",
+      "file": "apps/api/src/jobs/ingest_byo.ts",
+      "line": 16,
+      "confidence": 0.90,
+      "autofix_class": "advisory",
+      "owner": "human",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "After the run, record SerpConnectorResult.estimated_spend_usd (or a conservative per-run estimate) via deps.spendStore.record instead of 0. The current record(connector, 0) means getSpent always returns 0 and the budget guard condition budgetUsd - 0 > 0 is always true.",
+      "why_it_matters": "The documented intent is to enforce DATAFORSEO_DAILY_BUDGET_USD. The spendStore outer guard in runWithSpend checks budgetUsd - spentUsd <= 0. Because 0 is recorded every run, spentUsd never accumulates, so the guard never fires. The inner guard in runSerpByoConnector also omits spentUsd. Both budget checks are statically fixed — no run-count-based enforcement exists despite the budget infrastructure being wired up.",
+      "evidence": [
+        "ingest_byo.ts line 16: dataforseo_serp_byo: 0 (comment acknowledges it is a sentinel)",
+        "Line 126: deps.spendStore.record(connector, COST_PER_CALL[connector] ?? 0.01) — passes 0 for SERP",
+        "byo_guard.ts line 58: if (budgetUsd - (spentUsd ?? 0) <= 0) — with spentUsd always 0, condition is never true",
+        "dataforseo_serp_byo.ts lines 83-88: inner evaluateByoGuard call omits spentUsd entirely — both guards are static"
+      ]
+    }
+  ],
+  "residual_risks": [
+    "AIO .slice(0,4096) truncates JavaScript string characters, not Unicode code points. A surrogate pair split at position 4095 produces a lone surrogate in the metadata string; behavior across JSON serializers and LLM tokenizers is inconsistent across runtimes.",
+    "googleOrganicTasksReady() is account-global, not scoped to the current run. Process restart mid-poll (after POST, before poll completes) permanently orphans tasks — they reappear in a future run's tasks_ready but are filtered by !taskIdToQuery.has(taskId) and silently discarded without cancellation via DataForSEO task-cancel API.",
+    "buildSerpQueries produces a Cartesian product of locationMap entries x keywords. Results are silently truncated to DATAFORSEO_MAX_BATCH_PER_RUN (default 500) at live_read_model.ts line 660 with no caller notification that coverage was dropped.",
+    "estimatedSpendUsd (dataforseo_serp_byo.ts line 98) computed from inputs.length before locale filtering and before batch cap — can significantly overstate actual spend, making R17 informational telemetry inaccurate for observability dashboards."
+  ],
+  "testing_gaps": [
+    "No test covers extractPaaEntries with long description strings or many entries to assert absence of length caps.",
+    "No test for partial chunk POST failure (first chunk succeeds, second throws) verifying orphaned task behavior and double-spend scenario.",
+    "No test verifies that retrieved.add fires on googleOrganicTaskGetAdvanced throw — the silent permanent-drop scenario is untested.",
+    "No test verifies that COST_PER_CALL=0 results in spendStore never accumulating across repeated runs and that the budget guard never fires for the SERP connector."
+  ]
+}

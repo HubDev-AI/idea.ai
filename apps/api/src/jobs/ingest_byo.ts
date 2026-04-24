@@ -2,15 +2,25 @@ import { evaluateByoGuard, type ByoConnectorResult } from '@idea/connectors/src/
 import { runExaByoConnector } from '@idea/connectors/src/exa_byo';
 import { runPerigonByoConnector } from '@idea/connectors/src/perigon_byo';
 import { runTwitterByoConnector } from '@idea/connectors/src/twitter_byo';
+import { runSerpByoConnector, type SerpQuery } from '@idea/connectors/src/dataforseo_serp_byo';
 import { createExecutionLogger, type ExecutionLogger } from '../runtime/execution_logger';
 
-type ByoConnectorName = 'exa_byo' | 'perigon_byo' | 'twitter_byo';
+type ByoConnectorName = 'exa_byo' | 'perigon_byo' | 'twitter_byo' | 'dataforseo_serp_byo';
 
 const COST_PER_CALL: Record<string, number> = {
   exa_byo: 0.01,
   perigon_byo: 0.01,
   twitter_byo: 0.02,
+  // dataforseo_serp_byo cost is variable (batch size × depth × AIO flag);
+  // set to 0 as sentinel — real cost tracked via R17 spend-preview telemetry on SerpConnectorResult.
+  dataforseo_serp_byo: 0,
 };
+
+// Minimal smoke-test fixture for criterion validation before Language-First Pruning Gate ships.
+// Production default is [] (no queries run until SerpQuery[] population is wired up).
+const SMOKE_TEST_SERP_INPUTS: SerpQuery[] = [
+  { keyword: 'salary calculator', country_code: 'DE', language_code: 'de' },
+];
 
 type ConnectorExecutor = (env: NodeJS.ProcessEnv) => Promise<ByoConnectorResult>;
 
@@ -55,12 +65,28 @@ const runSafely = async (
   }
 };
 
+const API_KEY_ENV: Record<ByoConnectorName, string> = {
+  exa_byo: 'EXA_API_KEY',
+  perigon_byo: 'PERIGON_API_KEY',
+  twitter_byo: 'X_BEARER_TOKEN',
+  dataforseo_serp_byo: 'DATAFORSEO_API_KEY',
+};
+
+const BUDGET_ENV: Record<ByoConnectorName, string> = {
+  exa_byo: 'EXA_DAILY_BUDGET_USD',
+  perigon_byo: 'PERIGON_DAILY_BUDGET_USD',
+  twitter_byo: 'X_DAILY_BUDGET_USD',
+  dataforseo_serp_byo: 'DATAFORSEO_DAILY_BUDGET_USD',
+};
+
 export const runByoConnectorIngestion = async (
   env: NodeJS.ProcessEnv = process.env,
   deps: {
     runExa?: ConnectorExecutor;
     runPerigon?: ConnectorExecutor;
     runTwitter?: ConnectorExecutor;
+    runSerp?: ConnectorExecutor;
+    serpInputs?: SerpQuery[];
     logger?: ExecutionLogger;
     spendStore?: { record(connector: string, amount: number): Promise<void>; getSpent(connector: string): Promise<number> };
   } = {}
@@ -71,6 +97,8 @@ export const runByoConnectorIngestion = async (
   const runExa = deps.runExa ?? runExaByoConnector;
   const runPerigon = deps.runPerigon ?? runPerigonByoConnector;
   const runTwitter = deps.runTwitter ?? runTwitterByoConnector;
+  const serpInputs = deps.serpInputs ?? [];
+  const runSerp = deps.runSerp ?? ((e) => runSerpByoConnector(serpInputs, e));
 
   const runWithSpend = async (
     connector: ByoConnectorName,
@@ -78,8 +106,8 @@ export const runByoConnectorIngestion = async (
   ): Promise<ByoConnectorResult> => {
     if (deps.spendStore) {
       const spent = await deps.spendStore.getSpent(connector);
-      const apiKey = env[connector === 'exa_byo' ? 'EXA_API_KEY' : connector === 'perigon_byo' ? 'PERIGON_API_KEY' : 'X_BEARER_TOKEN'];
-      const budgetValue = env[connector === 'exa_byo' ? 'EXA_DAILY_BUDGET_USD' : connector === 'perigon_byo' ? 'PERIGON_DAILY_BUDGET_USD' : 'X_DAILY_BUDGET_USD'];
+      const apiKey = env[API_KEY_ENV[connector]];
+      const budgetValue = env[BUDGET_ENV[connector]];
       const guard = evaluateByoGuard({
         connector,
         ...(apiKey !== undefined ? { apiKey } : {}),
@@ -101,17 +129,19 @@ export const runByoConnectorIngestion = async (
     return result;
   };
 
-  const [exa, perigon, twitter] = await Promise.all([
+  const [exa, perigon, twitter, serp] = await Promise.all([
     runWithSpend('exa_byo', runExa),
     runWithSpend('perigon_byo', runPerigon),
-    runWithSpend('twitter_byo', runTwitter)
+    runWithSpend('twitter_byo', runTwitter),
+    runWithSpend('dataforseo_serp_byo', runSerp),
   ]);
 
   await logger.info('ingest_byo', 'ingestion complete', {
     connectors: {
       exa: exa.status,
       perigon: perigon.status,
-      twitter: twitter.status
+      twitter: twitter.status,
+      serp: serp.status,
     }
   });
 
@@ -120,7 +150,8 @@ export const runByoConnectorIngestion = async (
     connectors: {
       exa,
       perigon,
-      twitter
+      twitter,
+      dataforseo_serp_byo: serp,
     }
   };
 };
