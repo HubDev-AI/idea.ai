@@ -1,0 +1,62 @@
+{
+  "reviewer": "maintainability",
+  "findings": [
+    {
+      "title": "Composite key parsing duplicated between serp_query_builder.ts and dataforseo_location_helpers.ts — shared convention with no shared helper",
+      "severity": "medium",
+      "file": "packages/connectors/src/serp_query_builder.ts",
+      "line": 51,
+      "confidence": 0.88,
+      "autofix_class": "extract-helper",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Extract parseLocationMapKey(key: string, entry: LocationEntry): { countryCode: string; langCode: string } into dataforseo_location_helpers.ts and import it in serp_query_builder.ts. Both modules already import the same JSON; the key-parsing logic is the only duplication."
+    },
+    {
+      "title": "Type cast (byo.connectors as Record<string, ...>) applied twice in live_read_model.ts — return type of runByoConnectorIngestion is not updated to include dataforseo_serp_byo",
+      "severity": "medium",
+      "file": "apps/api/src/runtime/live_read_model.ts",
+      "line": 394,
+      "confidence": 0.92,
+      "autofix_class": "add-explicit-return-type",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Add an explicit return type to runByoConnectorIngestion that includes dataforseo_serp_byo in the connectors shape. The two casts on lines 394 and 669 of live_read_model.ts can then be removed and replaced with typed property access, matching the pattern already used for exa/perigon/twitter."
+    },
+    {
+      "title": "SMOKE_TEST_SERP_INPUTS exported but has no consumer outside ingest_byo.ts — dead export",
+      "severity": "low",
+      "file": "apps/api/src/jobs/ingest_byo.ts",
+      "line": 21,
+      "confidence": 0.82,
+      "autofix_class": "unexport-or-delete",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Remove the export keyword. The fixture is a local smoke-test scaffold; exporting it implies an external contract that doesn't exist. The comment already says 'Production default is []' — keeping it unexported signals its transient nature."
+    },
+    {
+      "title": "SerpQuery owned by dataforseo_serp_byo.ts but consumed upstream by serp_query_builder.ts — inverted dependency direction",
+      "severity": "low",
+      "file": "packages/connectors/src/serp_query_builder.ts",
+      "line": 2,
+      "confidence": 0.65,
+      "autofix_class": "move-type",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Move SerpQuery into a shared types file (e.g. serp_types.ts) or into dataforseo_location_helpers.ts, then import from there in both dataforseo_serp_byo.ts and serp_query_builder.ts. The builder is logically upstream of the connector; importing from the connector creates an inversion that will force a circular-dependency fix if the builder is ever reused without the connector."
+    }
+  ],
+  "residual_risks": [
+    "COST_PER_CALL['dataforseo_serp_byo'] = 0 causes spendStore.record() to write 0 on every active run. If the spend store aggregates totals for budget enforcement, the sentinel silently allows unlimited runs for this connector until R17 telemetry is wired. The comment documents intent but there is no test asserting the 0-cost path does not block on the guard's budget check.",
+    "buildSerpQueries cross-multiplies all matching location-map entries with all keywords. With a large boringSitesKeywords config, this can produce thousands of SerpQuery objects that all hit DATAFORSEO_MAX_BATCH_PER_RUN silently truncation. No warning or metric is emitted when the cap truncates valid queries."
+  ],
+  "testing_gaps": [
+    "No test covers the two type-cast paths in live_read_model.ts (lines 394, 669) with a ByoIngestionResult that is missing the dataforseo_serp_byo key — the cast masks an undefined access at runtime.",
+    "SERP_PROBE_SEEDS is only tested for array shape (non-empty, all strings). No test validates that each seed actually produces queries when passed to buildSerpQueries with a realistic language set, so a seed accidentally containing a locale-incompatible string would go undetected.",
+    "No test for the sentinel cost path: spendStore.record called with amount=0 for dataforseo_serp_byo when status='active'."
+  ]
+}

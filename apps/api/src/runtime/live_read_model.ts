@@ -20,6 +20,7 @@ import {
   resolveAiPostScrapeSettings
 } from '../jobs/ai_post_scrape';
 import { runByoConnectorIngestion } from '../jobs/ingest_byo';
+import { buildSerpQueries } from '@idea/connectors/src/serp_query_builder';
 import {
   type OpenConnectorIngestionResult,
   type OpenConnectorName, 
@@ -390,12 +391,15 @@ const toConnectorStatus = (
   const exa = mapByoStatusWithPrevious('exa_byo', byo.connectors.exa.status);
   const perigon = mapByoStatusWithPrevious('perigon_byo', byo.connectors.perigon.status);
   const twitter = mapByoStatusWithPrevious('twitter_byo', byo.connectors.twitter.status);
+  const serpByo = (byo.connectors as Record<string, { status: 'active' | 'skipped' | 'error'; events: RawEventInput[] }>)['dataforseo_serp_byo'];
+  const serp = mapByoStatusWithPrevious('dataforseo_serp_byo', serpByo?.status ?? 'skipped');
 
   return [
     ...openRecords,
     { name: 'exa_byo', status: exa.status, last_run: exa.last_run, cadence: 'daily' as const },
     { name: 'perigon_byo', status: perigon.status, last_run: perigon.last_run, cadence: 'daily' as const },
-    { name: 'twitter_byo', status: twitter.status, last_run: twitter.last_run, cadence: 'daily' as const }
+    { name: 'twitter_byo', status: twitter.status, last_run: twitter.last_run, cadence: 'daily' as const },
+    { name: 'dataforseo_serp_byo', status: serp.status, last_run: serp.last_run, cadence: 'daily' as const }
   ];
 };
 
@@ -435,6 +439,12 @@ const toErrorFirstSnapshot = (env: RuntimeEnv, refreshedAtIso: string): Connecto
     status: (env.xBearerToken && env.xDailyBudgetUsd > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
     last_run: env.xBearerToken && env.xDailyBudgetUsd > 0 ? refreshedAtIso : null,
     cadence: 'daily'
+  },
+  {
+    name: 'dataforseo_serp_byo',
+    status: ((env.boringSitesLanguages ?? []).length > 0 && (env.boringSitesKeywords ?? []).length > 0 ? 'error' : 'disabled') as ConnectorStatusRecord['status'],
+    last_run: (env.boringSitesLanguages ?? []).length > 0 && (env.boringSitesKeywords ?? []).length > 0 ? refreshedAtIso : null,
+    cadence: 'daily'
   }
 ];
 
@@ -454,7 +464,8 @@ const buildInitialConnectors = (env: RuntimeEnv): ConnectorStatusRecord[] => {
     ...openRecords,
     { name: 'exa_byo', status: (env.exaApiKey && env.exaDailyBudgetUsd > 0 ? 'active' : 'disabled') as ConnectorStatusRecord['status'], last_run: null, cadence: 'daily' as const },
     { name: 'perigon_byo', status: (env.perigonApiKey && env.perigonDailyBudgetUsd > 0 ? 'active' : 'disabled') as ConnectorStatusRecord['status'], last_run: null, cadence: 'daily' as const },
-    { name: 'twitter_byo', status: (env.xBearerToken && env.xDailyBudgetUsd > 0 ? 'active' : 'disabled') as ConnectorStatusRecord['status'], last_run: null, cadence: 'daily' as const }
+    { name: 'twitter_byo', status: (env.xBearerToken && env.xDailyBudgetUsd > 0 ? 'active' : 'disabled') as ConnectorStatusRecord['status'], last_run: null, cadence: 'daily' as const },
+    { name: 'dataforseo_serp_byo', status: ((env.boringSitesLanguages ?? []).length > 0 && (env.boringSitesKeywords ?? []).length > 0 ? 'active' : 'disabled') as ConnectorStatusRecord['status'], last_run: null, cadence: 'daily' as const }
   ];
 };
 
@@ -646,8 +657,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
             })
           : Promise.resolve(emptyIngestion),
         cadence === 'daily'
-          ? runByoConnectorIngestion(process.env, { logger, ...(opts?.byoSpendStore ? { spendStore: opts.byoSpendStore } : {}) })
-          : Promise.resolve({ run_id: '', connectors: { exa: { status: 'skipped' as const, events: [], telemetry: { connector: 'exa_byo', skipped: true, budget_usd: 0 } }, perigon: { status: 'skipped' as const, events: [], telemetry: { connector: 'perigon_byo', skipped: true, budget_usd: 0 } }, twitter: { status: 'skipped' as const, events: [], telemetry: { connector: 'twitter_byo', skipped: true, budget_usd: 0 } } } })
+          ? runByoConnectorIngestion(process.env, { logger, serpInputs: buildSerpQueries(env.boringSitesLanguages, env.boringSitesKeywords), ...(opts?.byoSpendStore ? { spendStore: opts.byoSpendStore } : {}) })
+          : Promise.resolve({ run_id: '', connectors: { exa: { status: 'skipped' as const, events: [], telemetry: { connector: 'exa_byo', skipped: true, budget_usd: 0 } }, perigon: { status: 'skipped' as const, events: [], telemetry: { connector: 'perigon_byo', skipped: true, budget_usd: 0 } }, twitter: { status: 'skipped' as const, events: [], telemetry: { connector: 'twitter_byo', skipped: true, budget_usd: 0 } }, dataforseo_serp_byo: { status: 'skipped' as const, events: [], telemetry: { connector: 'dataforseo_serp_byo', skipped: true, budget_usd: 0 } } } })
       ]);
 
       if (shutdownController.signal.aborted) {
@@ -655,7 +666,8 @@ export const createLiveReadModel = (refreshMs = DEFAULT_REFRESH_MS, opts?: {
         return snapshot;
       }
 
-      const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events, ...byo.connectors.twitter.events]);
+      const serpByoEvents = (byo.connectors as Record<string, { events: RawEventInput[] }>)['dataforseo_serp_byo']?.events ?? [];
+      const events = dedupeEvents([...hourly.events, ...daily.events, ...byo.connectors.exa.events, ...byo.connectors.perigon.events, ...byo.connectors.twitter.events, ...serpByoEvents]);
       const highSignalEvents = events.filter((event) => !isLowValueRecruitingEvent(event));
       const selectedEvents = selectEventsForScoring(highSignalEvents);
 

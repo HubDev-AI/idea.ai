@@ -7,6 +7,7 @@
     "test": "pnpm --dir ../.. exec vitest --run packages/connectors/tests"
   },
   "dependencies": {
-    "@idea/contracts": "workspace:*"
+    "@idea/contracts": "workspace:*",
+    "dataforseo-client": "^2.0.23"
   }
 }

@@ -63,6 +63,8 @@ export type RuntimeEnv = {
   aiRetries: number;
   aiTimeoutMs: number;
   connectorConcurrency: number;
+  boringSitesLanguages: string[];
+  boringSitesKeywords: string[];
 };
 
 const parseNumber = (value: string | undefined, fallback: number): number => {
@@ -132,6 +134,8 @@ export const loadRuntimeEnv = (env: NodeJS.ProcessEnv = process.env): RuntimeEnv
     aiRetries: parseNumber(env.AI_RETRIES ?? env.AI_PROVIDER_RETRIES, 1),
     aiTimeoutMs: parseNumber(env.AI_TIMEOUT_MS, 300_000),
     connectorConcurrency: parseNumber(env.CONNECTOR_CONCURRENCY, 5),
+    boringSitesLanguages: parseCsv(env.BORING_SITES_LANGUAGES, []),
+    boringSitesKeywords: parseCsv(env.BORING_SITES_KEYWORDS, []),
   };
   if (env.DATABASE_URL !== undefined) result.databaseUrl = env.DATABASE_URL;
   if (env.GREENHOUSE_BOARD_TOKEN !== undefined) result.greenhouseBoardToken = env.GREENHOUSE_BOARD_TOKEN;

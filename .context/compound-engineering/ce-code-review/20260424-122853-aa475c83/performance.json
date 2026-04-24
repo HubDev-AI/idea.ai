@@ -1,0 +1,49 @@
+{
+  "reviewer": "performance",
+  "findings": [
+    {
+      "title": "Serial googleOrganicTaskGetAdvanced awaits inside poll loop — N ready tasks per tick = N sequential RTTs",
+      "severity": "medium",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 192,
+      "confidence": 0.82,
+      "autofix_class": "Promise.allSettled-parallelization",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Collect all matching ready task IDs from readyItems (filter at line 189), then await Promise.allSettled(ids.map(fetchAndEmit)) instead of the for loop. Add p-limit at 10-20 to avoid DataForSEO rate limits. Node.js single-threaded event loop makes events.push and retrieved.add safe from concurrent async tasks.",
+      "why_it_matters": "At 210 tasks completing between ticks (typical first-tick catchup at t=30s), 210 sequential awaits at ~200ms RTT adds ~42s of serial fetch time per tick before the poll loop proceeds. This consumes a significant fraction of the 10-minute ceiling and delays downstream event processing proportionally to run size.",
+      "evidence": [
+        "Line 187: for (const readyItem of readyItems) — synchronous iteration over all ready items.",
+        "Line 192: const taskRes = await api.googleOrganicTaskGetAdvanced(taskId) — awaited serially inside the loop, blocking all subsequent tasks until each fetch completes.",
+        "Typical run: 210 tasks; DEFAULT_POLL_INITIAL_MS=30000 means all tasks likely complete before first tick, so first tick serially fetches all 210."
+      ]
+    },
+    {
+      "title": "Sequential chunk POST loop — 3 chunks POSTed serially, wastes ~2 RTTs at typical scale",
+      "severity": "low",
+      "file": "packages/connectors/src/dataforseo_serp_byo.ts",
+      "line": 159,
+      "confidence": 0.70,
+      "autofix_class": "Promise.all-parallelization",
+      "owner": "connector",
+      "requires_verification": false,
+      "pre_existing": false,
+      "suggested_fix": "Replace the for loop (line 147) with: const chunkResults = await Promise.all(chunks.map(chunk => api.googleOrganicTaskPost(chunk.map(buildTask)))); then iterate chunkResults to populate taskIdToQuery.",
+      "why_it_matters": "3 serial POST round trips add ~400-600ms of unnecessary startup latency before polling begins. Impact is small at stated scale (3 batches) but grows linearly with inputs.length / CHUNK_SIZE.",
+      "evidence": [
+        "Line 147: for (const chunk of chunks) — serial iteration over chunks array.",
+        "Line 159: const res = await api.googleOrganicTaskPost(tasks) — awaited serially inside loop.",
+        "CHUNK_SIZE=100 (line 34); 210 queries / 100 = 3 chunks = 3 sequential POST round trips."
+      ]
+    }
+  ],
+  "residual_risks": [
+    "Poll tick wall time can overshoot pollCeilingMs (line 180) by the full duration of the serial taskGetAdvanced loop within a single tick. The while-condition is checked at loop-top only; a tick that starts just before the ceiling can run 42s of serial fetches past it.",
+    "Parallelizing taskGetAdvanced without a concurrency limit risks DataForSEO rate limiting (HTTP 429). Any parallel implementation should use p-limit or equivalent at <=20 concurrency."
+  ],
+  "testing_gaps": [
+    "No test that measures or bounds wall-time for a full-size run (DATAFORSEO_MAX_BATCH_PER_RUN=500). Serial fetch latency is invisible to correctness tests.",
+    "No test simulating a poll tick where all tasks are ready simultaneously — the worst-case serial-fetch scenario (N=totalTasks on first tick) is untested."
+  ]
+}
