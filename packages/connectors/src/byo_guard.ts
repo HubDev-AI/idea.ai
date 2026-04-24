@@ -1,6 +1,6 @@
 import type { RawEventInput } from './common/http';
 
-export type ByoSkipReason = 'missing_credentials' | 'budget_exhausted';
+export type ByoSkipReason = 'missing_credentials' | 'budget_exhausted' | 'unsupported_locale' | 'poll_timeout';
 
 export type ConnectorStatus = 'active' | 'skipped' | 'error';
 
