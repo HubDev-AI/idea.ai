@@ -141,6 +141,44 @@ describe('GET /v1/theses', () => {
     expect(body.items[1].firstSeenAt).toBe('2026-02-20T08:00:00.000Z');
   });
 
+  it('sourceCount reflects distinct evidence.source rather than mirroring evidenceCount', async () => {
+    const store = new InMemoryThesisStore();
+    await store.upsert({
+      canonicalKey: 'sources-distinct',
+      title: 'Distinct sources',
+      topic: 't',
+      status: 'candidate',
+      confidence: 60,
+      scoreTotal: 60,
+      problemStatement: 'p',
+      targetBuyer: 'b',
+      proposedSolution: 's',
+      evidenceCount: 3,
+      avgDemand: 60,
+      avgTiming: 50,
+      avgBuildability: 40,
+      avgVirality: 20,
+      latestObservedAt: '2026-02-25T10:00:00Z',
+      evidence: [
+        { signal_id: 's1', relation: 'supporting', weight: 0.8, snippet: 'a', observed_at: '2026-02-25T09:00:00Z', source: 'hacker_news' },
+        { signal_id: 's2', relation: 'supporting', weight: 0.7, snippet: 'b', observed_at: '2026-02-25T09:00:00Z', source: 'hacker_news' },
+        { signal_id: 's3', relation: 'supporting', weight: 0.6, snippet: 'c', observed_at: '2026-02-25T09:00:00Z', source: 'reddit' }
+      ]
+    } as any);
+
+    const app = await buildServer({ thesisStore: store });
+    servers.push(app);
+
+    const response = await app.inject({ method: 'GET', url: '/v1/theses' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    const item = body.items.find((i: any) => i.canonicalKey === 'sources-distinct');
+    expect(item).toBeDefined();
+    expect(item.evidenceCount).toBe(3);
+    expect(item.sourceCount).toBe(2);
+    expect(body.stats.totalSources).toBe(2);
+  });
+
   it('does not register thesis route when no store provided', async () => {
     const app = await buildServer();
     servers.push(app);
