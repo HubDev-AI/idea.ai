@@ -20,6 +20,14 @@ export type ThesesRouteDeps = {
 const inFlightDives = new Map<string, Promise<unknown>>();
 const toIsoString = (value: string): string => new Date(value).toISOString();
 
+const distinctSourceCount = (draft: ThesisDraft): number => {
+  const sources = new Set<string>();
+  for (const ev of draft.evidence ?? []) {
+    if (ev.source) sources.add(ev.source);
+  }
+  return sources.size;
+};
+
 const draftToListItem = (draft: ThesisDraft) => ({
   canonicalKey: draft.canonicalKey,
   title: draft.title,
@@ -27,7 +35,7 @@ const draftToListItem = (draft: ThesisDraft) => ({
   status: draft.status,
   evidenceCount: draft.evidenceCount,
   problemStatement: draft.problemStatement,
-  sourceCount: draft.evidenceCount,
+  sourceCount: distinctSourceCount(draft),
   estimatedScope: draft.estimatedScope ?? null,
   firstSeenAt: toIsoString(draft.firstObservedAt ?? draft.latestObservedAt),
   lastSeenAt: toIsoString(draft.latestObservedAt),
@@ -119,7 +127,7 @@ export const registerThesesRoute = (
       promoted: filtered.filter((draft) => draft.status === 'promoted').length,
       watching: filtered.filter((draft) => draft.status === 'watching').length,
       totalEvidence: filtered.reduce((sum, draft) => sum + draft.evidenceCount, 0),
-      totalSources: filtered.reduce((sum, draft) => sum + draft.evidenceCount, 0)
+      totalSources: filtered.reduce((sum, draft) => sum + distinctSourceCount(draft), 0)
     };
 
     return {

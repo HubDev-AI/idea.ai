@@ -430,6 +430,38 @@ describe('PostgresSignalStore', () => {
       expect(sql).toContain('thesis_evidence');
       expect(sql).toContain('thesis_candidates');
     });
+
+    it('skips time-window filter when thesis_key is set (thesis scoping replaces window)', async () => {
+      const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: 1 }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          signal_id: 'old-1', topic: 'ai', source: 'hn',
+          canonical_text: 'old signal', observed_at: new Date('2025-01-01'),
+          demand: '70', timing: '80', buildability: '60', blended: '72', virality: '30'
+        }]
+      });
+      const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
+      const result = await store.querySignals({ windowDays: 7, page: 1, pageSize: 20, thesisKey: 'aged-thesis' });
+      expect(result.items).toHaveLength(1);
+      const countCall = mockQuery.mock.calls[0]!;
+      const sql = countCall[0] as string;
+      const values = countCall[1] as unknown[];
+      expect(sql).not.toContain('observed_at');
+      expect(values).not.toContain(7);
+      expect(values).toContain('aged-thesis');
+    });
+
+    it('applies time-window filter when thesis_key is NOT set', async () => {
+      const { createPostgresSignalStore } = await import('../src/runtime/postgres_signal_store');
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: 0 }] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      const store = createPostgresSignalStore({ databaseUrl: 'postgres://test' });
+      await store.querySignals({ windowDays: 7, page: 1, pageSize: 20 });
+      const countCall = mockQuery.mock.calls[0]!;
+      expect(countCall[0] as string).toContain('observed_at');
+      expect(countCall[1] as unknown[]).toContain(7);
+    });
   });
 
   /* ---- close ---- */

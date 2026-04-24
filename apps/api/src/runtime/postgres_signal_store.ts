@@ -440,8 +440,12 @@ export const createPostgresSignalStore = ({
     const values: unknown[] = [];
     let paramIdx = 1;
 
-    conditions.push(`sm.observed_at >= NOW() - INTERVAL '1 day' * $${paramIdx++}`);
-    values.push(windowDays);
+    // Thesis scoping replaces time window: a thesis may link signals older than
+    // the feed's default 7d window, and we still want to show all of them.
+    if (!thesisKey) {
+      conditions.push(`sm.observed_at >= NOW() - INTERVAL '1 day' * $${paramIdx++}`);
+      values.push(windowDays);
+    }
 
     if (source) {
       conditions.push(`sm.source = $${paramIdx++}`);
