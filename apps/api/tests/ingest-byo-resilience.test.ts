@@ -40,4 +40,35 @@ describe('BYO ingestion resilience', () => {
     expect(result.connectors.perigon.status).toBe('active');
     expect(result.connectors.perigon.events).toHaveLength(1);
   });
+
+  it('isolates dataforseo_serp_byo sync throw without aborting other connectors', async () => {
+    vi.doMock('@idea/connectors/src/dataforseo_serp_byo', () => ({
+      runSerpByoConnector: vi.fn(() => {
+        throw new Error('serp sync failure');
+      })
+    }));
+
+    const { runByoConnectorIngestion } = await import('../src/jobs/ingest_byo');
+    const result = await runByoConnectorIngestion({});
+
+    expect(result.connectors.dataforseo_serp_byo.status).toBe('error');
+    expect(result.connectors.dataforseo_serp_byo.events).toEqual([]);
+    expect(result.connectors.exa.status).not.toBeUndefined();
+    expect(result.connectors.perigon.status).not.toBeUndefined();
+    expect(result.connectors.twitter.status).not.toBeUndefined();
+  });
+
+  it('isolates dataforseo_serp_byo Promise rejection without aborting other connectors', async () => {
+    vi.doMock('@idea/connectors/src/dataforseo_serp_byo', () => ({
+      runSerpByoConnector: vi.fn(async () => {
+        throw new Error('serp async failure');
+      })
+    }));
+
+    const { runByoConnectorIngestion } = await import('../src/jobs/ingest_byo');
+    const result = await runByoConnectorIngestion({});
+
+    expect(result.connectors.dataforseo_serp_byo.status).toBe('error');
+    expect(result.connectors.exa.status).not.toBeUndefined();
+  });
 });
