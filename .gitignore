@@ -11,3 +11,9 @@ pnpm-lock.yaml
 logs/
 .pnpm-store/
 apps/api/logs/
+
+# Local tool caches
+.hippo/
+.leankg/
+.letta/
+ContextPool/
