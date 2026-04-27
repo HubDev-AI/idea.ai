@@ -32,7 +32,7 @@ import { useSocket } from './useSocket';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
 const DEFAULT_SIGNAL_PAGE_SIZE = 10;
-const DEFAULT_THESIS_PAGE_SIZE = 10;
+const DEFAULT_THESIS_PAGE_SIZE = 100;
 const MIN_PANE_PCT = 20;
 const MAX_PANE_PCT = 80;
 

@@ -26,6 +26,7 @@ export const connectorDisplayName: Record<string, string> = {
   exa_byo: 'Exa',
   perigon_byo: 'Perigon',
   twitter_byo: 'Twitter/X',
+  dataforseo_serp_byo: 'DataForSEO SERP',
 };
 
 /** Maps connector config name to the source key stored in scored_signals */
